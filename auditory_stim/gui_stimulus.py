@@ -1,5 +1,5 @@
 import streamlit as st
-from auditory_stim import *
+from auditory_stim.auditory_stim import generate_and_play_stimuli
 from stimulus_package_notes import add_notes
 import pandas as pd
 import os
