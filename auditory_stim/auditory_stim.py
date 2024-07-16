@@ -167,7 +167,7 @@ def generate_and_play_stimuli(patient_id="patient0"):
 
         for trial in trial_types:
             if trial == "lang":
-                sentences_played, start_time,  duration = language_stim(num_sentence=2)
+                sentences_played, start_time,  duration = language_stim()
                 administered_stimuli.append({
                     'patient_id': patient_id,
                     'date': current_date,
