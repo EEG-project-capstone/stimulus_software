@@ -1,3 +1,5 @@
 gtts
 psychtoolbox
 playsound
+pandas
+streamlit
