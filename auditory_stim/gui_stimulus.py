@@ -24,12 +24,12 @@ The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' 
 
 
 # Load patient data
-if os.path.exists('patient_df.csv'):
-    patient_df = pd.read_csv('patient_df.csv')
+if os.path.exists('data/patient_df.csv'):
+    patient_df = pd.read_csv('data/patient_df.csv')
 else:
     patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                 'sentences', 'start_time', 'duration', 'order'])
-    patient_df.to_csv("patient_df.csv")
+    patient_df.to_csv("data/patient_df.csv")
 current_date = time.strftime("%Y-%m-%d")
 
 ### Streamlit Interface ###

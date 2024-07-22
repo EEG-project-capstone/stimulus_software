@@ -37,12 +37,12 @@ def language_stim(num_sentence=12):
         # Initialize Google-Text-to-Speech gTTS
         tts = gTTS(text=sentence, lang="en")
         # Temporarily save as mp3 file
-        tts.save("temp_sentence.mp3")
+        tts.save("data/temp_sentence.mp3")
 
         # Get timestamp when sentence is played
         start_time = time.time()  # UTC time
         # Play sentence
-        playsound("temp_sentence.mp3")
+        playsound("data/temp_sentence.mp3")
         # Get timestamp when is done playing 1 sentence
         end_time = time.time()  # UTC time
         # Duration of one sentence
@@ -58,8 +58,8 @@ def language_stim(num_sentence=12):
     time.sleep(2)
 
     # Delete intermediate mp3 file
-    if os.path.exists("temp_sentence.mp3"):
-        os.remove("temp_sentence.mp3")
+    if os.path.exists("data/temp_sentence.mp3"):
+        os.remove("data/temp_sentence.mp3")
     
     overall_end_time = time.time()  # for 1 trial
     overall_duration = overall_end_time - overall_start_time  # for 1 trial
@@ -78,15 +78,15 @@ def right_cmd_stim():
             # Initialize Google text to speech
             tts = gTTS(text=cmd, lang="en")
             # Temporarily save as mp3 file
-            tts.save("right_cmd.mp3")
+            tts.save("data/right_cmd.mp3")
             # Get timestamp when sentence is played
             # Play sentence
-            playsound("right_cmd.mp3")
+            playsound("data/right_cmd.mp3")
             time.sleep(10)
     
     # Delete intermediate mp3 file
-    if os.path.exists("right_cmd.mp3"):
-        os.remove("right_cmd.mp3")
+    if os.path.exists("data/right_cmd.mp3"):
+        os.remove("data/right_cmd.mp3")
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
@@ -104,15 +104,15 @@ def left_cmd_stim():
             # Initialize Google text to speech
             tts = gTTS(text=cmd, lang="en")
             # Temporarily save as mp3 file
-            tts.save("left_cmd.mp3")
+            tts.save("data/left_cmd.mp3")
             # Get timestamp when sentence is played
             # Play sentence
-            playsound("left_cmd.mp3")
+            playsound("data/left_cmd.mp3")
             time.sleep(10)
     
     # Delete intermediate mp3 file
-    if os.path.exists("left_cmd.mp3"):
-        os.remove("left_cmd.mp3")
+    if os.path.exists("data/left_cmd.mp3"):
+        os.remove("data/left_cmd.mp3")
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
@@ -122,7 +122,7 @@ def administer_beep():
 
     # Get timestamp of when beep will play
     start_time = time.time()
-    playsound("sample_beep.mp3")
+    playsound("data/sample_beep.mp3")
     end_time = time.time()
 
     duration = end_time - start_time
@@ -151,8 +151,8 @@ def generate_and_play_stimuli(patient_id="patient0"):
 
     current_date = time.strftime("%Y-%m-%d")
 
-    if os.path.exists('patient_df.csv'):
-        patient_df = pd.read_csv('patient_df.csv')
+    if os.path.exists('data/patient_df.csv'):
+        patient_df = pd.read_csv('data/patient_df.csv')
     else:
         patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                     'sentences', 'start_time', 'duration', 'order'])
@@ -212,4 +212,4 @@ def generate_and_play_stimuli(patient_id="patient0"):
                 })
         pd.DataFrame(administered_stimuli)
         administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-        administered_stimuli_df.to_csv("patient_df.csv", index=False)
+        administered_stimuli_df.to_csv("data/patient_df.csv", index=False)
