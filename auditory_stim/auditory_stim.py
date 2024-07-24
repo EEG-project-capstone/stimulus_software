@@ -49,9 +49,7 @@ def language_stim(num_sentence=12):
     sentences_played = []
     # Start the audio timing (for quality check) for 1 trial
     overall_start_time = time.time()
-    # Loop through each sentence
-    # for sentence in selected_sentences:
-        # Initialize Google-Text-to-Speech gTTS
+    # Initialize Google-Text-to-Speech gTTS
     tts = gTTS(text=joined_sentences, lang="en")
     # Temporarily save as mp3 file
     tts.save(config['lang_stim_path'])
@@ -62,7 +60,6 @@ def language_stim(num_sentence=12):
     # Load and play an MP3 file
     print("Playing sentence: ", joined_sentences)
     play_mp3(config['lang_stim_path'])
-
 
     # Get timestamp when is done playing 1 sentence
     end_time = time.time()  # UTC time
