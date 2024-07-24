@@ -8,6 +8,7 @@ from playsound import playsound
 import mpv
 import yaml
 import time
+import streamlit as st
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
@@ -15,13 +16,27 @@ with open(config_file_path, 'r') as file:
 
 player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
 
-def play_mp3(mp3_path):
+def play_mp3(mp3_path, verbose=True):
+    if verbose:
+        print(f"Playing {mp3_path}...")
     if config['os'].lower() == 'windows':
         player.play(mp3_path)
         player.wait_for_playback()
+    elif config['os'].lower() == 'streamlit':
+        st.audio(mp3_path, format="audio/mpeg", autoplay=True)
     else:
         playsound(mp3_path)
-        
+
+# Event handler for when the playback position changes
+@player.property_observer('time-pos')
+def on_time_pos_change(_name, value):
+    """Print video start and end times"""
+    if value == 0:
+        start_time = time.time()
+        print(f"Video started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+    if value is None:
+        end_time = time.time()
+        print(f"Video ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}")
 
 def language_stim(num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
@@ -58,7 +73,6 @@ def language_stim(num_sentence=12):
     start_time = time.time()  # UTC time        
 
     # Load and play an MP3 file
-    print("Playing sentence: ", joined_sentences)
     play_mp3(config['lang_stim_path'])
 
     # Get timestamp when is done playing 1 sentence
