@@ -1,0 +1,6 @@
+os: 'Windows'
+lang_stim_path: 'data/temp_sentence.mp3'
+right_cmd_path: 'data/right_cmd.mp3'
+left_cmd_path: 'data/left_cmd.mp3'
+beep_path: 'data/sample_beep.mp3'
+patient_note_path: 'data/patient_df.csv'
