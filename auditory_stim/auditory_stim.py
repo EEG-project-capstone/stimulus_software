@@ -59,17 +59,6 @@ def language_stim(num_sentence=12):
         # Load and play an MP3 file
         print("Playing sentence: ", sentence)
         player.play(config['lang_stim_path'])
-        time.sleep(3)  # Wait for 5 seconds
-
-        # # Pause playback
-        # player.pause = True
-
-        # # Resume playback
-        # player.pause = False
-
-        # # Stop playback
-        # player.stop()
-
 
         # Get timestamp when is done playing 1 sentence
         end_time = time.time()  # UTC time
