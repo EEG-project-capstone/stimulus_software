@@ -5,7 +5,21 @@ import pandas as pd
 from gtts import gTTS
 import psychtoolbox as ptb
 from playsound import playsound
+import mpv
+import yaml
+import time
 
+config_file_path = 'config.yml'  # Replace with the actual path to your config file
+with open(config_file_path, 'r') as file:
+    config = yaml.safe_load(file)
+
+player = mpv.MPV()
+def play_mp3(mp3_path):
+    if config['os'].lower() == 'windows':
+        player.play(mp3_path)
+    else:
+        playsound(mp3_path)
+        
 
 def language_stim(num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
@@ -37,12 +51,26 @@ def language_stim(num_sentence=12):
         # Initialize Google-Text-to-Speech gTTS
         tts = gTTS(text=sentence, lang="en")
         # Temporarily save as mp3 file
-        tts.save("data/temp_sentence.mp3")
+        tts.save(config['lang_stim_path'])
 
         # Get timestamp when sentence is played
-        start_time = time.time()  # UTC time
-        # Play sentence
-        playsound("data/temp_sentence.mp3")
+        start_time = time.time()  # UTC time        
+
+        # Load and play an MP3 file
+        print("Playing sentence: ", sentence)
+        player.play(config['lang_stim_path'])
+        time.sleep(3)  # Wait for 5 seconds
+
+        # # Pause playback
+        # player.pause = True
+
+        # # Resume playback
+        # player.pause = False
+
+        # # Stop playback
+        # player.stop()
+
+
         # Get timestamp when is done playing 1 sentence
         end_time = time.time()  # UTC time
         # Duration of one sentence
@@ -58,8 +86,8 @@ def language_stim(num_sentence=12):
     time.sleep(2)
 
     # Delete intermediate mp3 file
-    if os.path.exists("data/temp_sentence.mp3"):
-        os.remove("data/temp_sentence.mp3")
+    if os.path.exists(config['lang_stim_path']):
+        os.remove(config['lang_stim_path'])
     
     overall_end_time = time.time()  # for 1 trial
     overall_duration = overall_end_time - overall_start_time  # for 1 trial
@@ -78,15 +106,15 @@ def right_cmd_stim():
             # Initialize Google text to speech
             tts = gTTS(text=cmd, lang="en")
             # Temporarily save as mp3 file
-            tts.save("data/right_cmd.mp3")
+            tts.save(config['right_cmd_path'])
             # Get timestamp when sentence is played
             # Play sentence
-            playsound("data/right_cmd.mp3")
+            play_mp3(config['right_cmd_path'])
             time.sleep(10)
     
     # Delete intermediate mp3 file
-    if os.path.exists("data/right_cmd.mp3"):
-        os.remove("data/right_cmd.mp3")
+    if os.path.exists(config['right_cmd_path']):
+        os.remove(config['right_cmd_path'])
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
@@ -104,15 +132,15 @@ def left_cmd_stim():
             # Initialize Google text to speech
             tts = gTTS(text=cmd, lang="en")
             # Temporarily save as mp3 file
-            tts.save("data/left_cmd.mp3")
+            tts.save(config['left_cmd_path'])
             # Get timestamp when sentence is played
             # Play sentence
-            playsound("data/left_cmd.mp3")
+            play_mp3(config['left_cmd_path'])
             time.sleep(10)
     
     # Delete intermediate mp3 file
-    if os.path.exists("data/left_cmd.mp3"):
-        os.remove("data/left_cmd.mp3")
+    if os.path.exists(config['left_cmd_path']):
+        os.remove(config['left_cmd_path'])
 
     overall_end_time = time.time()
     overall_duration = overall_end_time - overall_start_time
@@ -122,7 +150,7 @@ def administer_beep():
 
     # Get timestamp of when beep will play
     start_time = time.time()
-    playsound("data/sample_beep.mp3")
+    play_mp3(config['beep_path'])
     end_time = time.time()
 
     duration = end_time - start_time
@@ -151,8 +179,8 @@ def generate_and_play_stimuli(patient_id="patient0"):
 
     current_date = time.strftime("%Y-%m-%d")
 
-    if os.path.exists('data/patient_df.csv'):
-        patient_df = pd.read_csv('data/patient_df.csv')
+    if os.path.exists(config['patient_note_path']):
+        patient_df = pd.read_csv(config['patient_note_path'])
     else:
         patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                     'sentences', 'start_time', 'duration', 'order'])
@@ -212,4 +240,4 @@ def generate_and_play_stimuli(patient_id="patient0"):
                 })
         pd.DataFrame(administered_stimuli)
         administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-        administered_stimuli_df.to_csv("data/patient_df.csv", index=False)
+        administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
