@@ -13,10 +13,12 @@ config_file_path = 'config.yml'  # Replace with the actual path to your config f
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
-player = mpv.MPV()
+player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+
 def play_mp3(mp3_path):
     if config['os'].lower() == 'windows':
         player.play(mp3_path)
+        player.wait_for_playback()
     else:
         playsound(mp3_path)
         
@@ -41,36 +43,38 @@ def language_stim(num_sentence=12):
     # Randomly select num_sentence sentences for 1 trial
     selected_sentences = random.sample(sentence_list, num_sentence)
 
+    joined_sentences = ' '.join(selected_sentences)
 
     # Create empty list for recording sentences played
     sentences_played = []
     # Start the audio timing (for quality check) for 1 trial
     overall_start_time = time.time()
     # Loop through each sentence
-    for sentence in selected_sentences:
+    # for sentence in selected_sentences:
         # Initialize Google-Text-to-Speech gTTS
-        tts = gTTS(text=sentence, lang="en")
-        # Temporarily save as mp3 file
-        tts.save(config['lang_stim_path'])
+    tts = gTTS(text=joined_sentences, lang="en")
+    # Temporarily save as mp3 file
+    tts.save(config['lang_stim_path'])
 
-        # Get timestamp when sentence is played
-        start_time = time.time()  # UTC time        
+    # Get timestamp when sentence is played
+    start_time = time.time()  # UTC time        
 
-        # Load and play an MP3 file
-        print("Playing sentence: ", sentence)
-        player.play(config['lang_stim_path'])
+    # Load and play an MP3 file
+    print("Playing sentence: ", joined_sentences)
+    play_mp3(config['lang_stim_path'])
 
-        # Get timestamp when is done playing 1 sentence
-        end_time = time.time()  # UTC time
-        # Duration of one sentence
-        sentence_duration = end_time - start_time
 
-        # Record sentence played, time start, and duration of each sentence
-        sentences_played.append({
-            "stimulus" : sentence,
-            "start-time" : start_time,
-            "duration" : sentence_duration,
-        })
+    # Get timestamp when is done playing 1 sentence
+    end_time = time.time()  # UTC time
+    # Duration of one sentence
+    sentence_duration = end_time - start_time
+
+    # Record sentence played, time start, and duration of each sentence
+    sentences_played.append({
+        "stimulus" : joined_sentences,
+        "start-time" : start_time,
+        "duration" : sentence_duration,
+    })
     # Add a 2-second break after 1 trial done
     time.sleep(2)
 
