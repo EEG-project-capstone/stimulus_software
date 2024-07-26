@@ -1,6 +1,6 @@
 import streamlit as st
-from auditory_stim import generate_and_play_stimuli
-from stimulus_package_notes import add_notes
+from auditory_stim.auditory_stim import generate_and_play_stimuli
+from auditory_stim.stimulus_package_notes import add_notes
 import pandas as pd
 import os
 import time
@@ -24,12 +24,12 @@ The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' 
 
 
 # Load patient data
-if os.path.exists('patient_df.csv'):
-    patient_df = pd.read_csv('patient_df.csv')
+if os.path.exists('data/patient_df.csv'):
+    patient_df = pd.read_csv('data/patient_df.csv')
 else:
     patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                 'sentences', 'start_time', 'duration', 'order'])
-    patient_df.to_csv("patient_df.csv")
+    patient_df.to_csv("data/patient_df.csv")
 current_date = time.strftime("%Y-%m-%d")
 
 ### Streamlit Interface ###

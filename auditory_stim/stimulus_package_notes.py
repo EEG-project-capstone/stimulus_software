@@ -24,16 +24,16 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
     that stimulus package hasn't been run for the patient yet.
     """
 
-    if os.path.exists('patient_notes.csv'):
+    if os.path.exists('data/patient_notes.csv'):
         # Open the patient notes DataFrame
-        patient_notes = pd.read_csv('patient_notes.csv')
+        patient_notes = pd.read_csv('data/patient_notes.csv')
     else:
         # Create an empty DataFrame if patient_df.csv doesn't exist
         patient_notes = pd.DataFrame(columns=['patient_id', 'notes', 'date'])
 
-    if os.path.exists('patient_df.csv'):
+    if os.path.exists('data/patient_df.csv'):
         # Open the patient administered sentences DataFrame
-        patient_df = pd.read_csv('patient_df.csv')
+        patient_df = pd.read_csv('data/patient_df.csv')
     else:
         # Create an empty DataFrame if patient_df.csv doesn't exist
         print('Make sure the patient_df.csv exists, if it does not, generate sentences was never run (ie no patients have been administered stimulus yet).')
@@ -45,6 +45,6 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
         # Concatenate the new note with the existing patient notes DataFrame
         patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
         # Save the updated DataFrame to CSV
-        patient_notes.to_csv("patient_notes.csv", index=False)
+        patient_notes.to_csv("data/patient_notes.csv", index=False)
     else:
         print('Patient has not been administered stimulus yet, double-check patient_id number.')
