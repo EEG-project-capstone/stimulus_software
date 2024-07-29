@@ -39,12 +39,9 @@ def play_mp3(mp3_path, verbose=True):
 @player.property_observer('time-pos')
 def on_time_pos_change(_name, value):
     """Print video start and end times"""
-    if value == 0:
+    if value == 0 or value is None:
         start_time = time.time()
-        print(f"Video started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
-    if value is None:
-        end_time = time.time()
-        print(f"Video ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}")
+        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
 def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=500, padding=55):
     # Load the audio file
@@ -91,44 +88,53 @@ def gen_lang_stim(output_file_path, num_sentence=12):
     'pink squid sinks rafts', 'vast space lacks air', 'slick crooks steal rings']
 
     # Randomly select num_sentence sentences for 1 trial
-    sample_id = random.sample(range(len(sentence_list)), num_sentence)
-    selected_sentences = [sentence_list[i] for i in sample_id]
+    sample_ids = random.sample(range(len(sentence_list)), num_sentence)
+    selected_sentences = [sentence_list[i] for i in sample_ids]
     joined_sentences = ' '.join(selected_sentences)
 
     tts = gTTS(text=joined_sentences, lang="en")
     tts.save(output_file_path)   
     remove_silence(output_file_path,output_file_path)    
 
-    return sample_id
+    return sample_ids
+
+def play_lang_stim(output_path):
+    start_time = time.time()
+    play_mp3(output_path)
+    end_time = time.time()
+    return start_time, end_time
 
 def right_cmd_stim():
+    start_time = time.time()
     for _ in range(8):
         play_mp3(config['right_keep_path'])
         time.sleep(10)
 
         play_mp3(config['right_stop_path'])
         time.sleep(10)
-    return None
+    end_time = time.time()
+    return start_time, end_time
 
 def left_cmd_stim():
+    start_time = time.time()
     for _ in range(8):
         play_mp3(config['left_keep_path'])
         time.sleep(10)
 
         play_mp3(config['left_stop_path'])
         time.sleep(10)
-    return None
+    end_time = time.time()
+    return start_time, end_time
 
 def administer_beep():
-    # Get timestamp of when beep will play
     start_time = time.time()
     play_mp3(config['beep_path'])
     end_time = time.time()
     duration = end_time - start_time
     # Break until 45secs
     time.sleep(45-duration)
-
-    return "BEEP", start_time, duration
+    end_time = time.time()
+    return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
     trial_types = []
@@ -158,18 +164,17 @@ def generate_stimuli(trial_types):
             sample_ids = gen_lang_stim(output_path)
     return sample_ids
 
-def play_stimuli(trial_types):
-    for trial in trial_types:
-        if trial[:4] == "lang":
-            output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
-            play_mp3(output_path)
-        elif trial == "rcmd":
-            right_cmd_stim()
-        elif trial == "lcmd":
-            left_cmd_stim()
-        else:
-            administer_beep()
-    return None
+def play_stimuli(trial):
+    if trial[:4] == "lang":
+        output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
+        start_time, end_time = play_lang_stim(output_path)
+    elif trial == "rcmd":
+        start_time, end_time = right_cmd_stim()
+    elif trial == "lcmd":
+        start_time, end_time = left_cmd_stim()
+    else:
+        start_time, end_time = administer_beep()
+    return start_time, end_time
 
 def generate_and_play_stimuli(patient_id="patient0"):
     current_date = time.strftime("%Y-%m-%d")
@@ -189,10 +194,25 @@ def generate_and_play_stimuli(patient_id="patient0"):
     else:
         trial_types = randomize_trials()
 
-    with st.spinner('Generating stimuli...'):
-        generate_stimuli(trial_types)
-    play_stimuli(trial_types)
+    # with st.spinner('Generating stimuli...'):
+        # sample_ids = generate_stimuli(trial_types)
 
+    if not sample_ids:
+        sample_ids = []
+
+    for trial in trial_types:
+        start_time, end_time = play_stimuli(trial)
+        administered_stimuli.append({
+                    'patient_id': patient_id,
+                    'date': current_date,
+                    'trial_type': trial[:4] if trial[:4] == "lang" else trial,
+                    'sentences': sample_ids,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': end_time - start_time
+                })
+        
+    
     return None
 
 # def generate_and_play_stimuli(patient_id="patient0"):
