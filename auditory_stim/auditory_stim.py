@@ -212,7 +212,9 @@ def generate_and_play_stimuli(patient_id="patient0"):
                     'duration': end_time - start_time
                 })
         
-    
+    pd.DataFrame(administered_stimuli)
+    administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
+    administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
     return None
 
 # def generate_and_play_stimuli(patient_id="patient0"):
