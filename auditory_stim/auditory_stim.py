@@ -3,12 +3,20 @@ import os
 import random
 import pandas as pd
 from gtts import gTTS
+import pyttsx3
 import psychtoolbox as ptb
 from playsound import playsound
 import mpv
 import yaml
 import time
 import streamlit as st
+from pydub import AudioSegment
+import numpy as np
+from pydub.silence import detect_nonsilent
+from pydub import AudioSegment
+from pydub.silence import split_on_silence
+from pydub import AudioSegment, effects 
+from scipy.io.wavfile import read, write
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
@@ -59,44 +67,23 @@ def language_stim(num_sentence=12):
     selected_sentences = random.sample(sentence_list, num_sentence)
 
     joined_sentences = ' '.join(selected_sentences)
+    # joined_sentences = joined_sentences.replace(" ", ", ")
+    print(f"Selected sentences: {joined_sentences}")
 
     # Create empty list for recording sentences played
     sentences_played = []
-    # Start the audio timing (for quality check) for 1 trial
-    overall_start_time = time.time()
-    # Initialize Google-Text-to-Speech gTTS
-    tts = gTTS(text=joined_sentences, lang="en")
-    # Temporarily save as mp3 file
-    tts.save(config['lang_stim_path'])
 
-    # Get timestamp when sentence is played
-    start_time = time.time()  # UTC time        
+    tts = gTTS(text=joined_sentences, lang="en")
+    tts.save(config['lang_stim_path'])   
+
+    remove_silence(config['lang_stim_path'],config['lang_stim_path'])
+
 
     # Load and play an MP3 file
     play_mp3(config['lang_stim_path'])
+    overall_duration = 0
 
-    # Get timestamp when is done playing 1 sentence
-    end_time = time.time()  # UTC time
-    # Duration of one sentence
-    sentence_duration = end_time - start_time
-
-    # Record sentence played, time start, and duration of each sentence
-    sentences_played.append({
-        "stimulus" : joined_sentences,
-        "start-time" : start_time,
-        "duration" : sentence_duration,
-    })
-    # Add a 2-second break after 1 trial done
-    time.sleep(2)
-
-    # Delete intermediate mp3 file
-    if os.path.exists(config['lang_stim_path']):
-        os.remove(config['lang_stim_path'])
-    
-    overall_end_time = time.time()  # for 1 trial
-    overall_duration = overall_end_time - overall_start_time  # for 1 trial
-    
-    return sentences_played, overall_start_time, overall_duration
+    return sentences_played, 0, overall_duration
 
 def right_cmd_stim():
 
