@@ -46,6 +46,28 @@ def on_time_pos_change(_name, value):
         end_time = time.time()
         print(f"Video ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}")
 
+def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=500, padding=55):
+    # Load the audio file
+    audio = AudioSegment.from_mp3(input_path)
+    
+    # Detect non-silent parts
+    nonsilent_parts = detect_nonsilent(audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
+    
+    # Add padding around non-silent parts and concatenate them
+    segments = []
+    for start, end in nonsilent_parts:
+        start = max(0, start - padding)
+        end = min(len(audio), end + padding)
+        segments.append(audio[start:end])
+    
+    # Combine all non-silent segments
+    combined = AudioSegment.empty()
+    for segment in segments:
+        combined += segment
+    
+    # Export the processed audio
+    combined.export(output_path, format="mp3")
+
 def language_stim(num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
     'fast car hit walls', 'sweet boys kiss girls', 'nice dad held sons', 'good minds save lives', 'dry fur rubs skin',
