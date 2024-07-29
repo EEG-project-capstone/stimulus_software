@@ -55,12 +55,10 @@ def start_stimulus(input_patient_id):
         st.error("Patient has already been administered stimulus protocol today")
     else:
         # Create placeholders for the messages
-        #administering_placeholder = st.empty()
         running_placeholder = st.empty()
 
         # Change the screen to "Administering Stimulus"
-        #administering_placeholder.write("Administering Stimulus...")
-        running_placeholder.write("Stimulus is running...")  # Placeholder for actual stimulus running
+        # running_placeholder.write("Stimulus is running...")  # Placeholder for actual stimulus running
 
         # Generate and play sentences
         generate_and_play_stimuli(input_patient_id)
@@ -69,7 +67,7 @@ def start_stimulus(input_patient_id):
         #administering_placeholder.empty()
         running_placeholder.empty()
 
-        st.experimental_rerun()
+        st.rerun()
         # Show success message
         st.success("Stimulus protocol successfully administered and data saved to patient_df.csv.")
 
