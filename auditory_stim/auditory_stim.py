@@ -73,7 +73,7 @@ def speed_up_audio(input_path, output_path, speed_factor=1.5):
     audio = audio.speedup(playback_speed=speed_factor)
     audio.export(output_path, format="mp3")
 
-def language_stim(num_sentence=12):
+def gen_lang_stim(output_file_path, num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
     'fast car hit walls', 'sweet boys kiss girls', 'nice dad held sons', 'good minds save lives', 'dry fur rubs skin',
     'great goat climbs hills', 'hot tea burns tongues', 'wise teen read books', 'poor men want work', 'clear words make sense',
@@ -91,88 +91,40 @@ def language_stim(num_sentence=12):
     'pink squid sinks rafts', 'vast space lacks air', 'slick crooks steal rings']
 
     # Randomly select num_sentence sentences for 1 trial
-    selected_sentences = random.sample(sentence_list, num_sentence)
-
+    sample_id = random.sample(range(len(sentence_list)), num_sentence)
+    selected_sentences = [sentence_list[i] for i in sample_id]
     joined_sentences = ' '.join(selected_sentences)
-    # joined_sentences = joined_sentences.replace(" ", ", ")
-    print(f"Selected sentences: {joined_sentences}")
-
-    # Create empty list for recording sentences played
-    sentences_played = []
 
     tts = gTTS(text=joined_sentences, lang="en")
-    tts.save(config['lang_stim_path'])   
+    tts.save(output_file_path)   
+    remove_silence(output_file_path,output_file_path)    
 
-    remove_silence(config['lang_stim_path'],config['lang_stim_path'])
-
-
-    # Load and play an MP3 file
-    play_mp3(config['lang_stim_path'])
-    overall_duration = 0
-
-    return sentences_played, 0, overall_duration
+    return sample_id
 
 def right_cmd_stim():
+    for _ in range(8):
+        play_mp3(config['right_keep_path'])
+        time.sleep(10)
 
-    right_cmd_list = [
-        "keep opening and closing your right hand",
-        "stop opening and closing your right hand"
-    ]
-    overall_start_time = time.time()
-    for i in range(8):
-        for cmd in right_cmd_list:
-            # Initialize Google text to speech
-            tts = gTTS(text=cmd, lang="en")
-            # Temporarily save as mp3 file
-            tts.save(config['right_cmd_path'])
-            # Get timestamp when sentence is played
-            # Play sentence
-            play_mp3(config['right_cmd_path'])
-            time.sleep(10)
-    
-    # Delete intermediate mp3 file
-    if os.path.exists(config['right_cmd_path']):
-        os.remove(config['right_cmd_path'])
-
-    overall_end_time = time.time()
-    overall_duration = overall_end_time - overall_start_time
-    return right_cmd_list, overall_start_time, overall_duration
+        play_mp3(config['right_stop_path'])
+        time.sleep(10)
+    return None
 
 def left_cmd_stim():
+    for _ in range(8):
+        play_mp3(config['left_keep_path'])
+        time.sleep(10)
 
-    left_cmd_list = [
-        "keep opening and closing your left hand",
-        "stop opening and closing your left hand"
-    ]
-    overall_start_time = time.time()
-    for i in range(8):
-        for cmd in left_cmd_list:
-            # Initialize Google text to speech
-            tts = gTTS(text=cmd, lang="en")
-            # Temporarily save as mp3 file
-            tts.save(config['left_cmd_path'])
-            # Get timestamp when sentence is played
-            # Play sentence
-            play_mp3(config['left_cmd_path'])
-            time.sleep(10)
-    
-    # Delete intermediate mp3 file
-    if os.path.exists(config['left_cmd_path']):
-        os.remove(config['left_cmd_path'])
-
-    overall_end_time = time.time()
-    overall_duration = overall_end_time - overall_start_time
-    return left_cmd_list, overall_start_time, overall_duration
+        play_mp3(config['left_stop_path'])
+        time.sleep(10)
+    return None
 
 def administer_beep():
-
     # Get timestamp of when beep will play
     start_time = time.time()
     play_mp3(config['beep_path'])
     end_time = time.time()
-
     duration = end_time - start_time
-    
     # Break until 45secs
     time.sleep(45-duration)
 
@@ -188,13 +140,38 @@ def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_s
     }
     for key in num_trials:
         for i in range(num_trials[key]):
-            trial_types.append(key)
+            if key == "lang":
+                trial = f"lang_{i}"
+            else:
+                trial = key
+            trial_types.append(trial)
 
     random.shuffle(trial_types)
     return trial_types
 
-def generate_and_play_stimuli(patient_id="patient0"):
+def generate_stimuli(trial_types):
+    print(f"trial_types: {trial_types}")
+    for trial in trial_types:
+        if trial[:4] == "lang":
+            output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
+            print(f"output_path: {output_path}")
+            sample_ids = gen_lang_stim(output_path)
+    return sample_ids
 
+def play_stimuli(trial_types):
+    for trial in trial_types:
+        if trial[:4] == "lang":
+            output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
+            play_mp3(output_path)
+        elif trial == "rcmd":
+            right_cmd_stim()
+        elif trial == "lcmd":
+            left_cmd_stim()
+        else:
+            administer_beep()
+    return None
+
+def generate_and_play_stimuli(patient_id="patient0"):
     current_date = time.strftime("%Y-%m-%d")
 
     if os.path.exists(config['patient_note_path']):
@@ -206,56 +183,82 @@ def generate_and_play_stimuli(patient_id="patient0"):
     administered_stimuli = []
 
     if ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
+        trial_types = None
         print("Patient has already been administered stimulus protocol today")
         return
     else:
         trial_types = randomize_trials()
 
-        for trial in trial_types:
-            if trial == "lang":
-                sentences_played, start_time,  duration = language_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences_played,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            elif trial == "rcmd":
-                sentences, start_time, duration = right_cmd_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            elif trial == "lcmd":
-                sentences, start_time, duration = left_cmd_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            else:
-                _, start_time, duration = administer_beep()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': 'BEEP',
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-        pd.DataFrame(administered_stimuli)
-        administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-        administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
+    with st.spinner('Generating stimuli...'):
+        time.sleep(5)
+        # generate_stimuli(trial_types)
+    play_stimuli(trial_types)
+
+    return None
+
+# def generate_and_play_stimuli(patient_id="patient0"):
+
+#     current_date = time.strftime("%Y-%m-%d")
+
+#     if os.path.exists(config['patient_note_path']):
+#         patient_df = pd.read_csv(config['patient_note_path'])
+#     else:
+#         patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
+#                                     'sentences', 'start_time', 'duration', 'order'])
+        
+#     administered_stimuli = []
+
+#     if ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
+#         print("Patient has already been administered stimulus protocol today")
+#         return
+#     else:
+#         trial_types = randomize_trials()
+
+#         for trial in trial_types:
+#             if trial == "lang":
+#                 sentences_played, start_time,  duration = language_stim()
+#                 administered_stimuli.append({
+#                     'patient_id': patient_id,
+#                     'date': current_date,
+#                     'trial_type': trial,
+#                     'sentences': sentences_played,
+#                     'start_time': start_time,
+#                     'duration': duration,
+#                     'order': trial_types
+#                 })
+#             elif trial == "rcmd":
+#                 sentences, start_time, duration = right_cmd_stim()
+#                 administered_stimuli.append({
+#                     'patient_id': patient_id,
+#                     'date': current_date,
+#                     'trial_type': trial,
+#                     'sentences': sentences,
+#                     'start_time': start_time,
+#                     'duration': duration,
+#                     'order': trial_types
+#                 })
+#             elif trial == "lcmd":
+#                 sentences, start_time, duration = left_cmd_stim()
+#                 administered_stimuli.append({
+#                     'patient_id': patient_id,
+#                     'date': current_date,
+#                     'trial_type': trial,
+#                     'sentences': sentences,
+#                     'start_time': start_time,
+#                     'duration': duration,
+#                     'order': trial_types
+#                 })
+#             else:
+#                 _, start_time, duration = administer_beep()
+#                 administered_stimuli.append({
+#                     'patient_id': patient_id,
+#                     'date': current_date,
+#                     'trial_type': trial,
+#                     'sentences': 'BEEP',
+#                     'start_time': start_time,
+#                     'duration': duration,
+#                     'order': trial_types
+#                 })
+#         pd.DataFrame(administered_stimuli)
+#         administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
+#         administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
