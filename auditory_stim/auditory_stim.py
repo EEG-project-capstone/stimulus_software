@@ -68,6 +68,11 @@ def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=
     # Export the processed audio
     combined.export(output_path, format="mp3")
 
+def speed_up_audio(input_path, output_path, speed_factor=1.5):
+    audio = AudioSegment.from_mp3(input_path)
+    audio = audio.speedup(playback_speed=speed_factor)
+    audio.export(output_path, format="mp3")
+
 def language_stim(num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
     'fast car hit walls', 'sweet boys kiss girls', 'nice dad held sons', 'good minds save lives', 'dry fur rubs skin',
