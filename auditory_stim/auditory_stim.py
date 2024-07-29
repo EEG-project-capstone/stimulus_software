@@ -3,20 +3,14 @@ import os
 import random
 import pandas as pd
 from gtts import gTTS
-import pyttsx3
-import psychtoolbox as ptb
 from playsound import playsound
 import mpv
 import yaml
 import time
 import streamlit as st
 from pydub import AudioSegment
-import numpy as np
 from pydub.silence import detect_nonsilent
 from pydub import AudioSegment
-from pydub.silence import split_on_silence
-from pydub import AudioSegment, effects 
-from scipy.io.wavfile import read, write
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
@@ -194,9 +188,8 @@ def generate_and_play_stimuli(patient_id="patient0"):
     else:
         trial_types = randomize_trials()
 
-    # with st.spinner('Generating stimuli...'):
-        # sample_ids = generate_stimuli(trial_types)
-
+    with st.spinner('Generating stimuli...'):
+        sample_ids = generate_stimuli(trial_types)
     if not sample_ids:
         sample_ids = []
 
@@ -216,70 +209,3 @@ def generate_and_play_stimuli(patient_id="patient0"):
     administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
     administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
     return None
-
-# def generate_and_play_stimuli(patient_id="patient0"):
-
-#     current_date = time.strftime("%Y-%m-%d")
-
-#     if os.path.exists(config['patient_note_path']):
-#         patient_df = pd.read_csv(config['patient_note_path'])
-#     else:
-#         patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
-#                                     'sentences', 'start_time', 'duration', 'order'])
-        
-#     administered_stimuli = []
-
-#     if ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
-#         print("Patient has already been administered stimulus protocol today")
-#         return
-#     else:
-#         trial_types = randomize_trials()
-
-#         for trial in trial_types:
-#             if trial == "lang":
-#                 sentences_played, start_time,  duration = language_stim()
-#                 administered_stimuli.append({
-#                     'patient_id': patient_id,
-#                     'date': current_date,
-#                     'trial_type': trial,
-#                     'sentences': sentences_played,
-#                     'start_time': start_time,
-#                     'duration': duration,
-#                     'order': trial_types
-#                 })
-#             elif trial == "rcmd":
-#                 sentences, start_time, duration = right_cmd_stim()
-#                 administered_stimuli.append({
-#                     'patient_id': patient_id,
-#                     'date': current_date,
-#                     'trial_type': trial,
-#                     'sentences': sentences,
-#                     'start_time': start_time,
-#                     'duration': duration,
-#                     'order': trial_types
-#                 })
-#             elif trial == "lcmd":
-#                 sentences, start_time, duration = left_cmd_stim()
-#                 administered_stimuli.append({
-#                     'patient_id': patient_id,
-#                     'date': current_date,
-#                     'trial_type': trial,
-#                     'sentences': sentences,
-#                     'start_time': start_time,
-#                     'duration': duration,
-#                     'order': trial_types
-#                 })
-#             else:
-#                 _, start_time, duration = administer_beep()
-#                 administered_stimuli.append({
-#                     'patient_id': patient_id,
-#                     'date': current_date,
-#                     'trial_type': trial,
-#                     'sentences': 'BEEP',
-#                     'start_time': start_time,
-#                     'duration': duration,
-#                     'order': trial_types
-#                 })
-#         pd.DataFrame(administered_stimuli)
-#         administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-#         administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
