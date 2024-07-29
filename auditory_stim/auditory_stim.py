@@ -190,8 +190,7 @@ def generate_and_play_stimuli(patient_id="patient0"):
         trial_types = randomize_trials()
 
     with st.spinner('Generating stimuli...'):
-        time.sleep(5)
-        # generate_stimuli(trial_types)
+        generate_stimuli(trial_types)
     play_stimuli(trial_types)
 
     return None
