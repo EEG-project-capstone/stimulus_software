@@ -193,7 +193,10 @@ def generate_and_play_stimuli(patient_id="patient0"):
     if not sample_ids:
         sample_ids = []
 
-    for trial in trial_types:
+    progress_bar = st.progress(0, text=0)
+    n = len(trial_types)
+    for i in range(n):
+        trial = trial_types[i]
         start_time, end_time = play_stimuli(trial)
         administered_stimuli.append({
                     'patient_id': patient_id,
@@ -204,6 +207,7 @@ def generate_and_play_stimuli(patient_id="patient0"):
                     'end_time': end_time,
                     'duration': end_time - start_time
                 })
+        progress_bar.progress(int(i/n), text=int(i/n))
         
     pd.DataFrame(administered_stimuli)
     administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
