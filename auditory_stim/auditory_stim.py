@@ -3,12 +3,14 @@ import os
 import random
 import pandas as pd
 from gtts import gTTS
-import psychtoolbox as ptb
 from playsound import playsound
 import mpv
 import yaml
 import time
 import streamlit as st
+from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
+from pydub import AudioSegment
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
@@ -31,14 +33,38 @@ def play_mp3(mp3_path, verbose=True):
 @player.property_observer('time-pos')
 def on_time_pos_change(_name, value):
     """Print video start and end times"""
-    if value == 0:
+    if value == 0 or value is None:
         start_time = time.time()
-        print(f"Video started at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
-    if value is None:
-        end_time = time.time()
-        print(f"Video ended at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time))}")
+        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
-def language_stim(num_sentence=12):
+def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=500, padding=55):
+    # Load the audio file
+    audio = AudioSegment.from_mp3(input_path)
+    
+    # Detect non-silent parts
+    nonsilent_parts = detect_nonsilent(audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
+    
+    # Add padding around non-silent parts and concatenate them
+    segments = []
+    for start, end in nonsilent_parts:
+        start = max(0, start - padding)
+        end = min(len(audio), end + padding)
+        segments.append(audio[start:end])
+    
+    # Combine all non-silent segments
+    combined = AudioSegment.empty()
+    for segment in segments:
+        combined += segment
+    
+    # Export the processed audio
+    combined.export(output_path, format="mp3")
+
+def speed_up_audio(input_path, output_path, speed_factor=1.5):
+    audio = AudioSegment.from_mp3(input_path)
+    audio = audio.speedup(playback_speed=speed_factor)
+    audio.export(output_path, format="mp3")
+
+def gen_lang_stim(output_file_path, num_sentence=12):
     sentence_list = ['cold homes need heat', 'black dog bit thieves', 'smart guys fix things', 'red cat ate rats',
     'fast car hit walls', 'sweet boys kiss girls', 'nice dad held sons', 'good minds save lives', 'dry fur rubs skin',
     'great goat climbs hills', 'hot tea burns tongues', 'wise teen read books', 'poor men want work', 'clear words make sense',
@@ -56,113 +82,53 @@ def language_stim(num_sentence=12):
     'pink squid sinks rafts', 'vast space lacks air', 'slick crooks steal rings']
 
     # Randomly select num_sentence sentences for 1 trial
-    selected_sentences = random.sample(sentence_list, num_sentence)
-
+    sample_ids = random.sample(range(len(sentence_list)), num_sentence)
+    selected_sentences = [sentence_list[i] for i in sample_ids]
     joined_sentences = ' '.join(selected_sentences)
 
-    # Create empty list for recording sentences played
-    sentences_played = []
-    # Start the audio timing (for quality check) for 1 trial
-    overall_start_time = time.time()
-    # Initialize Google-Text-to-Speech gTTS
     tts = gTTS(text=joined_sentences, lang="en")
-    # Temporarily save as mp3 file
-    tts.save(config['lang_stim_path'])
+    tts.save(output_file_path)   
+    remove_silence(output_file_path,output_file_path)    
 
-    # Get timestamp when sentence is played
-    start_time = time.time()  # UTC time        
+    return sample_ids
 
-    # Load and play an MP3 file
-    play_mp3(config['lang_stim_path'])
-
-    # Get timestamp when is done playing 1 sentence
-    end_time = time.time()  # UTC time
-    # Duration of one sentence
-    sentence_duration = end_time - start_time
-
-    # Record sentence played, time start, and duration of each sentence
-    sentences_played.append({
-        "stimulus" : joined_sentences,
-        "start-time" : start_time,
-        "duration" : sentence_duration,
-    })
-    # Add a 2-second break after 1 trial done
-    time.sleep(2)
-
-    # Delete intermediate mp3 file
-    if os.path.exists(config['lang_stim_path']):
-        os.remove(config['lang_stim_path'])
-    
-    overall_end_time = time.time()  # for 1 trial
-    overall_duration = overall_end_time - overall_start_time  # for 1 trial
-    
-    return sentences_played, overall_start_time, overall_duration
+def play_lang_stim(output_path):
+    start_time = time.time()
+    play_mp3(output_path)
+    end_time = time.time()
+    return start_time, end_time
 
 def right_cmd_stim():
+    start_time = time.time()
+    for _ in range(8):
+        play_mp3(config['right_keep_path'])
+        time.sleep(10)
 
-    right_cmd_list = [
-        "keep opening and closing your right hand",
-        "stop opening and closing your right hand"
-    ]
-    overall_start_time = time.time()
-    for i in range(8):
-        for cmd in right_cmd_list:
-            # Initialize Google text to speech
-            tts = gTTS(text=cmd, lang="en")
-            # Temporarily save as mp3 file
-            tts.save(config['right_cmd_path'])
-            # Get timestamp when sentence is played
-            # Play sentence
-            play_mp3(config['right_cmd_path'])
-            time.sleep(10)
-    
-    # Delete intermediate mp3 file
-    if os.path.exists(config['right_cmd_path']):
-        os.remove(config['right_cmd_path'])
-
-    overall_end_time = time.time()
-    overall_duration = overall_end_time - overall_start_time
-    return right_cmd_list, overall_start_time, overall_duration
+        play_mp3(config['right_stop_path'])
+        time.sleep(10)
+    end_time = time.time()
+    return start_time, end_time
 
 def left_cmd_stim():
+    start_time = time.time()
+    for _ in range(8):
+        play_mp3(config['left_keep_path'])
+        time.sleep(10)
 
-    left_cmd_list = [
-        "keep opening and closing your left hand",
-        "stop opening and closing your left hand"
-    ]
-    overall_start_time = time.time()
-    for i in range(8):
-        for cmd in left_cmd_list:
-            # Initialize Google text to speech
-            tts = gTTS(text=cmd, lang="en")
-            # Temporarily save as mp3 file
-            tts.save(config['left_cmd_path'])
-            # Get timestamp when sentence is played
-            # Play sentence
-            play_mp3(config['left_cmd_path'])
-            time.sleep(10)
-    
-    # Delete intermediate mp3 file
-    if os.path.exists(config['left_cmd_path']):
-        os.remove(config['left_cmd_path'])
-
-    overall_end_time = time.time()
-    overall_duration = overall_end_time - overall_start_time
-    return left_cmd_list, overall_start_time, overall_duration
+        play_mp3(config['left_stop_path'])
+        time.sleep(10)
+    end_time = time.time()
+    return start_time, end_time
 
 def administer_beep():
-
-    # Get timestamp of when beep will play
     start_time = time.time()
     play_mp3(config['beep_path'])
     end_time = time.time()
-
     duration = end_time - start_time
-    
     # Break until 45secs
     time.sleep(45-duration)
-
-    return "BEEP", start_time, duration
+    end_time = time.time()
+    return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
     trial_types = []
@@ -174,74 +140,41 @@ def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_s
     }
     for key in num_trials:
         for i in range(num_trials[key]):
-            trial_types.append(key)
+            if key == "lang":
+                trial = f"lang_{i}"
+            else:
+                trial = key
+            trial_types.append(trial)
 
     random.shuffle(trial_types)
     return trial_types
 
-def generate_and_play_stimuli(patient_id="patient0"):
+def generate_stimuli(trial_types):
+    gen_bar = st.progress(0, text="0")
+    n = len(trial_types)
+    lang_trials_ids = []
+    for i in range(n):
+        trial = trial_types[i]
+        if trial[:4] == "lang":
+            output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
+            sample_ids = gen_lang_stim(output_path)
+            percent = int(i/n*100)
+            gen_bar.progress(percent, text=f"{percent}%")
+            lang_trials_ids.append(sample_ids)
+            print(f"{i}: {output_path}")
+        else:
+            lang_trials_ids.append([])
+    gen_bar.progress(100, text=f"Done")
+    return lang_trials_ids
 
-    current_date = time.strftime("%Y-%m-%d")
-
-    if os.path.exists(config['patient_note_path']):
-        patient_df = pd.read_csv(config['patient_note_path'])
+def play_stimuli(trial):
+    if trial[:4] == "lang":
+        output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
+        start_time, end_time = play_lang_stim(output_path)
+    elif trial == "rcmd":
+        start_time, end_time = right_cmd_stim()
+    elif trial == "lcmd":
+        start_time, end_time = left_cmd_stim()
     else:
-        patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
-                                    'sentences', 'start_time', 'duration', 'order'])
-        
-    administered_stimuli = []
-
-    if ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
-        print("Patient has already been administered stimulus protocol today")
-        return
-    else:
-        trial_types = randomize_trials()
-
-        for trial in trial_types:
-            if trial == "lang":
-                sentences_played, start_time,  duration = language_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences_played,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            elif trial == "rcmd":
-                sentences, start_time, duration = right_cmd_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            elif trial == "lcmd":
-                sentences, start_time, duration = left_cmd_stim()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': sentences,
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-            else:
-                _, start_time, duration = administer_beep()
-                administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial,
-                    'sentences': 'BEEP',
-                    'start_time': start_time,
-                    'duration': duration,
-                    'order': trial_types
-                })
-        pd.DataFrame(administered_stimuli)
-        administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-        administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
+        start_time, end_time = administer_beep()
+    return start_time, end_time
