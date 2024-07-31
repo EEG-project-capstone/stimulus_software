@@ -150,13 +150,22 @@ def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_s
     return trial_types
 
 def generate_stimuli(trial_types):
-    print(f"trial_types: {trial_types}")
-    for trial in trial_types:
+    gen_bar = st.progress(0, text="0")
+    n = len(trial_types)
+    lang_trials_ids = []
+    for i in range(n):
+        trial = trial_types[i]
         if trial[:4] == "lang":
             output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
-            print(f"output_path: {output_path}")
             sample_ids = gen_lang_stim(output_path)
-    return sample_ids
+            percent = int(i/n*100)
+            gen_bar.progress(percent, text=f"{percent}%")
+            lang_trials_ids.append(sample_ids)
+            print(f"{i}: {output_path}")
+        else:
+            lang_trials_ids.append([])
+    gen_bar.progress(100, text=f"Done")
+    return lang_trials_ids
 
 def play_stimuli(trial):
     if trial[:4] == "lang":
@@ -169,47 +178,3 @@ def play_stimuli(trial):
     else:
         start_time, end_time = administer_beep()
     return start_time, end_time
-
-def generate_and_play_stimuli(patient_id="patient0"):
-    current_date = time.strftime("%Y-%m-%d")
-
-    if os.path.exists(config['patient_note_path']):
-        patient_df = pd.read_csv(config['patient_note_path'])
-    else:
-        patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
-                                    'sentences', 'start_time', 'duration', 'order'])
-        
-    administered_stimuli = []
-
-    if ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
-        trial_types = None
-        print("Patient has already been administered stimulus protocol today")
-        return
-    else:
-        trial_types = randomize_trials()
-
-    with st.spinner('Generating stimuli...'):
-        sample_ids = generate_stimuli(trial_types)
-    if not sample_ids:
-        sample_ids = []
-
-    progress_bar = st.progress(0, text=0)
-    n = len(trial_types)
-    for i in range(n):
-        trial = trial_types[i]
-        start_time, end_time = play_stimuli(trial)
-        administered_stimuli.append({
-                    'patient_id': patient_id,
-                    'date': current_date,
-                    'trial_type': trial[:4] if trial[:4] == "lang" else trial,
-                    'sentences': sample_ids,
-                    'start_time': start_time,
-                    'end_time': end_time,
-                    'duration': end_time - start_time
-                })
-        progress_bar.progress(int(i/n), text=int(i/n))
-        
-    pd.DataFrame(administered_stimuli)
-    administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-    administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
-    return None

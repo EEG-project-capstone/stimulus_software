@@ -1,9 +1,11 @@
 import streamlit as st
-from auditory_stim.auditory_stim import generate_and_play_stimuli
+# from auditory_stim.auditory_stim import generate_and_play_stimuli
 from auditory_stim.stimulus_package_notes import add_notes
+from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 import pandas as pd
 import os
 import time
+import yaml
 
 """
 GUI Stimulus Package
@@ -22,13 +24,17 @@ Output:
 The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
 
+# Load configuration
+with open('config.yml', 'r') as f:
+    config = yaml.safe_load(f)
+
 
 # Load patient data
-if os.path.exists('data/patient_df.csv'):
-    patient_df = pd.read_csv('data/patient_df.csv')
+if os.path.exists(config['patient_note_path']):
+    patient_df = pd.read_csv(config['patient_note_path'])
 else:
     patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
-                                'sentences', 'start_time', 'duration', 'order'])
+                                'sentences', 'start_time', 'end_time', 'duration'])
     patient_df.to_csv("data/patient_df.csv")
 current_date = time.strftime("%Y-%m-%d")
 
@@ -41,40 +47,60 @@ st.header("Administer Auditory Stimuli", divider='rainbow')
 
 # Patient ID input
 patient_id = st.text_input("Enter Patient/EEG ID")
+trial_types = []
+lang_trials_ids = []
 
-def start_stimulus(input_patient_id):
-    """
-    Administers the auditory stimuli to the patient.
-    
-    Parameters:
-    input_patient_id (str): The ID of the patient.
-    """
-    if patient_id.strip() == "":
-        st.error("Please enter a patient ID.")
-    elif ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
-        st.error("Patient has already been administered stimulus protocol today")
+if st.button("Prepare Stimulus"):
+    trial_types = randomize_trials()
+    st.session_state['trial_types'] = trial_types
+    lang_trials_ids = []
+    lang_trials_ids = generate_stimuli(trial_types)
+    st.session_state['lang_trials_ids'] = lang_trials_ids
+
+if st.button("Play Stimulus"):
+    print(f"patient_id: {patient_id}")
+    current_date = time.strftime("%Y-%m-%d")
+
+    if os.listdir(config['stimuli_dir']) == []:
+        st.error("Please prepare stimuli first.")
     else:
-        # Create placeholders for the messages
-        running_placeholder = st.empty()
+        if patient_id.strip() == "":
+            st.error("Please enter a patient ID.")
+        elif ((patient_df['patient_id'] == patient_id) & (patient_df['date'] == current_date)).any():
+            st.error("Patient has already been administered stimulus protocol today")
+        else:
+            progress_bar = st.progress(0, text="0")
+            if not trial_types and 'trial_types' in st.session_state:
+                trial_types = st.session_state['trial_types']
+            else:
+                st.error("Please prepare stimuli first.")
+            if not lang_trials_ids and 'lang_trials_ids' in st.session_state:
+                lang_trials_ids = st.session_state['lang_trials_ids']
+            else:
+                st.error("Please prepare stimuli first.")
 
-        # Change the screen to "Administering Stimulus"
-        # running_placeholder.write("Stimulus is running...")  # Placeholder for actual stimulus running
+            n = len(trial_types)
+            administered_stimuli = []
+            for i in range(n):
+                trial = trial_types[i]
+                start_time, end_time = play_stimuli(trial)
+                administered_stimuli.append({
+                            'patient_id': patient_id,
+                            'date': current_date,
+                            'trial_type': trial[:4] if trial[:4] == "lang" else trial,
+                            'sentences': lang_trials_ids[i],
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'duration': end_time - start_time
+                        })
+                percent = int(i/n*100)
+                progress_bar.progress(percent, text=f"{percent}%")
+            progress_bar.progress(100, text=f"Done")
 
-        # Generate and play sentences
-        generate_and_play_stimuli(input_patient_id)
-
-        # Clear the previous messages
-        #administering_placeholder.empty()
-        running_placeholder.empty()
-
-        st.rerun()
-        # Show success message
-        st.success("Stimulus protocol successfully administered and data saved to patient_df.csv.")
-
-
-# Start button
-if st.button("Start Stimulus"):
-    start_stimulus(patient_id)
+            pd.DataFrame(administered_stimuli)
+            administered_stimuli_df = pd.concat([patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
+            administered_stimuli_df.to_csv(config['patient_note_path'], index=False)
+            print(f"administered_stimuli_df: {administered_stimuli_df}")
 
 
 st.header("Search Patients Already Administered Stimuli", divider='rainbow')
@@ -87,9 +113,9 @@ st.subheader("The following auditory stimuli were administered:")
 for stimulus in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].sentences.tolist():
     st.write(stimulus)
 
-st.subheader("Stimuli were administered in the following order:")
-for order in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].order.value_counts().index.tolist():
-    st.write(order)
+# st.subheader("Stimuli were administered in the following order:")
+# for order in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].order.value_counts().index.tolist():
+#     st.write(order)
 
 st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
 your_note = st.text_input("Write your note here")
