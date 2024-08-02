@@ -19,6 +19,9 @@ with open(config_file_path, 'r') as file:
 
 player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
 
+def jittered_delay():
+    time.sleep(random.uniform(1.2, 2.2))
+
 def play_mp3(mp3_path, verbose=True):
     if verbose:
         print(f"Playing {mp3_path}...")
@@ -180,10 +183,14 @@ def play_stimuli(trial):
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
         start_time, end_time = play_lang_stim(output_path)
+        jittered_delay()
     elif trial == "rcmd":
         start_time, end_time = right_cmd_stim()
+        jittered_delay()
     elif trial == "lcmd":
         start_time, end_time = left_cmd_stim()
+        jittered_delay()
     else:
         start_time, end_time = administer_beep()
+        jittered_delay()
     return start_time, end_time
