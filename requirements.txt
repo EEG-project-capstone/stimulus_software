@@ -3,3 +3,7 @@ psychtoolbox
 playsound
 pandas
 streamlit
+mpv
+yaml
+winsound
+pydub
