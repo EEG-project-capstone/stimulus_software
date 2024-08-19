@@ -1,4 +1,5 @@
 os: 'Windows'
+tts_package: 'pyttsx3'
 stimuli_dir: 'data/lang_sound/'
 
 right_keep_path: 'data/static/right_keep.mp3'

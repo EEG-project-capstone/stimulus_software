@@ -3,6 +3,7 @@ import os
 import random
 import pandas as pd
 from gtts import gTTS
+import pyttsx3
 from playsound import playsound
 import mpv
 import yaml
@@ -90,9 +91,17 @@ def gen_lang_stim(output_file_path, num_sentence=12):
     selected_sentences = [sentence_list[i] for i in sample_ids]
     joined_sentences = ' '.join(selected_sentences)
 
-    tts = gTTS(text=joined_sentences, lang="en")
-    tts.save(output_file_path)   
-    remove_silence(output_file_path,output_file_path)    
+    if config['tts_package'] == 'gtts':
+        tts = gTTS(text=joined_sentences, lang="en")
+        tts.save(output_file_path)   
+        remove_silence(output_file_path,output_file_path)
+    elif config['tts_package'] == 'pyttsx3':
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 165)
+        voices = engine.getProperty('voices')
+        engine.setProperty('voice', voices[1].id) 
+        engine.save_to_file(joined_sentences, output_file_path)
+        engine.runAndWait()    
 
     return sample_ids
 
