@@ -3,3 +3,6 @@ psychtoolbox
 playsound
 pandas
 streamlit
+pyyaml
+pydub
+pyttsx3
