@@ -78,10 +78,12 @@ if st.button("Play Stimulus"):
             else:
                 st.error("Please prepare stimuli first.")
 
+            print(f"trial_types: {trial_types}")
             n = len(trial_types)
             administered_stimuli = []
             for i in range(n):
                 trial = trial_types[i]
+                print(f"Trial {i}: {trial}")
                 start_time, end_time = play_stimuli(trial)
                 administered_stimuli.append({
                             'patient_id': patient_id,
