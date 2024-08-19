@@ -8,6 +8,7 @@ from playsound import playsound
 import mpv
 import yaml
 import time
+import winsound
 import streamlit as st
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent
@@ -18,6 +19,9 @@ with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
 player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+
+def jittered_delay():
+    time.sleep(random.uniform(1.2, 2.2))
 
 def play_mp3(mp3_path, verbose=True):
     if verbose:
@@ -131,12 +135,20 @@ def left_cmd_stim():
 
 def administer_beep():
     start_time = time.time()
-    play_mp3(config['beep_path'])
+
+    time.sleep(10)
+    frequency = 2500  # Set Frequency To 2500 Hertz
+    duration = 10000  # Set Duration To 1000 ms == 1 second
+    winsound.Beep(frequency, duration)
+    time.sleep(10)
+    
     end_time = time.time()
-    duration = end_time - start_time
-    # Break until 45secs
-    time.sleep(45-duration)
-    end_time = time.time()
+
+    # play_mp3(config['beep_path'])
+    # end_time = time.time()
+    # duration = end_time - start_time
+    # # Break until 45secs
+    # time.sleep(45-duration)
     return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
@@ -180,10 +192,14 @@ def play_stimuli(trial):
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
         start_time, end_time = play_lang_stim(output_path)
+        jittered_delay()
     elif trial == "rcmd":
         start_time, end_time = right_cmd_stim()
+        jittered_delay()
     elif trial == "lcmd":
         start_time, end_time = left_cmd_stim()
+        jittered_delay()
     else:
         start_time, end_time = administer_beep()
+        jittered_delay()
     return start_time, end_time
