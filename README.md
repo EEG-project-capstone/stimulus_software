@@ -1,15 +1,14 @@
-Brain Waves Stimulus Package 2.0
-
-### Create CONDA env
+# Brain Waves Stimulus Package 2.0
+## A. Setup Environment
+### 1. Create CONDA env
 ```bash
-conda create -n "cheme"
-conda activate cheme
+conda create -n "eeg"
+conda activate eeg
 conda install pip
 pip install -r requirements.txt
 ```
 
-### Install mpv package
-#### For Windows
+### 2. Install mpv package (*for Windows*)
 ```bash
 pip install mpv
 ```
@@ -22,28 +21,22 @@ Then run
 ```bash
 pip install python-mpv
 ```
-
-#### For MacOS
-```bash
-brew install mpv
-```
-OSX & Linux can choose to play audio files via playsound package instead of mpv, to do this, change OS option in config.yml.
-
-### For Linux
-```bash
-sudo apt-get mpv
-```
-OSX & Linux can choose to play audio files via playsound package instead of mpv, to do this, change OS option in config.yml.
-
-### Instal ffmpeg
-#### For Windows
+### 3. Instal ffmpeg (*for Windows*)
 Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
 Extract and rename to `ffmpeg`.    
 Make sure to have these 2 files:    
 `ffmpeg\bin\ffmpeg.exe`    
 `ffmpeg\bin\ffprobe.exe`
 
-### Run streamlit app
+## B. Streamlit App Usage
+### *Steps to run Stimuli App:*
+1. Open `config.yml` and modify it according to the provided instructions.
+2. Open Terminal & relocate to `brain-waves-2.0` directory
+3. Activate Environment
+```bash
+conda activate eeg
+```
+4. Run Streamlit App
 ```bash
 python -m streamlit run gui_stimulus.py
 ```
