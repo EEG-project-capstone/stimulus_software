@@ -53,28 +53,6 @@ def on_time_pos_change(_name, value):
         start_time = time.time()
         print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
-def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=500, padding=55):
-    # Load the audio file
-    audio = AudioSegment.from_mp3(input_path)
-    
-    # Detect non-silent parts
-    nonsilent_parts = detect_nonsilent(audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
-    
-    # Add padding around non-silent parts and concatenate them
-    segments = []
-    for start, end in nonsilent_parts:
-        start = max(0, start - padding)
-        end = min(len(audio), end + padding)
-        segments.append(audio[start:end])
-    
-    # Combine all non-silent segments
-    combined = AudioSegment.empty()
-    for segment in segments:
-        combined += segment
-    
-    # Export the processed audio
-    combined.export(output_path, format="mp3")
-
 def speed_up_audio(input_path, output_path, speed_factor=1.5):
     audio = AudioSegment.from_mp3(input_path)
     audio = audio.speedup(playback_speed=speed_factor)
