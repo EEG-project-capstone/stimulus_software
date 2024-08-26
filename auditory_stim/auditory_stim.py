@@ -5,14 +5,11 @@ import pandas as pd
 from gtts import gTTS
 import pyttsx3
 from playsound import playsound
-import mpv
 import yaml
 import time
-import winsound
 import streamlit as st
 import pydub
 from pydub import AudioSegment
-from pydub.silence import detect_nonsilent
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 
