@@ -1,9 +1,11 @@
 # INPUT CHANGES HERE
-os: 'os' # 'os' or 'windows'
-  # Define your output path:
-patient_df_path: 'data/patient_df.csv' # (default)
-patient_note_path: 'data/patient_notes.csv' # (default)
 
+os: 'os' # 'os' or 'windows'
+# Define your output path:
+patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a different location
+patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
+
+#------------------------------
 
 # (Do not change)
 tts_package: 'pyttsx3'
