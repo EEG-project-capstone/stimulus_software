@@ -1,6 +1,7 @@
 import os
 import time
 import pandas as pd
+import yaml
 
 
 def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/00/0000"):
@@ -24,16 +25,20 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
     that stimulus package hasn't been run for the patient yet.
     """
 
-    if os.path.exists('data/patient_notes.csv'):
+    # Load configuration
+    with open('config.yml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    if os.path.exists(config["patient_note_path"]):
         # Open the patient notes DataFrame
         patient_notes = pd.read_csv('data/patient_notes.csv')
     else:
         # Create an empty DataFrame if patient_df.csv doesn't exist
         patient_notes = pd.DataFrame(columns=['patient_id', 'notes', 'date'])
 
-    if os.path.exists('data/patient_df.csv'):
+    if os.path.exists(config['patient_df_path']):
         # Open the patient administered sentences DataFrame
-        patient_df = pd.read_csv('data/patient_df.csv')
+        patient_df = pd.read_csv(config['patient_df_path'])
     else:
         # Create an empty DataFrame if patient_df.csv doesn't exist
         print('Make sure the patient_df.csv exists, if it does not, generate sentences was never run (ie no patients have been administered stimulus yet).')
