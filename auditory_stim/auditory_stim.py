@@ -5,20 +5,22 @@ import pandas as pd
 from gtts import gTTS
 import pyttsx3
 from playsound import playsound
-import mpv
 import yaml
 import time
-import winsound
 import streamlit as st
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent
 from pydub import AudioSegment
-
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
+
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
-player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+if config['os'].lower() == 'windows':
+    import winsound
+    import mpv
+
+    player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))
@@ -35,12 +37,13 @@ def play_mp3(mp3_path, verbose=True):
         playsound(mp3_path)
 
 # Event handler for when the playback position changes
-@player.property_observer('time-pos')
-def on_time_pos_change(_name, value):
-    """Print video start and end times"""
-    if value == 0 or value is None:
-        start_time = time.time()
-        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+if config['os'].lower() == 'windows':
+    @player.property_observer('time-pos')
+    def on_time_pos_change(_name, value):
+        """Print video start and end times"""
+        if value == 0 or value is None:
+            start_time = time.time()
+            print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
 # def remove_silence(input_path, output_path, silence_thresh=-40, min_silence_len=500, padding=55):
 #     # Load the audio file
@@ -106,22 +109,37 @@ def on_time_pos_change(_name, value):
 #     return sample_ids
 
 def random_lang_stim(output_path, num_sentence=12):
+
     sentence_files = os.listdir(config['sentences_path'])
 
     # Filter out non-wav files
     wav_files = [file for file in sentence_files if file.endswith('.wav')]
 
-    # Randomly select 12 files
-    sample_ids = random.sample(range(len(wav_files)), num_sentence)
+    # Ensure num_sentence does not exceed available wav files
+    if num_sentence > len(wav_files):
+        raise ValueError(f"Requested {num_sentence} files, but only {len(wav_files)} available.")
 
-    # Initialize an empty AudioSegment
+    selected_ids = set()  # To keep track of already selected IDs
     combined = AudioSegment.empty()
+    sample_ids = []
 
-    # Concatenate the selected files
-    for id in sample_ids:
+    while len(sample_ids) < num_sentence:
+        # Randomly choose an ID
+        id = random.choice(range(len(wav_files)))
+
+        if id in selected_ids:
+            continue  # Skip if this ID was already selected
+
         file = os.path.join(config['sentences_path'], f'lang{id}.wav')
-        audio = AudioSegment.from_wav(file)
-        combined += audio
+
+        if os.path.exists(file):
+            # If the file exists, add its ID to sample_ids and selected_ids
+            sample_ids.append(id)
+            selected_ids.add(id)
+
+            # Read and concatenate the audio
+            audio = AudioSegment.from_wav(file)
+            combined += audio
 
     # Export the processed audio
     combined.export(output_path, format="mp3")
@@ -157,21 +175,25 @@ def left_cmd_stim():
     return start_time, end_time
 
 def administer_beep():
-    start_time = time.time()
 
-    time.sleep(10)
-    frequency = 2500  # Set Frequency To 2500 Hertz
-    duration = 10000  # Set Duration To 1000 ms == 1 second
-    winsound.Beep(frequency, duration)
-    time.sleep(10)
-    
-    end_time = time.time()
+    if config['os'].lower() == 'windows':
+        start_time = time.time()
+        time.sleep(10)
+        frequency = 2500  # Set Frequency To 2500 Hertz
+        duration = 10000  # Set Duration To 1000 ms == 1 second
+        winsound.Beep(frequency, duration)
+        time.sleep(10)
+        end_time = time.time()
 
-    # play_mp3(config['beep_path'])
-    # end_time = time.time()
-    # duration = end_time - start_time
-    # # Break until 45secs
-    # time.sleep(45-duration)
+    else:
+        start_time = time.time()
+        time.sleep(10)
+        play_mp3(config['beep_path'])
+        end_time = time.time()
+        time.sleep(10)
+        end_time = time.time()
+        # Break until 45secs
+
     return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
