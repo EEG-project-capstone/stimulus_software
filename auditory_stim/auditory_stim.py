@@ -10,15 +10,26 @@ import yaml
 import time
 import winsound
 import streamlit as st
+import pydub
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent
-from pydub import AudioSegment
+
+config_file_path = 'config.yml'  # Replace with the actual path to your config file
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
-player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+if config['os'].lower() == 'windows':
+    import winsound
+    import mpv
+
+    player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+
+    pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
+    pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
+    print(f"pydub.AudioSegment.converter: {pydub.AudioSegment.converter}")
+    print(f"pydub.AudioSegment.ffprobe: {pydub.AudioSegment.ffprobe}")
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))
