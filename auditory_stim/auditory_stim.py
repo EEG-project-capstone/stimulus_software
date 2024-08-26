@@ -10,7 +10,6 @@ import time
 import streamlit as st
 import pydub
 from pydub import AudioSegment
-from pydub.silence import detect_nonsilent
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 
