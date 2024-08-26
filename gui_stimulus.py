@@ -29,8 +29,8 @@ with open('config.yml', 'r') as f:
 
 
 # Load patient data
-if os.path.exists(config['patient_df_path']):
-    patient_df = pd.read_csv(config['patient_df_path'])
+if os.path.exists(config['patient_note_path']):
+    patient_df = pd.read_csv(config['patient_note_path'])
 else:
     patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                 'sentences', 'start_time', 'end_time', 'duration'])
