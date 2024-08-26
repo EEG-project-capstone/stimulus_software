@@ -1,4 +1,4 @@
-# Brain Waves Stimulus Package 2.0
+# Brain Waves 2.0 - Usage
 ## A. Setup Environment
 ### 1. Create CONDA env
 ```bash
@@ -40,4 +40,4 @@ conda activate eeg
 ```bash
 python -m streamlit run gui_stimulus.py
 ```
-
+# Brain Waves 2.0 - Specs
