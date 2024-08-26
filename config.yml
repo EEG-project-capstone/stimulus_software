@@ -1,7 +1,8 @@
 os: 'Windows'
 tts_package: 'pyttsx3'
-stimuli_dir: 'data/lang_sound/'
+stimuli_dir: 'data/lang_trials/'
 
+sentences_path: 'data/sentences/'
 right_keep_path: 'data/static/right_keep.mp3'
 right_stop_path: 'data/static/right_stop.mp3'
 left_keep_path: 'data/static/left_keep.mp3'
