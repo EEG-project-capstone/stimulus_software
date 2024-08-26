@@ -25,6 +25,13 @@ if config['os'].lower() == 'windows':
     import mpv
 
     player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+    # Event handler for when the playback position changes
+    @player.property_observer('time-pos')
+    def on_time_pos_change(_name, value):
+        """Print video start and end times"""
+        if value == 0 or value is None:
+            start_time = time.time()
+            print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
     pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
     pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
@@ -44,14 +51,6 @@ def play_mp3(mp3_path, verbose=True):
         st.audio(mp3_path, format="audio/mpeg", autoplay=True)
     else:
         playsound(mp3_path)
-
-# Event handler for when the playback position changes
-@player.property_observer('time-pos')
-def on_time_pos_change(_name, value):
-    """Print video start and end times"""
-    if value == 0 or value is None:
-        start_time = time.time()
-        print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
 def speed_up_audio(input_path, output_path, speed_factor=1.5):
     audio = AudioSegment.from_mp3(input_path)
