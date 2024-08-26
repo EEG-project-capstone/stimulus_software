@@ -2,6 +2,7 @@
 data/lang_sound/
 data/sample_sound/
 ffmpeg/
+data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

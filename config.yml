@@ -1,4 +1,4 @@
-os: 'OS'
+os: 'Windows' # 'OS' or 'Windows'
 tts_package: 'pyttsx3'
 stimuli_dir: 'data/lang_trials/'
 
@@ -9,5 +9,4 @@ left_keep_path: 'data/static/left_keep.mp3'
 left_stop_path: 'data/static/left_stop.mp3'
 beep_path: 'data/static/sample_beep.mp3'
 
-patient_df_path: 'data/patient_df.csv'
 patient_note_path: 'data/patient_notes.csv'
