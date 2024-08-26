@@ -8,7 +8,7 @@ conda install pip
 pip install -r requirements.txt
 ```
 
-### To install mpv package
+### Install mpv package
 #### For Windows
 ```bash
 pip install mpv
@@ -27,11 +27,21 @@ pip install python-mpv
 ```bash
 brew install mpv
 ```
+OSX & Linux can choose to play audio files via playsound package instead of mpv, to do this, change OS option in config.yml.
 
 ### For Linux
 ```bash
 sudo apt-get mpv
 ```
+OSX & Linux can choose to play audio files via playsound package instead of mpv, to do this, change OS option in config.yml.
+
+### Instal ffmpeg
+#### For Windows
+Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
+Extract and rename to `ffmpeg`.    
+Make sure to have these 2 files:    
+`ffmpeg\bin\ffmpeg.exe`    
+`ffmpeg\bin\ffprobe.exe`
 
 ### Run streamlit app
 ```bash
