@@ -1,6 +1,15 @@
-# Brain Waves 2.0 - Usage
-## A. Setup Environment
-### 1. Create CONDA env
+# Brain Waves Stimulus Package 2.0
+
+## Introduction
+
+## Features
+
+
+## Installation
+### *Prerequisites*
+- Download `conda`, `python`
+### *Setup Environment*
+#### 1. Create CONDA env
 ```bash
 conda create -n "eeg"
 conda activate eeg
@@ -8,7 +17,7 @@ conda install pip
 pip install -r requirements.txt
 ```
 
-### 2. Install mpv package (*for Windows*)
+#### 2. Install mpv package (*for Windows*)
 ```bash
 pip install mpv
 ```
@@ -21,15 +30,15 @@ Then run
 ```bash
 pip install python-mpv
 ```
-### 3. Instal ffmpeg (*for Windows*)
+#### 3. Instal ffmpeg (*for Windows*)
 Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
 Extract and rename to `ffmpeg`.    
 Make sure to have these 2 files:    
 `ffmpeg\bin\ffmpeg.exe`    
 `ffmpeg\bin\ffprobe.exe`
 
-## B. Streamlit App Usage
-### *Steps to run Stimuli App:*
+## Usage
+### Steps to Run Stimuli App
 1. Open `config.yml` and make changes according to instructions.
 2. Open Terminal & relocate to `brain-waves-2.0` directory
 3. Activate Environment
@@ -40,4 +49,30 @@ conda activate eeg
 ```bash
 python -m streamlit run gui_stimulus.py
 ```
-# Brain Waves 2.0 - Specs
+
+## Configuration
+
+To set up the project, you need to modify specific parts of the `config.yml` file:
+
+### Required Changes
+
+In the `config.yml` file, locate the section marked with `# INPUT CHANGES HERE` and update the following fields:
+
+- **`os`**: Set this to your operating system, either `'os'` for macOS/Linux or `'windows'` for Windows.
+  
+  ```bash
+  os: 'os'  # Change to 'os' or 'windows' depending on your system
+  ```
+
+## Examples
+
+## Contributing
+- Nguyen Ha (Summer 2024)
+- Khanh Ha (Summer 2024)
+
+## License
+- The license under which the project is distributed.
+- Link to the full license text.
+
+## Contact
+- Dr. Peter Schwab, MD
