@@ -1,12 +1,13 @@
-os: 'Windows'
+os: 'OS'
 tts_package: 'pyttsx3'
 stimuli_dir: 'data/lang_trials/'
 
-sentences_path: 'data/sentences/'
+sentences_path: 'data/sentences'
 right_keep_path: 'data/static/right_keep.mp3'
 right_stop_path: 'data/static/right_stop.mp3'
 left_keep_path: 'data/static/left_keep.mp3'
 left_stop_path: 'data/static/left_stop.mp3'
 beep_path: 'data/static/sample_beep.mp3'
 
-patient_note_path: 'data/patient_df.csv'
+patient_df_path: 'data/patient_df.csv'
+patient_note_path: 'data/patient_notes.csv'
