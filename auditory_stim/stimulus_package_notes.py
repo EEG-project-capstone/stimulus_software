@@ -31,7 +31,7 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
 
     if os.path.exists(config["patient_note_path"]):
         # Open the patient notes DataFrame
-        patient_notes = pd.read_csv('data/patient_notes.csv')
+        patient_notes = pd.read_csv(config["patient_note_path"])
     else:
         # Create an empty DataFrame if patient_df.csv doesn't exist
         patient_notes = pd.DataFrame(columns=['patient_id', 'notes', 'date'])
@@ -50,6 +50,6 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
         # Concatenate the new note with the existing patient notes DataFrame
         patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
         # Save the updated DataFrame to CSV
-        patient_notes.to_csv("data/patient_notes.csv", index=False)
+        patient_notes.to_csv(config["patient_note_path"], index=False)
     else:
         print('Patient has not been administered stimulus yet, double-check patient_id number.')
