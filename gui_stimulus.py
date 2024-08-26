@@ -29,8 +29,8 @@ with open('config.yml', 'r') as f:
 
 
 # Load patient data
-if os.path.exists(config['patient_note_path']):
-    patient_df = pd.read_csv(config['patient_note_path'])
+if os.path.exists(config['patient_df_path']):
+    patient_df = pd.read_csv(config['patient_df_path'])
 else:
     patient_df = pd.DataFrame(columns=['patient_id', 'date', 'trial_type',
                                 'sentences', 'start_time', 'end_time', 'duration'])
@@ -129,10 +129,10 @@ if st.button("Add Note"):
 st.header("Find Patient Notes", divider='rainbow')
 st.subheader("The following notes have been written for the selected patient and date:")
 
-if not os.path.exists("patient_notes.csv"):
+if not os.path.exists(config["patient_note_path"]):
     st.error("You haven't added any notes yet, add a note first.")
 else:
-    patient_notes = pd.read_csv("patient_notes.csv")
+    patient_notes = pd.read_csv(config["patient_note_path"])
     selected_patient_find_notes = st.selectbox(
         "Select Patient ID", 
         patient_notes.patient_id.value_counts().index.sort_values(), 
@@ -143,5 +143,5 @@ else:
         patient_notes[patient_notes.patient_id == selected_patient_find_notes].date.value_counts().index.sort_values(), 
         key="widget_key_for_find_date_notes"
     )
-    for note in patient_notes[(patient_notes.patient_id == selected_patient_find_notes) & (patient_notes.date == selected_date_find_notes)].notes.tolist():
+    for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
         st.write(note)
