@@ -145,21 +145,22 @@ def left_cmd_stim():
     return start_time, end_time
 
 def administer_beep():
-    start_time = time.time()
+    if config['os'].lower() == 'windows':
+        start_time = time.time()
+        time.sleep(10)
+        frequency = 2500  # Set Frequency To 2500 Hertz
+        duration = 1000*10  # Set Duration To 1000 ms == 1 second
+        winsound.Beep(frequency, duration)
+        time.sleep(10)
+        end_time = time.time()
 
-    time.sleep(10)
-    frequency = 2500  # Set Frequency To 2500 Hertz
-    duration = 10000  # Set Duration To 1000 ms == 1 second
-    winsound.Beep(frequency, duration)
-    time.sleep(10)
-    
-    end_time = time.time()
+    else:
+        start_time = time.time()
+        time.sleep(10)
+        play_mp3(config['beep_path'])
+        time.sleep(10)
+        end_time = time.time()
 
-    # play_mp3(config['beep_path'])
-    # end_time = time.time()
-    # duration = end_time - start_time
-    # # Break until 45secs
-    # time.sleep(45-duration)
     return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
