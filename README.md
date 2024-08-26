@@ -30,7 +30,7 @@ Make sure to have these 2 files:
 
 ## B. Streamlit App Usage
 ### *Steps to run Stimuli App:*
-1. Open `config.yml` and modify it according to the provided instructions.
+1. Open `config.yml` and make changes according to instructions.
 2. Open Terminal & relocate to `brain-waves-2.0` directory
 3. Activate Environment
 ```bash
