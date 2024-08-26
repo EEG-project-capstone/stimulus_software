@@ -1,4 +1,4 @@
-os: 'OS'
+os: 'Windows'
 tts_package: 'pyttsx3'
 stimuli_dir: 'data/lang_trials/'
 
