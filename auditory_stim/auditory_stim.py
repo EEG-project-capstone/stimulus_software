@@ -10,6 +10,7 @@ import time
 import streamlit as st
 import pydub
 from pydub import AudioSegment
+from pydub.playback import play
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 
@@ -18,7 +19,6 @@ with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
 if config['os'].lower() == 'windows':
-    import winsound
     import mpv
 
     player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
@@ -44,8 +44,9 @@ def play_mp3(mp3_path, verbose=True):
     if config['os'].lower() == 'windows':
         player.play(mp3_path)
         player.wait_for_playback()
-    elif config['os'].lower() == 'streamlit':
-        st.audio(mp3_path, format="audio/mpeg", autoplay=True)
+    elif config['os'].lower() == 'linux':
+        audio = AudioSegment.from_mp3(mp3_path)
+        play(audio)
     else:
         playsound(mp3_path)
 
@@ -121,22 +122,11 @@ def left_cmd_stim():
     return start_time, end_time
 
 def administer_beep():
-    if config['os'].lower() == 'windows':
-        start_time = time.time()
-        time.sleep(10)
-        frequency = 2500  # Set Frequency To 2500 Hertz
-        duration = 1000*10  # Set Duration To 1000 ms == 1 second
-        winsound.Beep(frequency, duration)
-        time.sleep(10)
-        end_time = time.time()
-
-    else:
-        start_time = time.time()
-        time.sleep(10)
-        play_mp3(config['beep_path'])
-        time.sleep(10)
-        end_time = time.time()
-
+    start_time = time.time()
+    time.sleep(10)
+    play_mp3(config['beep_path'])
+    time.sleep(10)
+    end_time = time.time()
     return start_time, end_time
 
 def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
