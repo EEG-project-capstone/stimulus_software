@@ -1,13 +1,40 @@
 # Brain Waves Stimulus Package 2.0
 
 ## Introduction
-
+The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
 ## Features
+### Graphical User Interface (GUI):
+A web-based interface powered by Streamlit, allowing for easy interaction with the software without requiring deep technical knowledge.
 
+### Stimulus Administration:
+
+**Randomized Trials:** Automatically randomizes and prepares trial sequences, including language-based stimuli, command prompts, and auditory beeps.  
+**Jittered Delay:** Introduces random delays between stimuli to reduce predictability and improve experiment robustness.  
+**Multiple Stimulus Types:** Supports language stimuli, right/left command prompts, and beep stimuli, with configurable playback options.
+
+### Patient Data Management:
+
+**Patient/EEG ID Input:** Allows users to input and track patient IDs during stimulus administration.  
+**Trial Tracking:** Records detailed trial information, including the type of trial, start and end times, and duration, which are stored in a CSV format for easy access and analysis.  
+**Prevent Redundant Administration:** Automatically checks if a patient has already received the stimulus protocol on the current date to avoid redundancy.
+
+### Search and Retrieval:
+
+**Search Administered Stimuli:** Users can search for and review stimuli that have been administered to patients on specific dates.  
+**View Stimuli Details:** Displays the specific stimuli administered to a patient, helping researchers track the protocol's progress and effectiveness.
+
+### Notes Management:
+
+**Add Notes:** Enables users to append notes to patient records, ensuring that all observations and important details are documented.  
+**Retrieve Notes:** Allows for easy retrieval of previously added notes, providing a comprehensive overview of patient interactions and observations.
+### Cross-Platform Support:
+Compatible with *Windows/Linux/MacOS* operating systems.
 
 ## Installation
 ### *Prerequisites*
-- Download `conda`, `python`
+This software requires the installation of:
+* [Anaconda](https://docs.anaconda.com/anaconda/install/)/[Miniconda](https://docs.anaconda.com/miniconda/)
+* Python
 ### *Setup Environment*
 #### 1. Create CONDA env
 ```bash

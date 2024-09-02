@@ -1,6 +1,6 @@
 # INPUT CHANGES HERE
 
-os: 'os' # 'os' or 'windows'
+os: 'os' # 'windows' or 'linux' or 'os'
 # Define your output path:
 patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a different location
 patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
