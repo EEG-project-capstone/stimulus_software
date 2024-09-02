@@ -88,10 +88,9 @@ In the `config.yml` file, locate the section marked with `# INPUT CHANGES HERE` 
 - **`os`**: Set this to your operating system, either `'os'` for macOS/Linux or `'windows'` for Windows.
   
   ```bash
-  os: 'os'  # Change to 'os' or 'windows' depending on your system
+  os: 'os' # 'windows' or 'linux' or 'os'
   ```
 
-## Examples
 
 ## Contributing
 - Nguyen Ha (Summer 2024)
