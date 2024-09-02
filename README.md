@@ -85,7 +85,7 @@ To set up the project, you need to modify specific parts of the `config.yml` fil
 
 In the `config.yml` file, locate the section marked with `# INPUT CHANGES HERE` and update the following fields:
 
-- **`os`**: Set this to your operating system, either `'os'` for macOS/Linux or `'windows'` for Windows.
+- **`os`**: Set this to your operating system, either `'os'` for macOS, `'windows'` for Windows, or `'linux'` for Linux.
   
   ```bash
   os: 'os' # 'windows' or 'linux' or 'os'
