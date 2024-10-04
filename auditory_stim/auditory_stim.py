@@ -2,9 +2,9 @@ import time
 import os
 import random
 import pandas as pd
-from gtts import gTTS
-import pyttsx3
-from playsound import playsound
+# from gtts import gTTS
+# import pyttsx3
+# from playsound import playsound
 import yaml
 import time
 import streamlit as st
@@ -18,22 +18,22 @@ config_file_path = 'config.yml'  # Replace with the actual path to your config f
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
-if config['os'].lower() == 'windows':
-    import mpv
+# if config['os'].lower() == 'windows':
+#     import mpv
 
-    player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
-    # Event handler for when the playback position changes
-    @player.property_observer('time-pos')
-    def on_time_pos_change(_name, value):
-        """Print video start and end times"""
-        if value == 0 or value is None:
-            start_time = time.time()
-            print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+#     player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+#     # Event handler for when the playback position changes
+#     @player.property_observer('time-pos')
+#     def on_time_pos_change(_name, value):
+#         """Print video start and end times"""
+#         if value == 0 or value is None:
+#             start_time = time.time()
+#             print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
-    pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
-    pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
-    print(f"pydub.AudioSegment.converter: {pydub.AudioSegment.converter}")
-    print(f"pydub.AudioSegment.ffprobe: {pydub.AudioSegment.ffprobe}")
+#     pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
+#     pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
+#     print(f"pydub.AudioSegment.converter: {pydub.AudioSegment.converter}")
+#     print(f"pydub.AudioSegment.ffprobe: {pydub.AudioSegment.ffprobe}")
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))

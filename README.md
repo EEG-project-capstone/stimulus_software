@@ -57,12 +57,15 @@ Then run
 ```bash
 pip install python-mpv
 ```
-#### 3. Instal ffmpeg (*for Windows*)
+#### 3. Install ffmpeg (*for Windows or Mac if an error occurs*)
 Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
 Extract and rename to `ffmpeg`.    
 Make sure to have these 2 files:    
 `ffmpeg\bin\ffmpeg.exe`    
 `ffmpeg\bin\ffprobe.exe`
+
+##### For Mac
+If you encounter the error `FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'`, you can resolve it by running `brew install ffmpeg`.
 
 ## Usage
 ### Steps to Run Stimuli App
