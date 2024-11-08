@@ -46,7 +46,7 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
     # Check to see if patient has already been given stimulus
     if (patient_df['patient_id'] == patient_id).any():
         # Create a DataFrame with the new note
-        new_note = pd.DataFrame([{'patient_id': patient_id, 'notes': note, 'date': recorded_date}])
+        new_note = pd.DataFrame([{'patient_id': patient_id, 'date': recorded_date, 'notes': note}])
         # Concatenate the new note with the existing patient notes DataFrame
         patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
         # Save the updated DataFrame to CSV
