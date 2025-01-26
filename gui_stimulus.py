@@ -105,7 +105,8 @@ if st.button("Play Stimulus"):
 
             # Save each patient output into seaprated csv files with 'patientId_currentDate'
             output_dir = config['patient_output_path']
-            output_file = f"{patient_id}_{current_date}.csv"
+            formatted_date = current_date.replace("-", "")
+            output_file = f"{patient_id}_{formatted_date}.csv"
             output_path = os.path.join(output_dir, output_file)
             pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
             print(f"Data saved to {output_path}")
