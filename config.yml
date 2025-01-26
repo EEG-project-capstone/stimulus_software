@@ -4,6 +4,7 @@ os: 'linux' # 'windows' or 'linux' or 'os'
 # Define your output path:
 patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a different location
 patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
+patient_history_path: 'data/patient_history.csv' # Adjust the path if your file is in a different location
 patient_output_path: 'data/patients' # Add folder to save output csv fiels from 'Prepare Stimulus' process
 #------------------------------
 

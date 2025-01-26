@@ -1,5 +1,5 @@
 import streamlit as st
-from auditory_stim.stimulus_package_notes import add_notes
+from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 import pandas as pd
 import os
@@ -41,6 +41,34 @@ current_date = time.strftime("%Y-%m-%d")
 
 # Streamlit app title
 st.title("EEG Stimulus Package")
+
+st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
+your_note = st.text_input("Write your note here")
+
+# Add Note button
+if st.button("Add Note"):
+    add_notes(selected_patient, your_note, selected_date)
+    st.success("Your note was successfully added to patient_notes.csv")
+
+st.header("Find Patient Notes", divider='rainbow')
+st.subheader("The following notes have been written for the selected patient and date:")
+
+if not os.path.exists(config["patient_note_path"]):
+    st.error("You haven't added any notes yet, add a note first.")
+else:
+    patient_notes = pd.read_csv(config["patient_note_path"])
+    selected_patient_find_notes = st.selectbox(
+        "Select Patient ID", 
+        patient_notes.patient_id.value_counts().index.sort_values(), 
+        key="widget_key_for_find_patient_notes"
+    )
+    selected_date_find_notes = st.selectbox(
+        "Select Administered Date", 
+        patient_notes[patient_notes.patient_id == selected_patient_find_notes].date.value_counts().index.sort_values(), 
+        key="widget_key_for_find_date_notes"
+    )
+    for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
+        st.write(note)
 
 st.header("Administer Auditory Stimuli", divider='rainbow')
 
@@ -111,9 +139,9 @@ if st.button("Play Stimulus"):
             pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
             print(f"Data saved to {output_path}")
 
-            # Add notes after saving csv output files
-            add_notes(patient_id, "Saved into csv files", current_date)
-            st.success("Your note was successfully added to patient_notes.csv")
+            # Add history after saving csv output files
+            add_history(patient_id, current_date)
+            st.success("Your note was successfully added to patient_notes.csv and patient_history.csv")
 
 
 st.header("Search Patients Already Administered Stimuli", divider='rainbow')
@@ -130,30 +158,3 @@ for stimulus in patient_df[(patient_df.patient_id == selected_patient) & (patien
 # for order in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].order.value_counts().index.tolist():
 #     st.write(order)
 
-st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
-your_note = st.text_input("Write your note here")
-
-# Add Note button
-if st.button("Add Note"):
-    add_notes(selected_patient, your_note, selected_date)
-    st.success("Your note was successfully added to patient_notes.csv")
-
-st.header("Find Patient Notes", divider='rainbow')
-st.subheader("The following notes have been written for the selected patient and date:")
-
-if not os.path.exists(config["patient_note_path"]):
-    st.error("You haven't added any notes yet, add a note first.")
-else:
-    patient_notes = pd.read_csv(config["patient_note_path"])
-    selected_patient_find_notes = st.selectbox(
-        "Select Patient ID", 
-        patient_notes.patient_id.value_counts().index.sort_values(), 
-        key="widget_key_for_find_patient_notes"
-    )
-    selected_date_find_notes = st.selectbox(
-        "Select Administered Date", 
-        patient_notes[patient_notes.patient_id == selected_patient_find_notes].date.value_counts().index.sort_values(), 
-        key="widget_key_for_find_date_notes"
-    )
-    for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
-        st.write(note)
