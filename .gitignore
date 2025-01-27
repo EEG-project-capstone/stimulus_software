@@ -2,6 +2,7 @@
 ffmpeg/
 data/
 audio_data/lang_trials/
+.DS_Store
 
 
 # Byte-compiled / optimized / DLL files
