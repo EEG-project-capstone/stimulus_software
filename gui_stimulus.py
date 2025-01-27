@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import time
 import yaml
+import sys
 
 """
 GUI Stimulus Package
@@ -22,6 +23,10 @@ This script provides a graphical user interface (GUI) for administering auditory
 Output:
 The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
+
+# Check for test flag
+test_run = '--test' in sys.argv
+print(f"Test run: {test_run}")  
 
 # Load configuration
 with open('config.yml', 'r') as f:
@@ -48,6 +53,9 @@ st.header("Administer Auditory Stimuli", divider='rainbow')
 patient_id = st.text_input("Enter Patient/EEG ID")
 trial_types = []
 lang_trials_ids = []
+
+selected_patient = st.selectbox("Select Patient ID", patient_df.patient_id.value_counts().index.sort_values())
+selected_date = st.selectbox("Select Administered Date", patient_df[patient_df.patient_id == selected_patient].date.value_counts().index.sort_values())
 
 if st.button("Prepare Stimulus"):
     trial_types = randomize_trials()
@@ -84,7 +92,7 @@ if st.button("Play Stimulus"):
             for i in range(n):
                 trial = trial_types[i]
                 print(f"Trial {i}: {trial}")
-                start_time, end_time = play_stimuli(trial)
+                start_time, end_time = play_stimuli(trial, test_run)
                 administered_stimuli.append({
                             'patient_id': patient_id,
                             'date': current_date,
@@ -147,10 +155,6 @@ else:
         st.write(note)
 
 st.header("Search Patients Already Administered Stimuli", divider='rainbow')
-
-# Add searchable dropdown menu of patient IDs
-selected_patient = st.selectbox("Select Patient ID", patient_df.patient_id.value_counts().index.sort_values())
-selected_date = st.selectbox("Select Administered Date", patient_df[patient_df.patient_id == selected_patient].date.value_counts().index.sort_values())
 
 st.subheader("The following auditory stimuli were administered:")
 for stimulus in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].sentences.tolist():

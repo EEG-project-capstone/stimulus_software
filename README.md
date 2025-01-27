@@ -82,9 +82,18 @@ to create the static audio files.
 ```bash
 conda activate eeg
 ```
-4. Run Streamlit App
+4. Run Streamlit App:    
+*Normal Mode*
+
 ```bash
 python -m streamlit run gui_stimulus.py
+```    
+
+  *Test Mode*  
+To enable test mode, use the `--test` flag:    
+
+```bash
+python -m streamlit run gui_stimulus.py -- --test
 ```
 
 ## Configuration

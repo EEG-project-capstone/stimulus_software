@@ -89,39 +89,43 @@ def random_lang_stim(output_path, num_sentence=12):
     
     return sample_ids
 
-def play_lang_stim(output_path):
+def play_lang_stim(input_path, test_run=False):
     start_time = time.time()
-    play_mp3(output_path)
+    if not test_run:
+        play_mp3(input_path)
     end_time = time.time()
     return start_time, end_time
 
-def right_cmd_stim():
+def right_cmd_stim(test_run=False):
     start_time = time.time()
-    for _ in range(8):
-        play_mp3(config['right_keep_path'])
-        time.sleep(10)
+    if not test_run:
+        for _ in range(8):
+            play_mp3(config['right_keep_path'])
+            time.sleep(10)
 
-        play_mp3(config['right_stop_path'])
-        time.sleep(10)
+            play_mp3(config['right_stop_path'])
+            time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def left_cmd_stim():
+def left_cmd_stim(test_run=False):
     start_time = time.time()
-    for _ in range(8):
-        play_mp3(config['left_keep_path'])
-        time.sleep(10)
+    if not test_run:
+        for _ in range(8):
+            play_mp3(config['left_keep_path'])
+            time.sleep(10)
 
-        play_mp3(config['left_stop_path'])
-        time.sleep(10)
+            play_mp3(config['left_stop_path'])
+            time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def administer_beep():
+def administer_beep(test_run=False):
     start_time = time.time()
-    time.sleep(10)
-    play_mp3(config['beep_path'])
-    time.sleep(10)
+    if not test_run:
+        time.sleep(10)
+        play_mp3(config['beep_path'])
+        time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
@@ -162,18 +166,18 @@ def generate_stimuli(trial_types):
     gen_bar.progress(100, text=f"Done")
     return lang_trials_ids
 
-def play_stimuli(trial):
+def play_stimuli(trial, test_run=False):
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
-        start_time, end_time = play_lang_stim(output_path)
+        start_time, end_time = play_lang_stim(output_path, test_run)
         jittered_delay()
     elif trial == "rcmd":
-        start_time, end_time = right_cmd_stim()
+        start_time, end_time = right_cmd_stim(test_run)
         jittered_delay()
     elif trial == "lcmd":
-        start_time, end_time = left_cmd_stim()
+        start_time, end_time = left_cmd_stim(test_run)
         jittered_delay()
     else:
-        start_time, end_time = administer_beep()
+        start_time, end_time = administer_beep(test_run)
         jittered_delay()
     return start_time, end_time
