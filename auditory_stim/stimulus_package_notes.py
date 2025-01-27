@@ -46,10 +46,60 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
     # Check to see if patient has already been given stimulus
     if (patient_df['patient_id'] == patient_id).any():
         # Create a DataFrame with the new note
-        new_note = pd.DataFrame([{'patient_id': patient_id, 'notes': note, 'date': recorded_date}])
+        new_note = pd.DataFrame([{'patient_id': patient_id, 'date': recorded_date, 'notes': note}])
         # Concatenate the new note with the existing patient notes DataFrame
         patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
         # Save the updated DataFrame to CSV
         patient_notes.to_csv(config["patient_note_path"], index=False)
+    else:
+        print('Patient has not been administered stimulus yet, double-check patient_id number.')
+
+def add_history(patient_id="patient0", recorded_date="00/00/0000"):
+    """
+    Adds a history note for a patient to a CSV file if the
+    patient has already been administered stimulus.
+
+    Parameters:
+    - patient_id (str): The identifier for the
+    patient, such as a patient ID or EEG ID.
+    - recorded_date (str): The date of recording
+
+    Returns:
+    - None, but overwrites/updates the patient_history.csv
+
+    Note:
+    The function checks if the patient has been administered stimulus by
+    verifying if there exists a record for the patient in 'patient_df.csv'.
+    If such a record exists, the note is appended to 'patient_history.csv'. 
+    If 'patient_df.csv' does not exist, it prints a message indicating
+    that stimulus package hasn't been run for the patient yet.
+    """
+
+    # Load configuration
+    with open('config.yml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    if os.path.exists(config["patient_history_path"]):
+        # Open the patient notes DataFrame
+        patient_history = pd.read_csv(config["patient_history_path"])
+    else:
+        # Create an empty DataFrame if patient_history.csv doesn't exist
+        patient_history = pd.DataFrame(columns=['patient_id', 'date'])
+
+    if os.path.exists(config['patient_df_path']):
+        # Open the patient administered sentences DataFrame
+        patient_df = pd.read_csv(config['patient_df_path'])
+    else:
+        # Create an empty DataFrame if patient_df.csv doesn't exist
+        print('Make sure the patient_df.csv exists, if it does not, generate sentences was never run (ie no patients have been administered stimulus yet).')
+
+    # Check to see if patient has already been given stimulus
+    if (patient_df['patient_id'] == patient_id).any():
+        # Create a DataFrame with the new note
+        new_history = pd.DataFrame([{'patient_id': patient_id, 'date': recorded_date}])
+        # Concatenate the new note with the existing patient notes DataFrame
+        patient_history = pd.concat([patient_history, new_history], ignore_index=True)
+        # Save the updated DataFrame to CSV
+        patient_history.to_csv(config["patient_history_path"], index=False)
     else:
         print('Patient has not been administered stimulus yet, double-check patient_id number.')

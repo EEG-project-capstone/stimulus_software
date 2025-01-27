@@ -1,8 +1,5 @@
 # Data files
 ffmpeg/
-data/lang_sound/
-data/sample_sound/
-data/lang_trials/
 data/
 
 # Byte-compiled / optimized / DLL files
