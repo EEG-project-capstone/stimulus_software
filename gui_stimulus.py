@@ -32,6 +32,14 @@ print(f"Test run: {test_run}")
 with open('config.yml', 'r') as f:
     config = yaml.safe_load(f)
 
+# Check if the directory exists
+if not os.path.exists(config['patient_output_dir']):
+    os.makedirs(config['patient_output_dir'])
+if not os.path.exists(config['stimuli_dir']):
+    os.makedirs(config['stimuli_dir'])
+if not os.path.exists(config['sentences_path']):
+    raise FileNotFoundError(f"Sentences directory not found at {config['sentences_path']}")
+print(f"Configuration loaded: {config}")
 
 # Load patient data
 if os.path.exists(config['patient_df_path']):
