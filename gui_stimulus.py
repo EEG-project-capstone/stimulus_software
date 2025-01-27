@@ -104,7 +104,10 @@ if st.button("Play Stimulus"):
             print(f"administered_stimuli_df: {administered_stimuli_df}")
 
             # Save each patient output into seaprated csv files with 'patientId_currentDate'
-            output_dir = config['patient_output_path']
+            output_dir = config['patient_output_dir']
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
             formatted_date = current_date.replace("-", "")
             output_file = f"{patient_id}_{formatted_date}.csv"
             output_path = os.path.join(output_dir, output_file)
@@ -142,7 +145,7 @@ else:
     )
     for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
         st.write(note)
-        
+
 st.header("Search Patients Already Administered Stimuli", divider='rainbow')
 
 # Add searchable dropdown menu of patient IDs
