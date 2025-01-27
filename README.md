@@ -68,6 +68,10 @@ Make sure to have these 2 files:
 ##### For Mac
 `brew install ffmpeg`.
 
+#### 4. Install audio folder
+Download the audio folder from this [link](https://drive.google.com/drive/folders/1VktnddvsY1kFihuCpRO4GKf7Z4wXVKIa) 
+to the `data` folder. Make sure the folder name matches the `sentences_path` field in `config.yml`
+
 ## Usage
 ### Steps to Run Stimuli App
 1. Open `config.yml` and make changes according to instructions.
