@@ -12,7 +12,7 @@ patient_output_dir: 'data/patients/' # Add folder to save output csv fiels from 
 tts_package: 'pyttsx3'
 stimuli_dir: 'audio_data/lang_trials/'
 
-sentences_path: 'audio_data/sentences'
+sentences_path: 'audio_data/sentences/'
 right_keep_path: 'audio_data/static/right_keep.mp3'
 right_stop_path: 'audio_data/static/right_stop.mp3'
 left_keep_path: 'audio_data/static/left_keep.mp3'
