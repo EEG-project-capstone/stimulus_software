@@ -58,6 +58,7 @@ Then run
 pip install python-mpv
 ```
 #### 3. Install ffmpeg (*for Windows or Mac if an error occurs*)
+##### For Windows
 Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
 Extract and rename to `ffmpeg`.    
 Make sure to have these 2 files:    
@@ -65,7 +66,13 @@ Make sure to have these 2 files:
 `ffmpeg\bin\ffprobe.exe`
 
 ##### For Mac
-If you encounter the error `FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'`, you can resolve it by running `brew install ffmpeg`.
+`brew install ffmpeg`.
+
+#### 4. Install audio folder
+Download the audio folder from this [link](https://drive.google.com/drive/folders/1VktnddvsY1kFihuCpRO4GKf7Z4wXVKIa) 
+to the `data` folder. Make sure the folder name matches the `sentences_path` field in `config.yml`.    
+If the `data/static/` is not already available, run ` python auditort_stim/static_sound.py`
+to create the static audio files. 
 
 ## Usage
 ### Steps to Run Stimuli App
@@ -75,9 +82,18 @@ If you encounter the error `FileNotFoundError: [Errno 2] No such file or directo
 ```bash
 conda activate eeg
 ```
-4. Run Streamlit App
+4. Run Streamlit App:    
+*Normal Mode*
+
 ```bash
 python -m streamlit run gui_stimulus.py
+```    
+
+  *Test Mode*  
+To enable test mode, use the `--test` flag:    
+
+```bash
+python -m streamlit run gui_stimulus.py -- --test
 ```
 
 ## Configuration

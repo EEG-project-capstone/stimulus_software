@@ -1,10 +1,11 @@
 import streamlit as st
-from auditory_stim.stimulus_package_notes import add_notes
+from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 import pandas as pd
 import os
 import time
 import yaml
+import sys
 
 """
 GUI Stimulus Package
@@ -22,6 +23,10 @@ This script provides a graphical user interface (GUI) for administering auditory
 Output:
 The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
+
+# Check for test flag
+test_run = '--test' in sys.argv
+print(f"Test run: {test_run}")  
 
 # Load configuration
 with open('config.yml', 'r') as f:
@@ -84,7 +89,7 @@ if st.button("Play Stimulus"):
             for i in range(n):
                 trial = trial_types[i]
                 print(f"Trial {i}: {trial}")
-                start_time, end_time = play_stimuli(trial)
+                start_time, end_time = play_stimuli(trial, test_run)
                 administered_stimuli.append({
                             'patient_id': patient_id,
                             'date': current_date,
@@ -104,42 +109,34 @@ if st.button("Play Stimulus"):
             print(f"administered_stimuli_df: {administered_stimuli_df}")
 
             # Save each patient output into seaprated csv files with 'patientId_currentDate'
-            output_dir = config['patient_output_path']
-            output_file = f"{patient_id}_{current_date}.csv"
+            output_dir = config['patient_output_dir']
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            formatted_date = current_date.replace("-", "")
+            output_file = f"{patient_id}_{formatted_date}.csv"
             output_path = os.path.join(output_dir, output_file)
             pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
             print(f"Data saved to {output_path}")
 
-            # Add notes after saving csv output files
-            add_notes(patient_id, "Saved into csv files", current_date)
-            st.success("Your note was successfully added to patient_notes.csv")
-
-
-st.header("Search Patients Already Administered Stimuli", divider='rainbow')
-
-# Add searchable dropdown menu of patient IDs
-selected_patient = st.selectbox("Select Patient ID", patient_df.patient_id.value_counts().index.sort_values())
-selected_date = st.selectbox("Select Administered Date", patient_df[patient_df.patient_id == selected_patient].date.value_counts().index.sort_values())
-
-st.subheader("The following auditory stimuli were administered:")
-for stimulus in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].sentences.tolist():
-    st.write(stimulus)
-
-# st.subheader("Stimuli were administered in the following order:")
-# for order in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].order.value_counts().index.tolist():
-#     st.write(order)
+            # Add history after saving csv output files
+            add_history(patient_id, current_date)
+            st.success(f"Stimuli has been administered to patient {patient_id} on {current_date}.")
 
 st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
 your_note = st.text_input("Write your note here")
 
 # Add Note button
 if st.button("Add Note"):
-    add_notes(selected_patient, your_note, selected_date)
+    selected_date = time.strftime("%Y-%m-%d")
+    add_notes(patient_id, your_note, selected_date)
     st.success("Your note was successfully added to patient_notes.csv")
 
 st.header("Find Patient Notes", divider='rainbow')
 st.subheader("The following notes have been written for the selected patient and date:")
 
+selected_patient_find_notes = None
+selected_date_find_notes = None
 if not os.path.exists(config["patient_note_path"]):
     st.error("You haven't added any notes yet, add a note first.")
 else:
@@ -156,3 +153,14 @@ else:
     )
     for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
         st.write(note)
+
+st.header("Search Patients Already Administered Stimuli", divider='rainbow')
+
+st.subheader("The following auditory stimuli were administered:")
+for stimulus in patient_df[(patient_df.patient_id == selected_patient_find_notes) & (patient_df.date == selected_date_find_notes)].sentences.tolist():
+    st.write(stimulus)
+
+# st.subheader("Stimuli were administered in the following order:")
+# for order in patient_df[(patient_df.patient_id == selected_patient) & (patient_df.date == selected_date)].order.value_counts().index.tolist():
+#     st.write(order)
+

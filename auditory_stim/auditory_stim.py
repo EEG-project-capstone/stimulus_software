@@ -1,10 +1,6 @@
 import time
 import os
 import random
-import pandas as pd
-# from gtts import gTTS
-# import pyttsx3
-# from playsound import playsound
 import yaml
 import time
 import streamlit as st
@@ -12,28 +8,10 @@ import pydub
 from pydub import AudioSegment
 from pydub.playback import play
 
-config_file_path = 'config.yml'  # Replace with the actual path to your config file
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
-
-# if config['os'].lower() == 'windows':
-#     import mpv
-
-#     player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
-#     # Event handler for when the playback position changes
-#     @player.property_observer('time-pos')
-#     def on_time_pos_change(_name, value):
-#         """Print video start and end times"""
-#         if value == 0 or value is None:
-#             start_time = time.time()
-#             print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
-
-#     pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
-#     pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
-#     print(f"pydub.AudioSegment.converter: {pydub.AudioSegment.converter}")
-#     print(f"pydub.AudioSegment.ffprobe: {pydub.AudioSegment.ffprobe}")
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))
@@ -42,12 +20,30 @@ def play_mp3(mp3_path, verbose=True):
     if verbose:
         print(f"Playing {mp3_path}...")
     if config['os'].lower() == 'windows':
+        import mpv
+        player = mpv.MPV(input_default_bindings=True, input_vo_keyboard=True, osc=True)
+
+        @player.property_observer('time-pos')
+        def on_time_pos_change(_name, value):
+            """Print video start and end times"""
+            if value == 0 or value is None:
+                start_time = time.time()
+                print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+
+        pydub.AudioSegment.converter = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffmpeg.exe")               
+        pydub.AudioSegment.ffprobe   = os.path.join(os.getcwd(), 'ffmpeg', 'bin', "ffprobe.exe")
+        print(f"pydub.AudioSegment.converter: {pydub.AudioSegment.converter}")
+        print(f"pydub.AudioSegment.ffprobe: {pydub.AudioSegment.ffprobe}")
+
         player.play(mp3_path)
         player.wait_for_playback()
+    
     elif config['os'].lower() == 'linux':
         audio = AudioSegment.from_mp3(mp3_path)
         play(audio)
+    
     else:
+        from playsound import playsound
         playsound(mp3_path)
 
 def speed_up_audio(input_path, output_path, speed_factor=1.5):
@@ -93,39 +89,43 @@ def random_lang_stim(output_path, num_sentence=12):
     
     return sample_ids
 
-def play_lang_stim(output_path):
+def play_lang_stim(input_path, test_run=False):
     start_time = time.time()
-    play_mp3(output_path)
+    if not test_run:
+        play_mp3(input_path)
     end_time = time.time()
     return start_time, end_time
 
-def right_cmd_stim():
+def right_cmd_stim(test_run=False):
     start_time = time.time()
-    for _ in range(8):
-        play_mp3(config['right_keep_path'])
-        time.sleep(10)
+    if not test_run:
+        for _ in range(8):
+            play_mp3(config['right_keep_path'])
+            time.sleep(10)
 
-        play_mp3(config['right_stop_path'])
-        time.sleep(10)
+            play_mp3(config['right_stop_path'])
+            time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def left_cmd_stim():
+def left_cmd_stim(test_run=False):
     start_time = time.time()
-    for _ in range(8):
-        play_mp3(config['left_keep_path'])
-        time.sleep(10)
+    if not test_run:
+        for _ in range(8):
+            play_mp3(config['left_keep_path'])
+            time.sleep(10)
 
-        play_mp3(config['left_stop_path'])
-        time.sleep(10)
+            play_mp3(config['left_stop_path'])
+            time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def administer_beep():
+def administer_beep(test_run=False):
     start_time = time.time()
-    time.sleep(10)
-    play_mp3(config['beep_path'])
-    time.sleep(10)
+    if not test_run:
+        time.sleep(10)
+        play_mp3(config['beep_path'])
+        time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
@@ -166,18 +166,18 @@ def generate_stimuli(trial_types):
     gen_bar.progress(100, text=f"Done")
     return lang_trials_ids
 
-def play_stimuli(trial):
+def play_stimuli(trial, test_run=False):
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
-        start_time, end_time = play_lang_stim(output_path)
+        start_time, end_time = play_lang_stim(output_path, test_run)
         jittered_delay()
     elif trial == "rcmd":
-        start_time, end_time = right_cmd_stim()
+        start_time, end_time = right_cmd_stim(test_run)
         jittered_delay()
     elif trial == "lcmd":
-        start_time, end_time = left_cmd_stim()
+        start_time, end_time = left_cmd_stim(test_run)
         jittered_delay()
     else:
-        start_time, end_time = administer_beep()
+        start_time, end_time = administer_beep(test_run)
         jittered_delay()
     return start_time, end_time

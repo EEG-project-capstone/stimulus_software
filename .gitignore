@@ -1,6 +1,7 @@
 # Data files
 ffmpeg/
 data/
+audio_data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
