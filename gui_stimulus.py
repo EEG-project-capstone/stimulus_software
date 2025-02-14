@@ -253,16 +253,6 @@ with tab1:
         for note in patient_notes[(patient_notes['patient_id'] == selected_patient_find_notes) & (patient_notes['date'] == selected_date_find_notes)]['notes'].tolist():
             st.write(note)
 
-    st.header("Search Patients Already Administered Stimuli", divider='rainbow')
-    st.header("Search Patients Already Administered Stimuli", divider='rainbow')
-
-    st.subheader("The following auditory stimuli were administered:")
-    for stimulus in patient_df[(patient_df.patient_id == selected_patient_find_notes) & (patient_df.date == selected_date_find_notes)].sentences.tolist():
-        st.write(stimulus)
-    st.subheader("The following auditory stimuli were administered:")
-    for stimulus in patient_df[(patient_df.patient_id == selected_patient_find_notes) & (patient_df.date == selected_date_find_notes)].sentences.tolist():
-        st.write(stimulus)
-
 # Tab 2: Upload Data
 # Check if the directory exists
 if not os.path.exists(config['edf_dir']):
