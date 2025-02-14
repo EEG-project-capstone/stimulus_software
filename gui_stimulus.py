@@ -1,12 +1,3 @@
-import streamlit as st
-from auditory_stim.stimulus_package_notes import add_notes, add_history
-from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
-import pandas as pd
-import os
-import time
-import yaml
-import sys
-
 """
 GUI Stimulus Package
 
@@ -23,6 +14,15 @@ This script provides a graphical user interface (GUI) for administering auditory
 Output:
 The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
+
+import streamlit as st
+from auditory_stim.stimulus_package_notes import add_notes, add_history
+from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
+import pandas as pd
+import os
+import time
+import yaml
+import sys
 
 # Check for test flag
 test_run = '--test' in sys.argv
