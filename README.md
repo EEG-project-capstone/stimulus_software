@@ -71,7 +71,7 @@ Make sure to have these 2 files:
 #### 4. Install audio folder
 Download the audio folder from this [link](https://drive.google.com/drive/folders/1VktnddvsY1kFihuCpRO4GKf7Z4wXVKIa) 
 to the `data` folder. Make sure the folder name matches the `sentences_path` field in `config.yml`.    
-If the `data/static/` is not already available, run ` python auditort_stim/static_sound.py`
+If the `data/static/` is not already available, run `python auditory_stim/static_sound.py`
 to create the static audio files. 
 
 #### 5. Set File Upload Limit
