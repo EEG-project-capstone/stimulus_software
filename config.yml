@@ -6,6 +6,8 @@ patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a d
 patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
 patient_history_path: 'data/patient_history.csv' # Adjust the path if your file is in a different location
 patient_output_dir: 'data/patients/' # Add folder to save output csv fiels from 'Prepare Stimulus' process
+patient_label_path: 'data/patient_records.csv' # Adjust the path if your file is in a different location
+edf_dir: 'data/edfs/' # Add folder to save edf files
 #------------------------------
 
 # (Do not change)
