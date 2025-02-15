@@ -15,14 +15,14 @@ Output:
 The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
 
-import streamlit as st
-from auditory_stim.stimulus_package_notes import add_notes, add_history
-from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 import pandas as pd
 import os
 import time
 import yaml
 import sys
+import streamlit as st
+from auditory_stim.stimulus_package_notes import add_notes, add_history
+from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 
 # Check for test flag
 test_run = '--test' in sys.argv
@@ -168,6 +168,11 @@ with tab1:
 # Check if the directory exists
 if not os.path.exists(config['edf_dir']):
     os.makedirs(config['edf_dir'])
+if os.path.exists(config['patient_label_path']):
+    patient_label_df = pd.read_csv(config['patient_label_path'])
+else:
+    patient_label_df = pd.DataFrame(columns=['patient_id', 'date', 'cpc', 'gose'])
+    patient_label_df.to_csv(config['patient_label_path'], index=False)
 
 # CPC Scale
 cpc_scale = [
@@ -193,20 +198,33 @@ gose_scale = [
     "GOSE 8: Upper good recovery",
 ]
 gose_options = list(range(len(gose_scale)))
-
+    
 with tab2:
     st.header("Upload EEG Files")
 
     with st.form("my_form"):
         patient_id = st.text_input("Patient ID", placeholder="Enter Patient ID")
+        date = st.date_input("Recording Date")
+        date_str = date.strftime("%Y%m%d")
+
+        print(patient_id, date_str)
+
+        # Search for existing data
+        if patient_id and date_str:
+            existing_record = patient_label_df.loc[(patient_label_df['patient_id'] == patient_id) & (patient_label_df['date'] == date_str)]
+            print(existing_record)
+            if not existing_record.empty:
+                cpc_input = existing_record['cpc'].values[0]
+                gose_input = existing_record['gose'].values[0]
+                st.info(f"Existing data found for {patient_id} on {date_str}. CPC: {cpc_input}, GOSE: {gose_input}")
+
         edf_file = st.file_uploader("Upload EDF File", type=["edf"])
-        date = st.date_input("Recording Date", value="today")
-        cpc_input = st.selectbox("Select CPC Scale", cpc_options, format_func=lambda x: cpc_scale[x])
-        gose_input = st.selectbox("Select GOSE Scale", gose_options, format_func=lambda x: gose_scale[x])
+        cpc_input = st.selectbox("Select CPC Score", cpc_options, format_func=lambda x: cpc_scale[x])
+        gose_input = st.selectbox("Select GOSE Score", gose_options, format_func=lambda x: gose_scale[x])
         submitted = st.form_submit_button("Submit")
         if submitted:
             # Check no duplicates      
-            date_str = date.strftime("%Y%m%d")
+            
             full_path = os.path.join(config['edf_dir'], f"{patient_id}_{date_str}.edf")
             if os.path.exists(full_path):
                 st.error(f"File already exists for {patient_id} on {date_str}")
@@ -216,6 +234,16 @@ with tab2:
                 with open(full_path, 'wb') as f: 
                     f.write(edf_file.getvalue())
                 st.success(f"Uploaded {edf_file.name} for {patient_id}")
+
+                # Save the label
+                patient_label_row = pd.DataFrame([{
+                    'patient_id': patient_id,
+                    'date': date_str,
+                    'cpc': cpc_input if cpc_input > 0 else None,
+                    'gose': gose_input if gose_input > 0 else None
+                }])
+                patient_label_row.to_csv(config['patient_label_path'], mode='a', header=False, index=False)
+                patient_label_df = pd.read_csv(config['patient_label_path'])
             
 
             
