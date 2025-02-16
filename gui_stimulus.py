@@ -231,6 +231,42 @@ with tab2:
                 }])
                 patient_label_row.to_csv(config['patient_label_path'], mode='a', header=False, index=False)
                 patient_label_df = pd.read_csv(config['patient_label_path'])
-            
 
-            
+# Tab 3: EEG Graphs
+# Check if the directory exists
+if not os.path.exists(config['result_dir']):
+    os.makedirs(config['result_dir'])
+if not os.path.exists(config['cmd_result_dir']):
+    os.makedirs(config['cmd_result_dir'])
+if not os.path.exists(config['lang_tracking_dir']):
+    os.makedirs(config['lang_tracking_dir'])
+
+graphs = ["", "Language Tracking", "CMD"]
+graph_options = list(range(len(graphs)))
+
+with tab3:
+    st.header("EEG Graphs")
+
+    patient_ids = patient_label_df['patient_id'].unique()
+    selected_patient = st.selectbox("Choose Patient", patient_ids, index=None)
+    date = st.date_input("Recording Date")
+    date_str = date.strftime("%Y%m%d")
+    fname = f"{selected_patient}_{date_str}"
+    selected_graph = st.selectbox("Choose Graph Type", graph_options, format_func=lambda x: graphs[x])
+    
+    st.subheader("Graph Display")
+    
+    if selected_graph==1:
+        # TODO: Add comments for analysis results
+        fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
+        if os.path.exists(fig_full_path):
+            st.image(fig_full_path)
+        else:
+            pass
+    elif selected_graph==2:
+        # TODO: Add comments for analysis results
+        fig_full_path = os.path.join(config['lang_tracking_dir'], f"{fname}.png")
+        if os.path.exists(fig_full_path):
+            st.image(fig_full_path)
+        else:
+            pass
