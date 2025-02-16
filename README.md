@@ -74,6 +74,11 @@ to the `data` folder. Make sure the folder name matches the `sentences_path` fie
 If the `data/static/` is not already available, run `python auditory_stim/static_sound.py`
 to create the static audio files. 
 
+#### 5. Set File Upload Limit
+```bash
+export STREAMLIT_SERVER_MAX_UPLOAD_SIZE=400
+```
+
 ## Usage
 ### Steps to Run Stimuli App
 1. Open `config.yml` and make changes according to instructions.
