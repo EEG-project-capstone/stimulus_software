@@ -23,6 +23,7 @@ import sys
 import streamlit as st
 from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
+from eeg_auditory_stimulus import claassen_analysis
 
 # Check for test flag
 test_run = '--test' in sys.argv
@@ -269,4 +270,4 @@ with tab3:
         if os.path.exists(fig_full_path):
             st.image(fig_full_path)
         else:
-            pass
+            print(claassen_analysis.plot_permutation_test())
