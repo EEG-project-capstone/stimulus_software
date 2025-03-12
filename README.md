@@ -79,6 +79,21 @@ to create the static audio files.
 export STREAMLIT_SERVER_MAX_UPLOAD_SIZE=400
 ```
 
+#### 6. Install and import eeg-auditory-stimulus package
+To integrate the [eeg-auditory-stimulus](https://github.com/EEG-project-capstone/eeg-auditory-stimulus) package into the **brain-waves-2.0** project, follow these steps:
+
+**From the main branch:**
+
+```bash
+pip install --upgrade --force-reinstall git+https://github.com/EEG-project-capstone/eeg-auditory-stimulus.git
+```
+
+**From a different branch (e.g., `dev/package`):**
+
+```bash
+pip install --upgrade --force-reinstall git+https://github.com/EEG-project-capstone/eeg-auditory-stimulus.git@dev/package
+```
+
 ## Usage
 ### Steps to Run Stimuli App
 1. Open `config.yml` and make changes according to instructions.
