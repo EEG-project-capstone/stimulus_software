@@ -259,14 +259,14 @@ with tab3:
     
     if selected_graph==1:
         # TODO: Add comments for analysis results
-        fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
+        fig_full_path = os.path.join(config['lang_tracking_dir'], f"{fname}.png")
         if os.path.exists(fig_full_path):
             st.image(fig_full_path)
         else:
             pass
     elif selected_graph==2:
         # TODO: Add comments for analysis results
-        fig_full_path = os.path.join(config['lang_tracking_dir'], f"{fname}.png")
+        fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
         if os.path.exists(fig_full_path):
             st.image(fig_full_path)
         else:
