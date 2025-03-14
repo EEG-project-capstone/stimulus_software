@@ -21,8 +21,10 @@ import time
 import yaml
 import sys
 import streamlit as st
+from PIL import Image
 from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
+from eeg_auditory_stimulus import claassen_analysis
 
 # Check for test flag
 test_run = '--test' in sys.argv
@@ -48,6 +50,56 @@ else:
                                 'sentences', 'start_time', 'end_time', 'duration'])
     patient_df.to_csv(config['patient_df_path'])
 current_date = time.strftime("%Y-%m-%d")
+
+### Display plots & log function ###
+def display_all_plots(patient_folder):
+    log_file_path = os.path.join(patient_folder, 'log.txt')
+
+    # Get log details
+    auc_score, permutation_results = read_log_file(log_file_path)
+
+    # Define the order of plots
+    plot_order = [
+        'raw_eeg_plot.png',
+        'instructions_epochs.png',
+        'prerpocess_epochs_plot.png',
+        'cross_validation.png',
+        'average_predicted_probability.png',
+        'topo_map.png',
+        'permutation_distribution.png',
+        'permutation_plt.png'
+    ]
+
+    # Filter only existing plots in the folder
+    plot_files = [f for f in plot_order if f in os.listdir(patient_folder)]
+
+    # Display each plot
+    for plot_file in plot_files:
+        st.subheader(f"{plot_file.replace('_', ' ').replace('.png', '').capitalize()}")
+        plot_path = os.path.join(patient_folder, plot_file)
+        image = Image.open(plot_path)
+        st.image(image, use_container_width=True)
+
+        # Show AUC score below average_predicted_probability.png
+        if plot_file == 'average_predicted_probability.png' and auc_score:
+            st.text(auc_score.strip())
+
+        # Show permutation results below permutation_distribution.png
+        if plot_file == 'permutation_distribution.png' and permutation_results:
+            for line in permutation_results:
+                st.text(line.strip())
+
+def read_log_file(log_file_path):
+    if os.path.exists(log_file_path):
+        with open(log_file_path, 'r') as f:
+            logs = f.readlines()
+
+        # Extract relevant logs
+        auc_score = next((line for line in logs if 'Mean scores across split' in line), None)
+        permutation_results = [line for line in logs if 'Permutation' in line or 'AUC' in line]
+
+        return auc_score, permutation_results
+    return None, None
 
 ### Streamlit Interface ###
 
@@ -241,28 +293,36 @@ if not os.path.exists(config['cmd_result_dir']):
 if not os.path.exists(config['lang_tracking_dir']):
     os.makedirs(config['lang_tracking_dir'])
 
-graphs = ["", "Language Tracking", "CMD"]
+graphs = ["", "CMD", "Language Tracking"]
 graph_options = list(range(len(graphs)))
+patient_ids = ["CON001a", "CON001b", "CON002", "CON003", "CON004", "CON005"]
 
 with tab3:
     st.header("EEG Graphs")
-
-    patient_ids = patient_label_df['patient_id'].unique()
-    selected_patient = st.selectbox("Choose Patient", patient_ids, index=None)
-    date = st.date_input("Recording Date")
-    date_str = date.strftime("%Y%m%d")
+    selected_patient = st.selectbox(
+        "Select Patient ID", 
+        patient_df['patient_id'].sort_values().unique())
+    selected_date_find_patient = st.selectbox(
+        "Select Administered Date", 
+        patient_df[patient_df['patient_id'] == selected_patient]['date'].unique())
+    date_str = pd.to_datetime(selected_date_find_patient).strftime("%Y%m%d")
     fname = f"{selected_patient}_{date_str}"
     selected_graph = st.selectbox("Choose Graph Type", graph_options, format_func=lambda x: graphs[x])
     
     st.subheader("Graph Display")
-    
-    if selected_graph==1:
-        # TODO: Add comments for analysis results
+
+    if selected_graph==1: # CMD
         fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
-        if os.path.exists(fig_full_path):
-            st.image(fig_full_path)
+        patient_folder = os.path.join(config['cmd_result_dir'], f"{selected_patient}_{date_str}")
+
+        if os.path.exists(patient_folder): # create folder under selected_patient, under date 
+            display_all_plots(patient_folder)
         else:
-            pass
+            # Create the directory if it doesn't exist
+            os.makedirs(patient_folder, exist_ok=True)
+            claassen_analysis.run_analysis(selected_patient, config['cmd_result_dir'], date_str)
+            display_all_plots(patient_folder)
+
     elif selected_graph==2:
         # TODO: Add comments for analysis results
         fig_full_path = os.path.join(config['lang_tracking_dir'], f"{fname}.png")
