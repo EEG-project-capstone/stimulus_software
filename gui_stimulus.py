@@ -60,14 +60,12 @@ def display_all_plots(patient_folder):
 
     # Define the order of plots
     plot_order = [
-        'raw_eeg_plot.png',
-        'instructions_epochs.png',
-        'prerpocess_epochs_plot.png',
-        'cross_validation.png',
+        'epochs_during_instructions.png',
+        'cross_validation_performance.png',
         'average_predicted_probability.png',
-        'topo_map.png',
-        'permutation_distribution.png',
-        'permutation_plt.png'
+        'EEG_spatial_patterns.png',
+        'permutation_test_distribution.png',
+        'permutation_results.png'
     ]
 
     # Filter only existing plots in the folder
@@ -320,8 +318,10 @@ with tab3:
         else:
             # Create the directory if it doesn't exist
             os.makedirs(patient_folder, exist_ok=True)
-            claassen_analysis.run_analysis(selected_patient, config['cmd_result_dir'], date_str)
-            display_all_plots(patient_folder)
+        
+        if st.button("Run Analysis"):
+            claassen_analysis.run_analysis(selected_patient, config['cmd_result_dir'], config['edf_dir'], config['patient_df_path'], date_str)
+        display_all_plots(patient_folder)
 
     elif selected_graph==2:
         # TODO: Add comments for analysis results
