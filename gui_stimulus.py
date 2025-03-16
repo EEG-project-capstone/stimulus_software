@@ -24,6 +24,8 @@ import streamlit as st
 from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 
+from eeg_auditory_stimulus import rodika_modularized
+
 # Check for test flag
 test_run = '--test' in sys.argv
 print(f"Test run: {test_run}")  
@@ -256,17 +258,37 @@ with tab3:
     
     st.subheader("Graph Display")
     
-    if selected_graph==1:
+    if selected_graph==2:
         # TODO: Add comments for analysis results
         fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
         if os.path.exists(fig_full_path):
             st.image(fig_full_path)
         else:
             pass
-    elif selected_graph==2:
-        # TODO: Add comments for analysis results
-        fig_full_path = os.path.join(config['lang_tracking_dir'], f"{fname}.png")
-        if os.path.exists(fig_full_path):
-            st.image(fig_full_path)
+    elif selected_graph==1:
+        expected_filename = "avg_itpc_plot.png"
+        patient_folder = os.path.join(config['lang_tracking_dir'], selected_patient)
+        image_path = os.path.join(config['lang_tracking_dir'], expected_filename)
+        
+        # Button to run analysis and generate plots
+        if st.button("Run Language Tracking Analysis"):
+            # You can call your main() function from rodika_modularized here.
+            # It should process the data and save the plots in the appropriate folder.
+            # Make sure to pass in the necessary parameters.
+            eeg_file_path = os.path.join(config['edf_dir'], f"{selected_patient}_{date_str}.edf")
+            stimulus_csv_path = config['patient_df_path']
+            use_channels = ['C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8',
+                    'Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8']
+            bad_channels = ['T7', 'Fp1', 'Fp2']
+            eog_chs = ['Fp1', 'Fp2', 'T7']
+            
+            rodika_modularized.main(eeg_file_path, stimulus_csv_path, selected_patient, use_channels, bad_channels, eog_chs)
+            st.success("Analysis complete! The ITPC graphs have been generated.")
+
+        st.subheader("Graph Display")
+        if os.path.exists(image_path):
+            st.image(image_path, caption=f"Language Tracking ITPC for {selected_patient} on {date_str}")
         else:
-            pass
+            st.warning(f"No ITPC graph found for {selected_patient} on {date_str}. Run the analysis first.")
+
+            
