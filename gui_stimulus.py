@@ -256,8 +256,6 @@ with tab3:
     fname = f"{selected_patient}_{date_str}"
     selected_graph = st.selectbox("Choose Graph Type", graph_options, format_func=lambda x: graphs[x])
     
-    st.subheader("Graph Display")
-    
     if selected_graph==2:
         # TODO: Add comments for analysis results
         fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
@@ -270,25 +268,51 @@ with tab3:
         patient_folder = os.path.join(config['lang_tracking_dir'], selected_patient)
         image_path = os.path.join(config['lang_tracking_dir'], expected_filename)
         
-        # Button to run analysis and generate plots
+        st.subheader("Language Tracking Options")
+        # Let user pick channels for bad and EOG
+        available_channels = [
+            'C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8',
+            'Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8'
+        ]
+        selected_bad_channels = st.multiselect(
+            "Select Bad Channels", available_channels,
+            default=['T7','Fp1','Fp2']
+        )
+        selected_eog_chs = st.multiselect(
+            "Select EOG Channels", available_channels,
+            default=['Fp1','Fp2','T7']
+        )
+
+        # Let user pick which graph to display: average or individual channel
+        display_option = st.selectbox("Select Graph to Display", ["Average ITPC", "Individual Channel"])
+        if display_option == "Individual Channel":
+            chosen_channel = st.selectbox("Choose a Channel", available_channels)
+
+        # Button to run analysis
         if st.button("Run Language Tracking Analysis"):
-            # You can call your main() function from rodika_modularized here.
-            # It should process the data and save the plots in the appropriate folder.
-            # Make sure to pass in the necessary parameters.
             eeg_file_path = os.path.join(config['edf_dir'], f"{selected_patient}_{date_str}.edf")
             stimulus_csv_path = config['patient_df_path']
-            use_channels = ['C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8',
-                    'Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8']
-            bad_channels = ['T7', 'Fp1', 'Fp2']
-            eog_chs = ['Fp1', 'Fp2', 'T7']
-            
-            rodika_modularized.main(eeg_file_path, stimulus_csv_path, selected_patient, use_channels, bad_channels, eog_chs)
+            use_channels = available_channels
+            bad_channels = selected_bad_channels
+            eog_chs = selected_eog_chs
+
+            # Call your rodika_modularized.main
+            rodika_modularized.main(eeg_file_path, stimulus_csv_path,
+                                    selected_patient, use_channels, bad_channels, eog_chs)
             st.success("Analysis complete! The ITPC graphs have been generated.")
+
+        # Once the analysis is done, images are in data/results/lang_tracking/<patient_id>/...
+        patient_folder = os.path.join("data", "results", "lang_tracking", selected_patient)
+
+        if display_option == "Average ITPC":
+            expected_filename = "avg_itpc_plot.png"
+        else:
+            expected_filename = f"ITPC_{chosen_channel}.png"
+
+        image_path = os.path.join(patient_folder, expected_filename)
 
         st.subheader("Graph Display")
         if os.path.exists(image_path):
-            st.image(image_path, caption=f"Language Tracking ITPC for {selected_patient} on {date_str}")
+            st.image(image_path, caption=f"ITPC for {selected_patient}")
         else:
-            st.warning(f"No ITPC graph found for {selected_patient} on {date_str}. Run the analysis first.")
-
-            
+            st.warning(f"No ITPC graph found at {image_path}. Please run the analysis first or check your folder structure.")
