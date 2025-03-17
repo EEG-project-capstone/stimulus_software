@@ -24,6 +24,7 @@ import streamlit as st
 from PIL import Image
 from auditory_stim.stimulus_package_notes import add_notes, add_history
 from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
+from eeg_auditory_stimulus import rodika_modularized
 from eeg_auditory_stimulus import claassen_analysis
 
 # Check for test flag
@@ -329,4 +330,6 @@ with tab3:
         if os.path.exists(fig_full_path):
             st.image(fig_full_path)
         else:
-            pass
+            st.warning(f"No ITPC graph found for {selected_patient} on {date_str}. Run the analysis first.")
+
+            
