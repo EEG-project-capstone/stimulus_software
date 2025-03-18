@@ -2,6 +2,12 @@
 
 ## Introduction
 The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
+
+In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The Streamlit GUI (`gui_stimulus.py`) now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights—no separate pipelines required.
+
+Check out a video of our application here:
+https://github.com/user-attachments/assets/0b726042-abe8-48dc-87d5-d09c7f409bd4
+
 ## Features
 ### Graphical User Interface (GUI):
 A web-based interface powered by Streamlit, allowing for easy interaction with the software without requiring deep technical knowledge.
