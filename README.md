@@ -3,7 +3,7 @@
 ## Introduction
 The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
 
-In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The Streamlit GUI (`gui_stimulus.py`) now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights—no separate pipelines required.
+In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The Streamlit GUI (`gui_stimulus.py`) now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights, with no separate pipelines required.
 
 Check out a video of our application here:
 <video src="https://github.com/user-attachments/assets/fcf604e9-d5cf-4985-b3c2-1fb92a1c226c" width="300" />
@@ -38,7 +38,7 @@ A web-based interface powered by Streamlit, allowing for easy interaction with t
 Compatible with *Windows/Linux/MacOS* operating systems.
 
 ## Installation for Audio Stimilus Administration
-Please follow the steps below to download the depnedencies and files needed to deliver a randomized auditory stimulus to a patient. Read more about our auditory stimulus here.
+Please follow the steps below to download the depnedencies and files needed to deliver a randomized auditory stimulus to a patient. Read more about our auditory stimulus [here](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/EEG-TBI_AuditoryStimulusDetails.pdf).
 
 ### *Prerequisites*
 This software requires the installation of:
@@ -90,9 +90,9 @@ export STREAMLIT_SERVER_MAX_UPLOAD_SIZE=400
 
 ## Usage
 ### Steps to Run Stimuli App
-For a detailed step-by-step guide to setting up the repository to run analysis, please follow this guide.
+For a detailed step-by-step guide to setting up the repository to run analysis, please follow this [guide](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/Brain%20Waves%20Repository%20Step-by-Step%20Guide.pdf).
 
-For a detailed step-by-step guide to using the Brain Wave Application (on Streamlit) to run analysis, please follow this guide.
+For a detailed step-by-step guide to using the Brain Wave Application (on Streamlit) to run analysis, please follow this [guide](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/Brain%20Waves%20Application%20Step-by-Step%20Guide.pdf).
 
 ## Contributing
 - Nguyen Ha (Summer 2024)
