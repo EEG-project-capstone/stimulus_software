@@ -37,7 +37,9 @@ A web-based interface powered by Streamlit, allowing for easy interaction with t
 ### Cross-Platform Support:
 Compatible with *Windows/Linux/MacOS* operating systems.
 
-## Installation
+## Installation for Audio Stimilus Administration
+Please follow the steps below to download the depnedencies and files needed to deliver a randomized auditory stimulus to a patient. Read more about our auditory stimulus here.
+
 ### *Prerequisites*
 This software requires the installation of:
 * [Anaconda](https://docs.anaconda.com/anaconda/install/)/[Miniconda](https://docs.anaconda.com/miniconda/)
@@ -88,40 +90,9 @@ export STREAMLIT_SERVER_MAX_UPLOAD_SIZE=400
 
 ## Usage
 ### Steps to Run Stimuli App
-1. Open `config.yml` and make changes according to instructions.
-2. Open Terminal & relocate to `brain-waves-2.0` directory
-3. Activate Environment
-```bash
-conda activate eeg
-```
-4. Run Streamlit App:    
-*Normal Mode*
+For a detailed step-by-step guide to setting up the repository to run analysis, please follow this guide.
 
-```bash
-python -m streamlit run gui_stimulus.py
-```    
-
-  *Test Mode*  
-To enable test mode, use the `--test` flag:    
-
-```bash
-python -m streamlit run gui_stimulus.py -- --test
-```
-
-## Configuration
-
-To set up the project, you need to modify specific parts of the `config.yml` file:
-
-### Required Changes
-
-In the `config.yml` file, locate the section marked with `# INPUT CHANGES HERE` and update the following fields:
-
-- **`os`**: Set this to your operating system, either `'os'` for macOS, `'windows'` for Windows, or `'linux'` for Linux.
-  
-  ```bash
-  os: 'os' # 'windows' or 'linux' or 'os'
-  ```
-
+For a detailed step-by-step guide to using the Brain Wave Application (on Streamlit) to run analysis, please follow this guide.
 
 ## Contributing
 - Nguyen Ha (Summer 2024)
