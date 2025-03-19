@@ -1,4 +1,5 @@
-# Brain Waves Stimulus Package 2.0
+
+<img width="1000" alt="Screenshot 2025-03-18 at 6 08 57 PM" src="https://github.com/user-attachments/assets/eeb55158-1a26-47cf-b6da-322d35dd44e1" />
 
 ## Introduction
 The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
