@@ -8,12 +8,12 @@ patient_history_path: 'data/patient_history.csv' # Adjust the path if your file 
 patient_output_dir: 'data/patients/' # Add folder to save output csv fiels from 'Prepare Stimulus' process
 patient_label_path: 'data/patient_records.csv' # Adjust the path if your file is in a different location
 edf_dir: 'data/edfs/' # Add folder to save edf files
-CON001a_path: 'X~ X_ef7f7805-3781-4f1e-8134-8d5b57750330.EDF'
-CON001b_path: 'X~ X_86b44d5d-5036-4748-b666-ceff710a1e8d.EDF'
-CON002_path: 'CON002_20240924.EDF'
-CON003_path: 'CON003_clipped.EDF'
-CON004_path: 'CON004_clipped.EDF'
-CON005_path: 'CON005_clipped.EDF'
+# CON001a_path: 'X~ X_ef7f7805-3781-4f1e-8134-8d5b57750330.EDF'
+# CON001b_path: 'X~ X_86b44d5d-5036-4748-b666-ceff710a1e8d.EDF'
+# CON002_path: 'CON002_20240924.EDF'
+# CON003_path: 'CON003_clipped.EDF'
+# CON004_path: 'CON004_clipped.EDF'
+# CON005_path: 'CON005_clipped.EDF'
 result_dir: 'data/results/' # Add folder to save results
 cmd_result_dir: 'data/results/cmd/' # Add folder to save results
 lang_tracking_dir: 'data/results/lang_tracking/' # Add folder to save results 

@@ -84,7 +84,7 @@ def display_all_plots(patient_folder):
             st.text(auc_score.strip())
 
         # Show permutation results below permutation_distribution.png
-        if plot_file == 'permutation_distribution.png' and permutation_results:
+        if plot_file == 'permutation_results.png' and permutation_results:
             for line in permutation_results:
                 st.text(line.strip())
 
@@ -96,7 +96,6 @@ def read_log_file(log_file_path):
         # Extract relevant logs
         auc_score = next((line for line in logs if 'Mean scores across split' in line), None)
         permutation_results = [line for line in logs if 'Permutation' in line or 'AUC' in line]
-
         return auc_score, permutation_results
     return None, None
 
@@ -300,7 +299,10 @@ with tab3:
     st.header("EEG Graphs")
     selected_patient = st.selectbox(
         "Select Patient ID", 
-        patient_df['patient_id'].sort_values().unique())
+        patient_df.loc[~patient_df['patient_id'].isin(['joobee', 'khanh']), 'patient_id']
+        .sort_values()
+        .unique()
+    )
     selected_date_find_patient = st.selectbox(
         "Select Administered Date", 
         patient_df[patient_df['patient_id'] == selected_patient]['date'].unique())
@@ -313,16 +315,16 @@ with tab3:
     if selected_graph==1: # CMD
         fig_full_path = os.path.join(config['cmd_result_dir'], f"{fname}.png")
         patient_folder = os.path.join(config['cmd_result_dir'], f"{selected_patient}_{date_str}")
+        eeg_file_path = os.path.join(config['edf_dir'], f"{selected_patient}_{date_str}.edf")
 
         if os.path.exists(patient_folder): # create folder under selected_patient, under date 
             display_all_plots(patient_folder)
         else:
             # Create the directory if it doesn't exist
             os.makedirs(patient_folder, exist_ok=True)
-        
-        if st.button("Run Analysis"):
-            claassen_analysis.run_analysis(selected_patient, config['cmd_result_dir'], config['edf_dir'], config['patient_df_path'], date_str)
-        display_all_plots(patient_folder)
+        if st.button("Run CMD Analysis"):
+            claassen_analysis.run_analysis(selected_patient, config['cmd_result_dir'], eeg_file_path, config['patient_df_path'], date_str)
+            display_all_plots(patient_folder)
 
     elif selected_graph==2:
         expected_filename = "avg_itpc_plot.png"
@@ -351,9 +353,11 @@ with tab3:
 
         # Button to run analysis
         if st.button("Run Language Tracking Analysis"):
-            relative_path = config.get(f"{selected_patient}_path", "")
-            # Combine with edf_dir
-            eeg_file_path = os.path.join(config['edf_dir'], os.path.basename(relative_path))
+            eeg_file_path = os.path.join(config['edf_dir'], f"{selected_patient}_{date_str}.edf")
+
+            # relative_path = config.get(f"{selected_patient}_path", "")
+            # # Combine with edf_dir
+            # eeg_file_path = os.path.join(config['edf_dir'], os.path.basename(relative_path))
             
             stimulus_csv_path = config['patient_df_path']
             use_channels = available_channels
