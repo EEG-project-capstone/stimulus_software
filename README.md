@@ -95,6 +95,91 @@ For a detailed step-by-step guide to setting up the repository to run analysis, 
 
 For a detailed step-by-step guide to using the Brain Wave Application (on Streamlit) to run analysis, please follow this [guide](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/Brain%20Waves%20Application%20Step-by-Step%20Guide.pdf).
 
+### Data
+
+This directory contains various datasets and analysis results related to patient studies. The files in this directory are ignored by Git and are structured as follows:
+
+```
+data/
+├── edfs/
+│   ├── [PatientID]_[Date].edf
+├── images/
+├── patient_df.csv
+├── patient_history.csv
+├── patient_notes.csv
+├── patient_records.csv
+├── patients/
+│   └── [PatientName]_[Date].csv
+└── results/
+    ├── cmd/
+    │   ├── [PatientID]_[Date]/
+    │   │   ├── EEG_spatial_patterns.png
+    │   │   ├── average_predicted_probability.png
+    │   │   ├── cross_validation_performance.png
+    │   │   ├── epochs_during_instructions.png
+    │   │   ├── log.txt
+    │   │   ├── permutation_results.png
+    │   │   └── permutation_test_distribution.png
+    └── lang_tracking/
+        ├── [PatientID]/
+        │   ├── ITPC_C3.png
+        │   ├── ITPC_C4.png
+        │   ├── ITPC_Cz.png
+        │   ├── ITPC_F3.png
+        │   ├── ITPC_F4.png
+        │   ├── ITPC_F7.png
+        │   ├── ITPC_F8.png
+        │   ├── ITPC_FT10.png
+        │   ├── ITPC_FT9.png
+        │   ├── ITPC_Fp1.png
+        │   ├── ITPC_Fp2.png
+        │   ├── ITPC_Fpz.png
+        │   ├── ITPC_Fz.png
+        │   ├── ITPC_O1.png
+        │   ├── ITPC_O2.png
+        │   ├── ITPC_P3.png
+        │   ├── ITPC_P4.png
+        │   ├── ITPC_P7.png
+        │   ├── ITPC_P8.png
+        │   ├── ITPC_Pz.png
+        │   ├── ITPC_T7.png
+        │   ├── ITPC_T8.png
+        │   └── avg_itpc_plot.png
+```
+### Directory Breakdown
+
+#### `edfs/`
+
+This folder contains EEG data files in `.edf` format, with filenames structured as `[PatientID]_[Date].edf`.
+
+#### `images/`
+
+Reserved for any images or visualizations related to the study.
+
+#### `patients/`
+
+Contains individual CSV files for each patient, storing their records, with filenames structured as `[PatientName]_[Date].csv`.
+
+#### `results/`
+
+Contains analyzed data for each patient, organized into two main subdirectories:
+
+##### `cmd/`
+
+Stores CMD analysis results for each patient in `[PatientID]_[Date]/` folders.
+
+- `log.txt` contains analysis results such as AUC scores, and can also be used to check error logs.
+- If you need to re-run the analysis, delete the corresponding `[PatientID]_[Date]` folder.
+
+##### `lang_tracking/`
+
+Stores language tracking analysis data per patient.
+
+- Includes ITPC plots for different brain regions (`ITPC_C3.png`, `ITPC_F3.png`, etc.) and an averaged ITPC plot (`avg_itpc_plot.png`).
+
+#### Notes
+- Deleting a specific patient’s folder in `results/cmd/` allows for re-running the analysis.
+
 ## Contributing
 - Nguyen Ha (Summer 2024)
 - Khanh Ha (Summer 2024)
