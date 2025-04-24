@@ -202,7 +202,7 @@ def handle_stimulus_administration():
     with col1:
         if st.button("Play Stimulus"):
 
-            send_trigger()
+            # send_trigger()
 
             print(f"patient_id: {patient_id}")
             config.current_date = time.strftime("%Y-%m-%d")
