@@ -1,3 +1,4 @@
+import math
 import time
 import os
 import random
@@ -6,6 +7,7 @@ import time
 import streamlit as st
 import pydub
 from pydub import AudioSegment
+from pydub.generators import Sine
 from pydub.playback import play
 
 
@@ -129,16 +131,11 @@ def administer_beep(test_run=False):
     end_time = time.time()
     return start_time, end_time
 
-def randomize_trials(language_stim=72, right_cmd_stim=3, left_cmd_stim=3, beep_stim=6):
+def randomize_trials(num_of_each_trial):
     trial_types = []
-    num_trials = {
-        "lang": language_stim,
-        "rcmd": right_cmd_stim,
-        "lcmd": left_cmd_stim,
-        "beep": beep_stim
-    }
-    for key in num_trials:
-        for i in range(num_trials[key]):
+     
+    for key in num_of_each_trial:
+        for i in range(num_of_each_trial[key]):
             if key == "lang":
                 trial = f"lang_{i}"
             else:
@@ -177,7 +174,60 @@ def play_stimuli(trial, test_run=False):
     elif trial == "lcmd":
         start_time, end_time = left_cmd_stim(test_run)
         jittered_delay()
-    else:
+    elif trial == "beep":
         start_time, end_time = administer_beep(test_run)
         jittered_delay()
+    else:
+        trials = generate_oddball_stimulus()
+        play_oddball_stimulus(trials)
+        jittered_delay()
+    
     return start_time, end_time
+
+def generate_oddball_stimulus(
+    n_trials=20,
+    freq_frequent=1000,     # Default frequent tone (Hz)
+    freq_rare=2000,         # Default rare tone (Hz)
+    prob_rare=0.2,          # 20% rare tone probability
+    delay_range=(1.2, 2.2)  # Random delay between stimuli
+):
+    """oddball stimulus generater"""
+
+    tones = []
+
+    for _ in range(n_trials):
+    #     # Generate tone (frequent or rare)
+        if random.random() < prob_rare:
+            tones += Sine(freq_rare).to_audio_segment(duration=100)
+            print("Rare tone played ⚡")
+        else:
+            tones += Sine(freq_frequent).to_audio_segment(duration=100)
+            print("Frequent tone played •")
+        
+    return tones
+
+def play_oddball_stimulus(
+    tones,
+    n_trials=20,
+    delay_range=(1.2, 2.2)  # Random delay between stimuli
+):
+    
+    """oddball stimulus player"""
+
+    print("playing oddball")
+
+    for i in range(n_trials):
+        # Play tone with random delay
+        play(tones[i])
+        time.sleep(random.uniform(*delay_range))
+
+def send_trigger(
+    freq=2000,     # Frequency in Hz (default 2000 = high pitch)
+    duration=100,  # Duration in milliseconds (default 100ms)
+    volume=-10     # Volume in dB (default -10 for safety)
+):
+    """Play a pure tone beep"""
+
+    beep = Sine(freq).to_audio_segment(duration=duration)
+    beep = beep.apply_gain(volume)  # Prevent loud surprises!
+    play(beep)
