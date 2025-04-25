@@ -23,7 +23,7 @@ import sys
 import streamlit as st
 from PIL import Image
 from auditory_stim.stimulus_package_notes import add_notes, add_history
-from auditory_stim.auditory_stim import send_trigger, randomize_trials, generate_stimuli, play_stimuli, generate_oddball_stimulus, play_oddball_stimulus
+from auditory_stim.auditory_stim import send_trigger, randomize_trials, generate_stimuli, play_stimuli
 from eeg_auditory_stimulus import rodika_modularized
 from eeg_auditory_stimulus import claassen_analysis
 
@@ -131,7 +131,7 @@ class Config:
             "GOSE 7: Lower good recovery",
             "GOSE 8: Upper good recovery",
         ]
-        gose_options = list(range(len(self.gose_scale)))
+        self.gose_options = list(range(len(self.gose_scale)))
 
     def _ouput_data(self):
         # for Tab 3: EEG Graphs
@@ -152,10 +152,6 @@ def handle_stimulus_administration():
     st.title("EEG Stimulus Package")
     st.header("Administer Auditory Stimuli", divider='rainbow')
 
-    # Initialize stop flag in session state
-    if 'stop_playback' not in st.session_state:
-        st.session_state.stop_playback = False
-
     # Patient ID input
     patient_id = st.text_input("Enter Patient/EEG ID")
     trial_types = []
@@ -175,6 +171,12 @@ def handle_stimulus_administration():
         "odd": 0
     }
 
+
+    # Initialize stop flag in session state
+    if 'stop_playback' not in st.session_state:
+        st.session_state.stop_playback = False
+
+    # Create Prepare Stimulus button
     if st.button("Prepare Stimulus"):
 
         # Validate selection (only one can be selected)
@@ -187,7 +189,7 @@ def handle_stimulus_administration():
         if beep_stim_selcted:
             num_of_each_trial["beep"] = 6    
         if oddball_stim_selected:
-            num_of_each_trial["odd"] = 20
+            num_of_each_trial["odd"] = 4
 
         # Original random stimulus
         trial_types = randomize_trials(num_of_each_trial)
@@ -195,80 +197,85 @@ def handle_stimulus_administration():
         lang_trials_ids = generate_stimuli(trial_types)
         st.session_state['lang_trials_ids'] = lang_trials_ids
 
-        # Create columns for Play and Stop buttons
-    
+    # Create columns for Play and Stop buttons
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        if st.button("Play Stimulus"):
-
-            # send_trigger()
-
-            print(f"patient_id: {patient_id}")
-            config.current_date = time.strftime("%Y-%m-%d")
-
-            if os.listdir(config.file['stimuli_dir']) == []:
-                st.error("Please prepare stimuli first.")
-            else:
-                if patient_id.strip() == "":
-                    st.error("Please enter a patient ID.")
-                elif ((config.patient_df['patient_id'] == patient_id) & (config.patient_df['date'] == config.current_date)).any():
-                    st.error("Patient has already been administered stimulus protocol today")
-                else:
-                    progress_bar = st.progress(0, text="0")
-                    if not trial_types and 'trial_types' in st.session_state:
-                        trial_types = st.session_state['trial_types']
-                    else:
-                        st.error("Please prepare stimuli first.")
-                    if not lang_trials_ids and 'lang_trials_ids' in st.session_state:
-                        lang_trials_ids = st.session_state['lang_trials_ids']
-                    else:
-                        st.error("Please prepare stimuli first.")
-
-                    print(f"trial_types: {trial_types}")
-                    n = len(trial_types)
-                    administered_stimuli = []
-                    for i in range(n):
-                        trial = trial_types[i]
-                        print(f"Trial {i}: {trial}")
-                        start_time, end_time = play_stimuli(trial, config.test_run)
-                        administered_stimuli.append({
-                                    'patient_id': patient_id,
-                                    'date': config.current_date,
-                                    'trial_type': trial[:4] if trial[:4] == "lang" else trial,
-                                    'sentences': lang_trials_ids[i],
-                                    'start_time': start_time,
-                                    'end_time': end_time,
-                                    'duration': end_time - start_time
-                                })
-                        percent = int(i/n*100)
-                        progress_bar.progress(percent, text=f"{percent}%")
-                    progress_bar.progress(100, text=f"Done")
-
-                    pd.DataFrame(administered_stimuli)
-                    administered_stimuli_df = pd.concat([config.patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-                    administered_stimuli_df.to_csv(config.file['patient_df_path'], index=False)
-                    print(f"administered_stimuli_df: {administered_stimuli_df}")
-
-                    # Save each patient output into seaprated csv files with 'patientId_currentDate'
-                    output_dir = config.file['patient_output_dir']
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-
-                    formatted_date = config.current_date.replace("-", "")
-                    output_file = f"{patient_id}_{formatted_date}.csv"
-                    output_path = os.path.join(output_dir, output_file)
-                    pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
-                    print(f"Data saved to {output_path}")
-
-                    # Add history after saving csv output files
-                    add_history(patient_id, config.current_date)
-                    st.success(f"Stimuli has been administered to patient {patient_id} on {config.current_date}.")
+        play_btn = st.button("Play Stimulus")
 
     with col2:
-        if st.button("Stop Playback", type="primary"):
-            st.session_state.stop_playback = True
-            st.warning("Stopping playback after current stimulus...")
+        stop_btn = st.button("Stop Playback", type="primary")
+    
+    # play
+    if play_btn:
+
+        # send_trigger()
+
+        print(f"patient_id: {patient_id}")
+        config.current_date = time.strftime("%Y-%m-%d")
+
+        if os.listdir(config.file['stimuli_dir']) == []:
+            st.error("Please prepare stimuli first.")
+        else:
+            if patient_id.strip() == "":
+                st.error("Please enter a patient ID.")
+            elif ((config.patient_df['patient_id'] == patient_id) & (config.patient_df['date'] == config.current_date)).any():
+                st.error("Patient has already been administered stimulus protocol today")
+            else:
+                progress_bar = st.progress(0, text="0")
+                if not trial_types and 'trial_types' in st.session_state:
+                    trial_types = st.session_state['trial_types']
+                else:
+                    st.error("Please prepare stimuli first.")
+                if not lang_trials_ids and 'lang_trials_ids' in st.session_state:
+                    lang_trials_ids = st.session_state['lang_trials_ids']
+                else:
+                    st.error("Please prepare stimuli first.")
+
+                print(f"trial_types: {trial_types}")
+                n = len(trial_types)
+                administered_stimuli = []
+                for i in range(n):
+                    trial = trial_types[i]
+                    print(f"Trial {i}: {trial}")
+                    start_time, end_time = play_stimuli(trial, config.test_run)
+                    administered_stimuli.append({
+                                'patient_id': patient_id,
+                                'date': config.current_date,
+                                'trial_type': trial[:4] if trial[:4] == "lang" else trial,
+                                'sentences': lang_trials_ids[i],
+                                'start_time': start_time,
+                                'end_time': end_time,
+                                'duration': end_time - start_time
+                            })
+                    percent = int(i/n*100)
+                    progress_bar.progress(percent, text=f"{percent}%")
+                progress_bar.progress(100, text=f"Done")
+
+                pd.DataFrame(administered_stimuli)
+                administered_stimuli_df = pd.concat([config.patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
+                administered_stimuli_df.to_csv(config.file['patient_df_path'], index=False)
+                print(f"administered_stimuli_df: {administered_stimuli_df}")
+
+                # Save each patient output into seaprated csv files with 'patientId_currentDate'
+                output_dir = config.file['patient_output_dir']
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+
+                formatted_date = config.current_date.replace("-", "")
+                output_file = f"{patient_id}_{formatted_date}.csv"
+                output_path = os.path.join(output_dir, output_file)
+                pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
+                print(f"Data saved to {output_path}")
+
+                # Add history after saving csv output files
+                add_history(patient_id, config.current_date)
+                st.success(f"Stimuli has been administered to patient {patient_id} on {config.current_date}.")
+
+    # stop
+    if stop_btn:
+        st.session_state.stop_playback = True
+        st.warning("Stopping playback after current stimulus...")
 
     st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
     your_note = st.text_input("Write your note here")
@@ -336,16 +343,33 @@ def handle_patient_information():
 
 def handle_eeg_results():
     st.header("EEG Graphs")
-    selected_patient = st.selectbox(
-        "Select Patient ID", 
-        config.patient_df.loc[~config.patient_df['patient_id'].isin(['joobee', 'khanh']), 'patient_id']
-        .sort_values()
-        .unique()
-    )
-    selected_date_find_patient = st.selectbox(
-        "Select Administered Date", 
-        config.patient_df[config.patient_df['patient_id'] == selected_patient]['date'].unique())
-    date_str = pd.to_datetime(selected_date_find_patient).strftime("%Y%m%d")
+
+    # Get unique patient IDs (excluding 'joobee' and 'khanh')
+    valid_patient_ids = config.patient_df.loc[~config.patient_df['patient_id'].isin(['joobee', 'khanh']), 'patient_id'].sort_values().unique()
+    
+    if len(valid_patient_ids) == 0:
+        st.warning("No patient data available")
+        return
+    
+    selected_patient = st.selectbox("Select Patient ID", valid_patient_ids)
+
+    # Get dates for selected patient
+    patient_dates = config.patient_df[config.patient_df['patient_id'] == selected_patient]['date'].unique()
+    
+    if len(patient_dates) == 0:
+        st.warning(f"No dates available for patient {selected_patient}")
+        return
+    
+    selected_date_find_patient = st.selectbox("Select Administered Date", patient_dates)
+        
+    try:
+        date_str = pd.to_datetime(selected_date_find_patient).strftime("%Y%m%d")
+    except Exception as e:
+        st.error(f"Error processing date: {e}")
+        return
+
+    # date_str = pd.to_datetime(selected_date_find_patient).strftime("%Y%m%d")
+
     fname = f"{selected_patient}_{date_str}"
     selected_graph = st.selectbox("Choose Graph Type", config.graph_options, format_func=lambda x: config.graphs[x])
     
@@ -474,6 +498,7 @@ def read_log_file(log_file_path):
 
 if __name__ == "__main__":
 
+    # set up configuration settings
     config = Config()
 
     # Run the main application

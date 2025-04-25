@@ -1,4 +1,3 @@
-import math
 import time
 import os
 import random
@@ -14,6 +13,7 @@ from pydub.playback import play
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
+
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))
@@ -91,32 +91,31 @@ def random_lang_stim(output_path, num_sentence=12):
     
     return sample_ids
 
-def play_lang_stim(input_path, test_run=False):
+def administer_lang(input_path, test_run=False):
     start_time = time.time()
     if not test_run:
         play_mp3(input_path)
+        time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def right_cmd_stim(test_run=False):
+def administer_right_cmd(test_run=False):
     start_time = time.time()
     if not test_run:
         for _ in range(8):
             play_mp3(config['right_keep_path'])
             time.sleep(10)
-
             play_mp3(config['right_stop_path'])
             time.sleep(10)
     end_time = time.time()
     return start_time, end_time
 
-def left_cmd_stim(test_run=False):
+def administer_left_cmd(test_run=False):
     start_time = time.time()
     if not test_run:
         for _ in range(8):
             play_mp3(config['left_keep_path'])
             time.sleep(10)
-
             play_mp3(config['left_stop_path'])
             time.sleep(10)
     end_time = time.time()
@@ -125,8 +124,15 @@ def left_cmd_stim(test_run=False):
 def administer_beep(test_run=False):
     start_time = time.time()
     if not test_run:
-        time.sleep(10)
         play_mp3(config['beep_path'])
+        time.sleep(10)
+    end_time = time.time()
+    return start_time, end_time
+
+def administer_oddball(test_run=False):
+    start_time = time.time()
+    if not test_run:
+        play_oddball_stimulus()
         time.sleep(10)
     end_time = time.time()
     return start_time, end_time
@@ -166,60 +172,50 @@ def generate_stimuli(trial_types):
 def play_stimuli(trial, test_run=False):
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
-        start_time, end_time = play_lang_stim(output_path, test_run)
+        start_time, end_time = administer_lang(output_path, test_run)
         jittered_delay()
     elif trial == "rcmd":
-        start_time, end_time = right_cmd_stim(test_run)
+        start_time, end_time = administer_right_cmd(test_run)
         jittered_delay()
     elif trial == "lcmd":
-        start_time, end_time = left_cmd_stim(test_run)
+        start_time, end_time = administer_left_cmd(test_run)
         jittered_delay()
     elif trial == "beep":
         start_time, end_time = administer_beep(test_run)
         jittered_delay()
     else:
-        trials = generate_oddball_stimulus()
-        play_oddball_stimulus(trials)
+        start_time, end_time = administer_oddball(test_run)
         jittered_delay()
     
     return start_time, end_time
 
-def generate_oddball_stimulus(
-    n_trials=20,
-    freq_frequent=1000,     # Default frequent tone (Hz)
+def play_oddball_stimulus(
+    n_tones=20,            # number of distict tones 
+    freq_standard=1000,     # Default standard tone (Hz)
     freq_rare=2000,         # Default rare tone (Hz)
     prob_rare=0.2,          # 20% rare tone probability
-    delay_range=(1.2, 2.2)  # Random delay between stimuli
 ):
-    """oddball stimulus generater"""
+    """oddball stimulus player"""
 
     tones = []
 
-    for _ in range(n_trials):
-    #     # Generate tone (frequent or rare)
+    # Create 1-second silent gaps (1000ms)
+    silent_gap = AudioSegment.silent(duration=1000)  
+
+    for _ in range(n_tones):
+        # Generate tone (standard or rare)
         if random.random() < prob_rare:
-            tones += Sine(freq_rare).to_audio_segment(duration=100)
-            print("Rare tone played ⚡")
+            tones.append(Sine(freq_rare).to_audio_segment(duration=100))
         else:
-            tones += Sine(freq_frequent).to_audio_segment(duration=100)
-            print("Frequent tone played •")
+            tones.append(Sine(freq_standard).to_audio_segment(duration=100))
+        # add gap between tones
+        tones.append(silent_gap)
         
-    return tones
+    # Append tone and gap to combined audio
+    combined_audio = sum(tones)
 
-def play_oddball_stimulus(
-    tones,
-    n_trials=20,
-    delay_range=(1.2, 2.2)  # Random delay between stimuli
-):
-    
-    """oddball stimulus player"""
-
-    print("playing oddball")
-
-    for i in range(n_trials):
-        # Play tone with random delay
-        play(tones[i])
-        time.sleep(random.uniform(*delay_range))
+    # Play the complete sequence
+    play(combined_audio)            
 
 def send_trigger(
     freq=2000,     # Frequency in Hz (default 2000 = high pitch)
