@@ -23,15 +23,38 @@ import sys
 import streamlit as st
 from PIL import Image
 from auditory_stim.stimulus_package_notes import add_notes, add_history
-from auditory_stim.auditory_stim import send_trigger, randomize_trials, generate_stimuli, play_stimuli
+from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
 from eeg_auditory_stimulus import rodika_modularized
 from eeg_auditory_stimulus import claassen_analysis
 
+### main function ###
 def main():
     """Main function to run the EEG Stimulus Package GUI."""
+
+    # Initialize flags in session state
+    if 'playback_state' not in st.session_state:
+        st.session_state.playback_state = "empty" 
+
+    if 'playback_active' not in st.session_state:
+        st.session_state.playback_active = False   
+    if 'stop_playback' not in st.session_state:
+        st.session_state.stop_playback = False
+    if 'Stimulus_prepared' not in st.session_state:
+        st.session_state.Stimulus_prepared = False
+
+    # Initialize lists in session state
+    if 'trial_types' not in st.session_state:
+        st.session_state.trial_types = []
+    if 'lang_trials_ids' not in st.session_state:
+        st.session_state.lang_trials_ids = []
+
+    # Initialize current patient session state
+    if 'current_patient' not in st.session_state:
+        st.session_state.current_patient = None
+    
     # Initialize Streamlit tabs
     tab1, tab2, tab3 = st.tabs(["Administer Stimuli", "Patient Information", "Results"])
-    
+
     with tab1:
         handle_stimulus_administration()
     
@@ -55,6 +78,7 @@ class Config:
     gose_scale: any
     gose_options: list[int]
 
+    graphs: list[str]
     graph_options: list[int]
     patient_ids: list[str]
 
@@ -143,8 +167,8 @@ class Config:
         if not os.path.exists(self.file['lang_tracking_dir']):
             os.makedirs(self.file['lang_tracking_dir'])
 
-        graphs = ["", "CMD", "Language Tracking"]
-        self.graph_options = list(range(len(graphs)))
+        self.graphs = ["", "CMD", "Language Tracking"]
+        self.graph_options = list(range(len(self.graphs)))
         self.patient_ids = ["CON001a", "CON001b", "CON002", "CON003", "CON004", "CON005"]
 
 ### Streamlit Interface ###
@@ -152,131 +176,119 @@ def handle_stimulus_administration():
     st.title("EEG Stimulus Package")
     st.header("Administer Auditory Stimuli", divider='rainbow')
 
-    # Patient ID input
-    patient_id = st.text_input("Enter Patient/EEG ID")
-    trial_types = []
-    lang_trials_ids = []
+    # patient ID input
+    patient_id = st.text_input("Enter Patient/EEG ID").strip()
+
+    # Status message   
+    status = st.empty()
+    if not patient_id:
+        st.error("Please enter a patient ID")
+    elif st.session_state.playback_state == "empty":
+        st.error("Please prepare stimulus")
+    elif st.session_state.playback_state == "stimulus_prepared":
+        status.success("Stimulus Prepared")
+    elif st.session_state.playback_state == "play_stimulus":
+        status.success("Playing audio...")
+
+    # validation
+    if patient_id and patient_id != st.session_state.get('current_patient'):
+        st.session_state.current_patient = patient_id
+        st.session_state.playback_state = "empty"
+        st.session_state.Stimulus_prepared = False  # Reset if patient changes
  
-    language_stim_selcted = st.checkbox("language_stim", key="language_checkbox")
-    right_cmd_stim_selcted = st.checkbox("right_cmd_stim", key="right_cmd_checkbox")
-    left_cmd_stim_selcted = st.checkbox("left_cmd_stim", key="rleft_cmd_checkbox")
-    beep_stim_selcted = st.checkbox("beep_stim", key="beep_checkbox")
+    language_stim_selected = st.checkbox("language_stim", key="language_checkbox")
+    right_cmd_stim_selected = st.checkbox("right_cmd_stim", key="right_cmd_checkbox")
+    left_cmd_stim_selected = st.checkbox("left_cmd_stim", key="rleft_cmd_checkbox")
+    beep_stim_selected = st.checkbox("beep_stim", key="beep_checkbox")
     oddball_stim_selected = st.checkbox("oddball_stim", key="oddball_checkbox")
 
-    num_of_each_trial = {
-        "lang": 0,
-        "rcmd": 0,
-        "lcmd": 0,
-        "beep": 0,
-        "odd": 0
-    }
+    # create prepare button
+    if st.button("Prepare Stimulus", disabled = not st.session_state.playback_state == "empty"):
+        st.session_state.playback_state = "prepare_stimulus"
+        st.rerun()
 
+    # create play button
+    if st.button("Play Stimulus", disabled = not st.session_state.playback_state == "stimulus_prepared"):
+        st.session_state.playback_state = "play_stimulus"
+        st.rerun()
 
-    # Initialize stop flag in session state
-    if 'stop_playback' not in st.session_state:
-        st.session_state.stop_playback = False
+    # create and define stop button
+    if st.button("Stop", type="primary", disabled = not st.session_state.playback_state == "play_stimulus"):
+        st.session_state.playback_state = "stop_stimulus"
+        st.rerun()
 
-    # Create Prepare Stimulus button
-    if st.button("Prepare Stimulus"):
+    # define prepare button
+    if st.session_state.playback_state == "prepare_stimulus":
 
-        # Validate selection (only one can be selected)
-        if language_stim_selcted:
-            num_of_each_trial["lang"] = 72
-        if right_cmd_stim_selcted:
-            num_of_each_trial["rcmd"] = 3 
-        if left_cmd_stim_selcted:
-            num_of_each_trial["lcmd"] = 3 
-        if beep_stim_selcted:
-            num_of_each_trial["beep"] = 6    
-        if oddball_stim_selected:
-            num_of_each_trial["odd"] = 4
+        num_of_each_trial = {
+            "lang": 72 if language_stim_selected else 0,
+            "rcmd": 3 if right_cmd_stim_selected else 0,
+            "lcmd": 3 if left_cmd_stim_selected else 0,
+            "beep": 6 if beep_stim_selected else 0,
+            "odd": 4 if oddball_stim_selected else 0
+        }
 
-        # Original random stimulus
-        trial_types = randomize_trials(num_of_each_trial)
-        st.session_state['trial_types'] = trial_types
-        lang_trials_ids = generate_stimuli(trial_types)
-        st.session_state['lang_trials_ids'] = lang_trials_ids
+        if sum(num_of_each_trial.values()) == 0:
+            st.error("Please select at least one stimulus type.")
+            return
 
-    # Create columns for Play and Stop buttons
-    col1, col2 = st.columns(2)
+        try:
+            st.session_state.trial_types = randomize_trials(num_of_each_trial)
+            st.session_state.lang_trials_ids = generate_stimuli(st.session_state.trial_types)
+            st.session_state.playback_state = "stimulus_prepared"
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error preparing stimulus: {str(e)}")
 
-    with col1:
-        play_btn = st.button("Play Stimulus")
+    # define play button
+    if st.session_state.playback_state == "play_stimulus":
 
-    with col2:
-        stop_btn = st.button("Stop Playback", type="primary")
-    
-    # play
-    if play_btn:
+        try:
+            config.current_date = time.strftime("%Y-%m-%d")
 
-        # send_trigger()
+            progress_bar = st.progress(0, text="0%")
+            administered_stimuli = []
 
-        print(f"patient_id: {patient_id}")
-        config.current_date = time.strftime("%Y-%m-%d")
+            for i, (trial, trial_id) in enumerate(zip(st.session_state.trial_types, st.session_state.lang_trials_ids)):
 
-        if os.listdir(config.file['stimuli_dir']) == []:
-            st.error("Please prepare stimuli first.")
-        else:
-            if patient_id.strip() == "":
-                st.error("Please enter a patient ID.")
-            elif ((config.patient_df['patient_id'] == patient_id) & (config.patient_df['date'] == config.current_date)).any():
-                st.error("Patient has already been administered stimulus protocol today")
-            else:
-                progress_bar = st.progress(0, text="0")
-                if not trial_types and 'trial_types' in st.session_state:
-                    trial_types = st.session_state['trial_types']
-                else:
-                    st.error("Please prepare stimuli first.")
-                if not lang_trials_ids and 'lang_trials_ids' in st.session_state:
-                    lang_trials_ids = st.session_state['lang_trials_ids']
-                else:
-                    st.error("Please prepare stimuli first.")
+                start_time, end_time = play_stimuli(trial, config.test_run)
 
-                print(f"trial_types: {trial_types}")
-                n = len(trial_types)
-                administered_stimuli = []
-                for i in range(n):
-                    trial = trial_types[i]
-                    print(f"Trial {i}: {trial}")
-                    start_time, end_time = play_stimuli(trial, config.test_run)
-                    administered_stimuli.append({
-                                'patient_id': patient_id,
-                                'date': config.current_date,
-                                'trial_type': trial[:4] if trial[:4] == "lang" else trial,
-                                'sentences': lang_trials_ids[i],
-                                'start_time': start_time,
-                                'end_time': end_time,
-                                'duration': end_time - start_time
-                            })
-                    percent = int(i/n*100)
-                    progress_bar.progress(percent, text=f"{percent}%")
-                progress_bar.progress(100, text=f"Done")
+                administered_stimuli.append({
+                    'patient_id': patient_id,
+                    'date': config.current_date,
+                    'trial_type': trial[:4] if trial[:4] == "lang" else trial,
+                    'sentences': trial_id,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': end_time - start_time
+                })
+                
+                percent = int((i+1)/len(st.session_state.trial_types)*100)
+                progress_bar.progress(percent, text=f"{percent}%")
+                
 
-                pd.DataFrame(administered_stimuli)
-                administered_stimuli_df = pd.concat([config.patient_df, pd.DataFrame(administered_stimuli)], ignore_index=True)
-                administered_stimuli_df.to_csv(config.file['patient_df_path'], index=False)
-                print(f"administered_stimuli_df: {administered_stimuli_df}")
+            # Save results
+            if administered_stimuli:
+                save_results(patient_id, administered_stimuli)
+                st.success(f"Stimuli administered to {patient_id} on {config.current_date}")
+        
+            st.session_state.playback_state = "stimulus_prepared"
+            progress_bar.empty()
+            st.rerun()
 
-                # Save each patient output into seaprated csv files with 'patientId_currentDate'
-                output_dir = config.file['patient_output_dir']
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+        except Exception as e:
+            st.session_state.playback_state = "stimulus_prepared"
+            st.error(f"Error during playback: {str(e)}")
+            st.rerun()
 
-                formatted_date = config.current_date.replace("-", "")
-                output_file = f"{patient_id}_{formatted_date}.csv"
-                output_path = os.path.join(output_dir, output_file)
-                pd.DataFrame(administered_stimuli).to_csv(output_path, index=False)
-                print(f"Data saved to {output_path}")
+    # define stop button
+    if st.session_state.playback_state == "stop_stimulus":
+        st.warning("Stopping after current stimulus...")
+        time.sleep(30) # time length of longest stimulus 
+        st.session_state.playback_state = "stimulus_prepared"
+        st.rerun()
 
-                # Add history after saving csv output files
-                add_history(patient_id, config.current_date)
-                st.success(f"Stimuli has been administered to patient {patient_id} on {config.current_date}.")
-
-    # stop
-    if stop_btn:
-        st.session_state.stop_playback = True
-        st.warning("Stopping playback after current stimulus...")
-
+    # notes
     st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
     your_note = st.text_input("Write your note here")
 
@@ -495,6 +507,23 @@ def read_log_file(log_file_path):
         return auc_score, permutation_results
     return None, None
 
+def save_results(patient_id, administered_stimuli):
+    """Save administered stimuli data to appropriate files."""
+    # Update main patient dataframe
+    new_df = pd.DataFrame(administered_stimuli)
+    updated_df = pd.concat([config.patient_df, new_df], ignore_index=True)
+    updated_df.to_csv(config.file['patient_df_path'], index=False)
+    
+    # Save patient-specific file
+    output_dir = config.file['patient_output_dir']
+    os.makedirs(output_dir, exist_ok=True)
+    formatted_date = config.current_date.replace("-", "")
+    output_file = f"{patient_id}_{formatted_date}.csv"
+    output_path = os.path.join(output_dir, output_file)
+    new_df.to_csv(output_path, index=False)
+    
+    # Add to history
+    add_history(patient_id, config.current_date)
 
 if __name__ == "__main__":
 

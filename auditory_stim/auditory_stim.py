@@ -2,7 +2,6 @@ import time
 import os
 import random
 import yaml
-import time
 import streamlit as st
 import pydub
 from pydub import AudioSegment
@@ -137,6 +136,34 @@ def administer_oddball(test_run=False):
     end_time = time.time()
     return start_time, end_time
 
+def play_oddball_stimulus(
+    n_tones=20,              # number of distict tones 
+    freq_standard=1000,     # Default standard tone (Hz)
+    freq_rare=2000,         # Default rare tone (Hz)
+    prob_rare=0.2,          # 20% rare tone probability
+):
+    """oddball stimulus player"""
+
+    tones = []
+
+    # Create 1-second silent gaps (1000ms)
+    silent_gap = AudioSegment.silent(duration=1000)  
+
+    for _ in range(n_tones):
+        # Generate tone (standard or rare)
+        if random.random() < prob_rare:
+            tones.append(Sine(freq_rare).to_audio_segment(duration=100))
+        else:
+            tones.append(Sine(freq_standard).to_audio_segment(duration=100))
+        # add gap between tones
+        tones.append(silent_gap)
+        
+    # Append tone and gap to combined audio
+    combined_audio = sum(tones)
+
+    # Play the complete sequence
+    play(combined_audio)         
+
 def randomize_trials(num_of_each_trial):
     trial_types = []
      
@@ -186,36 +213,8 @@ def play_stimuli(trial, test_run=False):
     else:
         start_time, end_time = administer_oddball(test_run)
         jittered_delay()
-    
+
     return start_time, end_time
-
-def play_oddball_stimulus(
-    n_tones=20,            # number of distict tones 
-    freq_standard=1000,     # Default standard tone (Hz)
-    freq_rare=2000,         # Default rare tone (Hz)
-    prob_rare=0.2,          # 20% rare tone probability
-):
-    """oddball stimulus player"""
-
-    tones = []
-
-    # Create 1-second silent gaps (1000ms)
-    silent_gap = AudioSegment.silent(duration=1000)  
-
-    for _ in range(n_tones):
-        # Generate tone (standard or rare)
-        if random.random() < prob_rare:
-            tones.append(Sine(freq_rare).to_audio_segment(duration=100))
-        else:
-            tones.append(Sine(freq_standard).to_audio_segment(duration=100))
-        # add gap between tones
-        tones.append(silent_gap)
-        
-    # Append tone and gap to combined audio
-    combined_audio = sum(tones)
-
-    # Play the complete sequence
-    play(combined_audio)            
 
 def send_trigger(
     freq=2000,     # Frequency in Hz (default 2000 = high pitch)
