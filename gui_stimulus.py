@@ -31,16 +31,9 @@ from eeg_auditory_stimulus import claassen_analysis
 def main():
     """Main function to run the EEG Stimulus Package GUI."""
 
-    # Initialize flags in session state
+    # Initialize playback state in session state
     if 'playback_state' not in st.session_state:
-        st.session_state.playback_state = "empty" 
-
-    if 'playback_active' not in st.session_state:
-        st.session_state.playback_active = False   
-    if 'stop_playback' not in st.session_state:
-        st.session_state.stop_playback = False
-    if 'Stimulus_prepared' not in st.session_state:
-        st.session_state.Stimulus_prepared = False
+        st.session_state.playback_state = "empty"  
 
     # Initialize lists in session state
     if 'trial_types' not in st.session_state:
@@ -194,7 +187,6 @@ def handle_stimulus_administration():
     if patient_id and patient_id != st.session_state.get('current_patient'):
         st.session_state.current_patient = patient_id
         st.session_state.playback_state = "empty"
-        st.session_state.Stimulus_prepared = False  # Reset if patient changes
  
     language_stim_selected = st.checkbox("language_stim", key="language_checkbox")
     right_cmd_stim_selected = st.checkbox("right_cmd_stim", key="right_cmd_checkbox")
@@ -272,7 +264,7 @@ def handle_stimulus_administration():
                 save_results(patient_id, administered_stimuli)
                 st.success(f"Stimuli administered to {patient_id} on {config.current_date}")
         
-            st.session_state.playback_state = "stimulus_prepared"
+            st.session_state.playback_state = "empty"
             progress_bar.empty()
             st.rerun()
 
@@ -285,7 +277,7 @@ def handle_stimulus_administration():
     if st.session_state.playback_state == "stop_stimulus":
         st.warning("Stopping after current stimulus...")
         time.sleep(30) # time length of longest stimulus 
-        st.session_state.playback_state = "stimulus_prepared"
+        st.session_state.playback_state = "empty"
         st.rerun()
 
     # notes

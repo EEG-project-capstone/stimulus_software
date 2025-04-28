@@ -8,11 +8,19 @@ from pydub import AudioSegment
 from pydub.generators import Sine
 from pydub.playback import play
 
+import sounddevice as sd
 
 config_file_path = 'config.yml'  # Replace with the actual path to your config file
 with open(config_file_path, 'r') as file:
     config = yaml.safe_load(file)
 
+def list_output_devices():
+    devices = sd.query_devices()
+    output_devices = []
+    for i, dev in enumerate(devices):
+        if dev['max_output_channels'] > 0:
+            output_devices.append((i, dev['name']))
+    return output_devices
 
 def jittered_delay():
     time.sleep(random.uniform(1.2, 2.2))
@@ -136,6 +144,15 @@ def administer_oddball(test_run=False):
     end_time = time.time()
     return start_time, end_time
 
+def administer_loved_ones(test_run=False):
+    # for kush
+
+    start_time = time.time()
+
+
+    end_time = time.time()
+    return start_time, end_time
+
 def play_oddball_stimulus(
     n_tones=20,              # number of distict tones 
     freq_standard=1000,     # Default standard tone (Hz)
@@ -197,6 +214,10 @@ def generate_stimuli(trial_types):
     return lang_trials_ids
 
 def play_stimuli(trial, test_run=False):
+    
+    devices = list_output_devices()
+    print(devices)
+
     if trial[:4] == "lang":
         output_path = os.path.join(config['stimuli_dir'], f"{trial}.mp3")
         start_time, end_time = administer_lang(output_path, test_run)
@@ -210,8 +231,11 @@ def play_stimuli(trial, test_run=False):
     elif trial == "beep":
         start_time, end_time = administer_beep(test_run)
         jittered_delay()
-    else:
+    elif trial == "odd":
         start_time, end_time = administer_oddball(test_run)
+        jittered_delay()
+    else:
+        start_time, end_time = administer_loved_ones(test_run)
         jittered_delay()
 
     return start_time, end_time

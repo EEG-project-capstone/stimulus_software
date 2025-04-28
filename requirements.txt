@@ -6,3 +6,4 @@ streamlit
 pyyaml
 pydub
 pyttsx3
+sounddevice
