@@ -389,73 +389,39 @@ def administer_oddball(test_run=False, config=None):
 
 # --- Main Playback Function (MODIFIED) ---
 def play_stimuli(stimulus_info, test_run=False):
-    """
-    Plays a single stimulus trial. Handles both new paradigm (dict with path)
-    and old paradigm (label string).
-    """
-    start_time, end_time = time.time(), time.time() # Initialize times
+    start_time, end_time = time.time(), time.time()
 
-    # --- Case 1: New Paradigm (Loved One / Control) ---
     if isinstance(stimulus_info, dict):
-        output_path = stimulus_info.get('output_path')
         trial_type = stimulus_info.get('type', 'unknown')
-        print(f"Playing from details: Type={trial_type}, Path={output_path}") # Debug
+        output_path = stimulus_info.get('output_path')
 
+        # --- Handle built-in (non-file) paradigms first ---
+        if trial_type == "rcmd":
+            return administer_right_cmd(test_run, config)
+        elif trial_type == "lcmd":
+            return administer_left_cmd(test_run, config)
+        elif trial_type == "beep":
+            return administer_beep(test_run, config)
+        elif trial_type == "odd":
+            return administer_oddball(test_run, config)
+
+        # --- Otherwise: use file path ---
         if output_path and os.path.exists(output_path):
             start_time = time.time()
             if not test_run:
-                play_mp3(output_path) # Play the pre-generated file (includes silence)
+                play_mp3(output_path)
             else:
-                # Simulate duration if test_run is True
-                try:
-                    audio = AudioSegment.from_mp3(output_path)
-                    sim_duration = len(audio) / 1000.0
-                except Exception:
-                    sim_duration = 8.0 # Estimate if file read fails
-                print(f"--- TEST RUN: Simulating playback {os.path.basename(output_path)} ({sim_duration:.1f}s) ---")
-                time.sleep(0.1) # Minimal delay
+                audio = AudioSegment.from_mp3(output_path)
+                time.sleep(len(audio) / 1000.0)
             end_time = time.time()
+            return start_time, end_time
         else:
-            print(f"ERROR: Output path missing or file not found in stimulus_info: {stimulus_info}")
-            st.error(f"Playback Error: File missing for trial type '{trial_type}'.")
-            # Return current time for start/end to avoid large duration errors
-            start_time = end_time = time.time()
-
-    # --- Case 2: Old Paradigm (Standard Labels) ---
-    elif isinstance(stimulus_info, str):
-        trial_label = stimulus_info
-        print(f"Playing from label: {trial_label}") # Debug
-
-        # Use existing administer_* functions for standard trials
-        if trial_label.startswith("lang_"):
-            # Assumes generate_stimuli created the file 'lang_N.mp3'
-            output_path = os.path.join(config.get('stimuli_dir', 'data/stimuli'), f"{trial_label}.mp3")
-            start_time, end_time = administer_lang(output_path, test_run)
-            # Keep jittered delay ONLY for old paradigm timing if needed? Or remove?
-            # Let's REMOVE it for consistency if silence isn't baked into old files.
-            # time.sleep(random.uniform(1.2, 2.2)) # Jittered delay for old paradigm?
-        elif trial_label == "rcmd":
-            start_time, end_time = administer_right_cmd(test_run, config)
-            # time.sleep(random.uniform(1.2, 2.2))
-        elif trial_label == "lcmd":
-            start_time, end_time = administer_left_cmd(test_run, config)
-            # time.sleep(random.uniform(1.2, 2.2))
-        elif trial_label == "beep":
-            start_time, end_time = administer_beep(test_run, config)
-            # time.sleep(random.uniform(1.2, 2.2))
-        elif trial_label == "odd":
-            start_time, end_time = administer_oddball(test_run, config)
-            # time.sleep(random.uniform(1.2, 2.2))
-        else:
-            print(f"Warning: Unknown trial label string '{trial_label}' in play_stimuli. Skipping playback.")
-            start_time = end_time = time.time()
+            st.error(f"Playback Error: File missing for trial type '{trial_type}'")
+            return time.time(), time.time()
 
     else:
-        print(f"ERROR: Invalid stimulus_info type received by play_stimuli: {type(stimulus_info)}")
-        start_time = end_time = time.time()
-
-
-    return start_time, end_time
+        st.error("Invalid stimulus_info passed to play_stimuli()")
+        return time.time(), time.time()
 # --------------------------------------
 
 # --- Deprecated / Unused Placeholders ---
