@@ -1,4 +1,10 @@
 # INPUT CHANGES HERE
+control_statement_male: "C:/Python/brain-waves-2.0/ControlStatement_male.wav"
+control_statement_female: "C:/Python/brain-waves-2.0/ControlStatement_female.wav"
+
+num_control_trials: 50
+num_voice_trials: 50
+silence_duration_ms: 5000
 
 os: 'linux' # 'windows' or 'linux' or 'os'
 # Define your output path:
