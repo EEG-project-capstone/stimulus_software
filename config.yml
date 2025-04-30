@@ -1,6 +1,6 @@
 # INPUT CHANGES HERE
 
-os: 'linux' # 'windows' or 'linux' or 'os'
+os: 'os' # 'windows' or 'linux' or 'os'
 # Define your output path:
 patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a different location
 patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
@@ -23,4 +23,6 @@ right_stop_path: 'audio_data/static/right_stop.mp3'
 left_keep_path: 'audio_data/static/left_keep.mp3'
 left_stop_path: 'audio_data/static/left_stop.mp3'
 beep_path: 'audio_data/static/sample_beep.mp3'
-
+loved_one_path: 'audio_data/static/sample_beep.mp3'
+male_control_path: 'audio_data/static/sample_beep.mp3'
+female_control_path: 'audio_data/static/sample_beep.mp3'

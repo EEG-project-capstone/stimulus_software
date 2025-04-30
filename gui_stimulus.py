@@ -23,7 +23,7 @@ import sys
 import streamlit as st
 from PIL import Image
 from auditory_stim.stimulus_package_notes import add_notes, add_history
-from auditory_stim.auditory_stim import randomize_trials, generate_stimuli, play_stimuli
+from auditory_stim.auditory_stim import AuditoryStimulator
 from eeg_auditory_stimulus import rodika_modularized
 from eeg_auditory_stimulus import claassen_analysis
 
@@ -31,15 +31,21 @@ from eeg_auditory_stimulus import claassen_analysis
 def main():
     """Main function to run the EEG Stimulus Package GUI."""
 
+    # set up configuration settings
+    if 'config' not in st.session_state:
+        st.session_state.config = Config()
+
+    # set up audio stim
+    if 'audio_stim' not in st.session_state:
+        st.session_state.audio_stim = AuditoryStimulator()
+
     # Initialize playback state in session state
     if 'playback_state' not in st.session_state:
         st.session_state.playback_state = "empty"  
 
-    # Initialize lists in session state
+    # Initialize trial types
     if 'trial_types' not in st.session_state:
         st.session_state.trial_types = []
-    if 'lang_trials_ids' not in st.session_state:
-        st.session_state.lang_trials_ids = []
 
     # Initialize current patient session state
     if 'current_patient' not in st.session_state:
@@ -177,25 +183,45 @@ def handle_stimulus_administration():
     if not patient_id:
         st.error("Please enter a patient ID")
     elif st.session_state.playback_state == "empty":
+        st.error("Please select at least one stimulus type.")
+    elif st.session_state.playback_state == "selected":
         st.error("Please prepare stimulus")
     elif st.session_state.playback_state == "stimulus_prepared":
-        status.success("Stimulus Prepared")
+        status.success(f"Stimulus Prepared and the followint trials have been added: \n\n {st.session_state.trial_types}")
     elif st.session_state.playback_state == "play_stimulus":
         status.success("Playing audio...")
 
-    # validation
+    # patient_id validation and reset 
     if patient_id and patient_id != st.session_state.get('current_patient'):
         st.session_state.current_patient = patient_id
+
+        # language_stim_selected = False
+        # right_cmd_stim_selected = False
+        # left_cmd_stim_selected = False
+        # beep_stim_selected = False
+        # oddball_stim_selected = False
+        # loved_one_stim_selected = False
+
         st.session_state.playback_state = "empty"
  
+    # create check boxes
     language_stim_selected = st.checkbox("language_stim", key="language_checkbox")
     right_cmd_stim_selected = st.checkbox("right_cmd_stim", key="right_cmd_checkbox")
     left_cmd_stim_selected = st.checkbox("left_cmd_stim", key="rleft_cmd_checkbox")
     beep_stim_selected = st.checkbox("beep_stim", key="beep_checkbox")
     oddball_stim_selected = st.checkbox("oddball_stim", key="oddball_checkbox")
 
+    # create loved one check box and file upload
+    left_col, middle_col, right_col = st.columns(3)
+    with left_col:
+        loved_one_stim_selected = st.checkbox("loved_one_stim", key="loved_one_checkbox")
+    with middle_col:
+        st.session_state.audio_stim.family_member_gender = st.radio("Select Family Member Gender", ('Male', 'Female'), horizontal=True, disabled=not loved_one_stim_selected)
+    with right_col:
+        st.session_state.audio_stim.loved_one_file = st.file_uploader("Upload Loved One's Voice", type=['wav', 'mp3'], disabled=not loved_one_stim_selected)
+
     # create prepare button
-    if st.button("Prepare Stimulus", disabled = not st.session_state.playback_state == "empty"):
+    if st.button("Prepare Stimulus", disabled = st.session_state.playback_state == "empty" or st.session_state.playback_state == "play_stimulus"):
         st.session_state.playback_state = "prepare_stimulus"
         st.rerun()
 
@@ -209,6 +235,12 @@ def handle_stimulus_administration():
         st.session_state.playback_state = "stop_stimulus"
         st.rerun()
 
+    # define checkboxes if empty
+    if st.session_state.playback_state == "empty" and patient_id:
+        if language_stim_selected or right_cmd_stim_selected or left_cmd_stim_selected or beep_stim_selected or oddball_stim_selected or loved_one_stim_selected:
+            st.session_state.playback_state = "selected"
+            st.rerun()
+
     # define prepare button
     if st.session_state.playback_state == "prepare_stimulus":
 
@@ -217,16 +249,12 @@ def handle_stimulus_administration():
             "rcmd": 3 if right_cmd_stim_selected else 0,
             "lcmd": 3 if left_cmd_stim_selected else 0,
             "beep": 6 if beep_stim_selected else 0,
-            "odd": 4 if oddball_stim_selected else 0
+            "odd": 4 if oddball_stim_selected else 0,
+            "loved": 50 if loved_one_stim_selected else 0
         }
 
-        if sum(num_of_each_trial.values()) == 0:
-            st.error("Please select at least one stimulus type.")
-            return
-
         try:
-            st.session_state.trial_types = randomize_trials(num_of_each_trial)
-            st.session_state.lang_trials_ids = generate_stimuli(st.session_state.trial_types)
+            st.session_state.trial_types = st.session_state.audio_stim.generate_trials(num_of_each_trial)
             st.session_state.playback_state = "stimulus_prepared"
             st.rerun()
         except Exception as e:
@@ -236,20 +264,20 @@ def handle_stimulus_administration():
     if st.session_state.playback_state == "play_stimulus":
 
         try:
-            config.current_date = time.strftime("%Y-%m-%d")
+            st.session_state.config.current_date = time.strftime("%Y-%m-%d")
 
             progress_bar = st.progress(0, text="0%")
             administered_stimuli = []
 
-            for i, (trial, trial_id) in enumerate(zip(st.session_state.trial_types, st.session_state.lang_trials_ids)):
+            for i, trial in enumerate(st.session_state.trial_types):
 
-                start_time, end_time = play_stimuli(trial, config.test_run)
+                start_time, end_time, sentences = st.session_state.audio_stim.play_stimuli(trial)
 
                 administered_stimuli.append({
                     'patient_id': patient_id,
-                    'date': config.current_date,
+                    'date': st.session_state.config.current_date,
                     'trial_type': trial[:4] if trial[:4] == "lang" else trial,
-                    'sentences': trial_id,
+                    'sentences': sentences,
                     'start_time': start_time,
                     'end_time': end_time,
                     'duration': end_time - start_time
@@ -262,7 +290,7 @@ def handle_stimulus_administration():
             # Save results
             if administered_stimuli:
                 save_results(patient_id, administered_stimuli)
-                st.success(f"Stimuli administered to {patient_id} on {config.current_date}")
+                st.success(f"Stimuli administered to {patient_id} on {st.session_state.config.current_date}")
         
             st.session_state.playback_state = "empty"
             progress_bar.empty()
@@ -280,7 +308,9 @@ def handle_stimulus_administration():
         st.session_state.playback_state = "empty"
         st.rerun()
 
-    # notes
+
+    ############### notes ##############
+
     st.header("Add Notes to your Selected Patient and Date", divider='rainbow')
     your_note = st.text_input("Write your note here")
 
@@ -295,10 +325,10 @@ def handle_stimulus_administration():
 
     selected_patient_find_notes = None
     selected_date_find_notes = None
-    if not os.path.exists(config.file["patient_note_path"]):
+    if not os.path.exists(st.session_state.config.file["patient_note_path"]):
         st.error("You haven't added any notes yet, add a note first.")
     else:
-        patient_notes = pd.read_csv(config.file["patient_note_path"])
+        patient_notes = pd.read_csv(st.session_state.config.file["patient_note_path"])
         selected_patient_find_notes = st.selectbox(
             "Select Patient ID", 
             patient_notes.patient_id.value_counts().index.sort_values(), 
@@ -320,12 +350,12 @@ def handle_patient_information():
         date = st.date_input("Recording Date")
         date_str = date.strftime("%Y%m%d")
         edf_file = st.file_uploader("Upload EDF File", type=["edf"])
-        cpc_input = st.selectbox("Select CPC Score", config.cpc_options, format_func=lambda x: config.cpc_scale[x])
-        gose_input = st.selectbox("Select GOSE Score", config.gose_options, format_func=lambda x: config.gose_scale[x])
+        cpc_input = st.selectbox("Select CPC Score", st.session_state.config.cpc_options, format_func=lambda x: st.session_state.config.cpc_scale[x])
+        gose_input = st.selectbox("Select GOSE Score", st.session_state.config.gose_options, format_func=lambda x: st.session_state.config.gose_scale[x])
         submitted = st.form_submit_button("Submit")
         if submitted:
             # Check no duplicates      
-            full_path = os.path.join(config.file['edf_dir'], f"{patient_id}_{date_str}.edf")
+            full_path = os.path.join(st.session_state.config.file['edf_dir'], f"{patient_id}_{date_str}.edf")
             if os.path.exists(full_path):
                 st.error(f"File already exists for {patient_id} on {date_str}")
 
@@ -342,14 +372,14 @@ def handle_patient_information():
                     'cpc': cpc_input if cpc_input > 0 else None,
                     'gose': gose_input if gose_input > 0 else None
                 }])
-                patient_label_row.to_csv(config.file['patient_label_path'], mode='a', header=False, index=False)
-                patient_label_df = pd.read_csv(config.file['patient_label_path'])
+                patient_label_row.to_csv(st.session_state.config.file['patient_label_path'], mode='a', header=False, index=False)
+                patient_label_df = pd.read_csv(st.session_state.config.file['patient_label_path'])
 
 def handle_eeg_results():
     st.header("EEG Graphs")
 
     # Get unique patient IDs (excluding 'joobee' and 'khanh')
-    valid_patient_ids = config.patient_df.loc[~config.patient_df['patient_id'].isin(['joobee', 'khanh']), 'patient_id'].sort_values().unique()
+    valid_patient_ids = st.session_state.config.patient_df.loc[~st.session_state.config.patient_df['patient_id'].isin(['joobee', 'khanh']), 'patient_id'].sort_values().unique()
     
     if len(valid_patient_ids) == 0:
         st.warning("No patient data available")
@@ -358,7 +388,7 @@ def handle_eeg_results():
     selected_patient = st.selectbox("Select Patient ID", valid_patient_ids)
 
     # Get dates for selected patient
-    patient_dates = config.patient_df[config.patient_df['patient_id'] == selected_patient]['date'].unique()
+    patient_dates = st.session_state.config.patient_df[st.session_state.config.patient_df['patient_id'] == selected_patient]['date'].unique()
     
     if len(patient_dates) == 0:
         st.warning(f"No dates available for patient {selected_patient}")
@@ -375,14 +405,14 @@ def handle_eeg_results():
     # date_str = pd.to_datetime(selected_date_find_patient).strftime("%Y%m%d")
 
     fname = f"{selected_patient}_{date_str}"
-    selected_graph = st.selectbox("Choose Graph Type", config.graph_options, format_func=lambda x: config.graphs[x])
+    selected_graph = st.selectbox("Choose Graph Type", st.session_state.config.graph_options, format_func=lambda x: st.session_state.config.graphs[x])
     
     st.subheader("Graph Display")
 
     if selected_graph==1: # CMD
-        fig_full_path = os.path.join(config.file['cmd_result_dir'], f"{fname}.png")
-        patient_folder = os.path.join(config.file['cmd_result_dir'], f"{selected_patient}_{date_str}")
-        eeg_file_path = os.path.join(config.file['edf_dir'], f"{selected_patient}_{date_str}.edf")
+        fig_full_path = os.path.join(st.session_state.config.file['cmd_result_dir'], f"{fname}.png")
+        patient_folder = os.path.join(st.session_state.config.file['cmd_result_dir'], f"{selected_patient}_{date_str}")
+        eeg_file_path = os.path.join(st.session_state.config.file['edf_dir'], f"{selected_patient}_{date_str}.edf")
 
         if os.path.exists(patient_folder): # create folder under selected_patient, under date 
             display_all_plots(patient_folder)
@@ -390,13 +420,13 @@ def handle_eeg_results():
             # Create the directory if it doesn't exist
             os.makedirs(patient_folder, exist_ok=True)
         if st.button("Run CMD Analysis"):
-            claassen_analysis.run_analysis(selected_patient, config.file['cmd_result_dir'], eeg_file_path, config.file['patient_df_path'], date_str)
+            claassen_analysis.run_analysis(selected_patient, st.session_state.config.file['cmd_result_dir'], eeg_file_path, st.session_state.config.file['patient_df_path'], date_str)
             display_all_plots(patient_folder)
 
     elif selected_graph==2:
         expected_filename = "avg_itpc_plot.png"
-        patient_folder = os.path.join(config.file['lang_tracking_dir'], selected_patient)
-        image_path = os.path.join(config.file['lang_tracking_dir'], expected_filename)
+        patient_folder = os.path.join(st.session_state.config.file['lang_tracking_dir'], selected_patient)
+        image_path = os.path.join(st.session_state.config.file['lang_tracking_dir'], expected_filename)
         
         st.subheader("Language Tracking Options")
         # Let user pick channels for bad and EOG
@@ -420,13 +450,13 @@ def handle_eeg_results():
 
         # Button to run analysis
         if st.button("Run Language Tracking Analysis"):
-            eeg_file_path = os.path.join(config.file['edf_dir'], f"{selected_patient}_{date_str}.edf")
+            eeg_file_path = os.path.join(st.session_state.config.file['edf_dir'], f"{selected_patient}_{date_str}.edf")
 
-            # relative_path = config.file.get(f"{selected_patient}_path", "")
+            # relative_path = st.session_state.config.file.get(f"{selected_patient}_path", "")
             # # Combine with edf_dir
-            # eeg_file_path = os.path.join(config.file['edf_dir'], os.path.basename(relative_path))
+            # eeg_file_path = os.path.join(st.session_state.config.file['edf_dir'], os.path.basename(relative_path))
             
-            stimulus_csv_path = config.file['patient_df_path']
+            stimulus_csv_path = st.session_state.config.file['patient_df_path']
             use_channels = available_channels
             bad_channels = selected_bad_channels
             eog_chs = selected_eog_chs
@@ -503,24 +533,20 @@ def save_results(patient_id, administered_stimuli):
     """Save administered stimuli data to appropriate files."""
     # Update main patient dataframe
     new_df = pd.DataFrame(administered_stimuli)
-    updated_df = pd.concat([config.patient_df, new_df], ignore_index=True)
-    updated_df.to_csv(config.file['patient_df_path'], index=False)
+    updated_df = pd.concat([st.session_state.config.patient_df, new_df], ignore_index=True)
+    updated_df.to_csv(st.session_state.config.file['patient_df_path'], index=False)
     
     # Save patient-specific file
-    output_dir = config.file['patient_output_dir']
+    output_dir = st.session_state.config.file['patient_output_dir']
     os.makedirs(output_dir, exist_ok=True)
-    formatted_date = config.current_date.replace("-", "")
+    formatted_date = st.session_state.config.current_date.replace("-", "")
     output_file = f"{patient_id}_{formatted_date}.csv"
     output_path = os.path.join(output_dir, output_file)
     new_df.to_csv(output_path, index=False)
     
     # Add to history
-    add_history(patient_id, config.current_date)
+    add_history(patient_id, st.session_state.config.current_date)
 
 if __name__ == "__main__":
-
-    # set up configuration settings
-    config = Config()
-
     # Run the main application
     main()
