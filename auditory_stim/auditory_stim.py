@@ -3,7 +3,7 @@ import os
 import random
 import yaml
 import streamlit as st
-import pydub
+import numpy as np
 from pydub import AudioSegment
 from pydub.generators import Sine
 from pydub.playback import play
@@ -26,8 +26,10 @@ class AuditoryStimulator:
 
     loved_one_file: any
     loved_one_gender: any
-    loved_one_voice_audio: any
-    control_voice_audio: any
+    loved_one_audio: np.array
+    control_audio: np.array
+
+    sample_rate: any
      
     def __init__(self, config_file_path='config.yml'):
         """Initialize the auditory stimulator with configuration"""
@@ -49,8 +51,10 @@ class AuditoryStimulator:
 
         self.loved_one_file = None
         self.loved_one_gender = None
-        self.loved_one_voice_audio = None
-        self.control_voice_audio = None
+        self.loved_one_audio = None
+        self.control_audio = None
+
+        self.sample_rate = 44100
 
     def generate_trials(self, num_of_each_trials):      
         # generate random set of trials
@@ -87,14 +91,16 @@ class AuditoryStimulator:
                         trial_names.append('oddball')
                 elif key == "loved":
                     # path to loved ones voice recording
-                    temp_path = os.path.join("audio_data/static/", self.loved_one_file.name)
-                    # add loved ones voice recording 
-                    self.loved_one_voice_audio = AudioSegment.from_mp3(temp_path)
-                    # add a gendered control voice recording 
+                    temp_path = os.path.join(self.config['loved_one_path'], self.loved_one_file.name)
+                    # add loved ones voice recording
+                    self.loved_one_voice_audio = self._load_audio(temp_path)
+                    # add a gendered control voice recording
                     if self.loved_one_gender == 'Male':
-                        self.control_voice_audio = AudioSegment.from_mp3(self.config['male_control_path'])
+                        self.control_voice_audio = self._load_audio(self.config['male_control_path'])
                     elif self.loved_one_gender == 'Female':
-                        self.control_voice_audio = AudioSegment.from_mp3(self.config['female_control_path'])
+                        self.control_voice_audio = self._load_audio(self.config['female_control_path'])
+                    else:
+                        raise ValueError(f"No gender selected")
                     # add loved ones or control voice recording
                     trial_names += ['control'] * num_of_each_trials[key]
                     trial_names += ['loved_one'] * num_of_each_trials[key]
@@ -103,7 +109,34 @@ class AuditoryStimulator:
         random.shuffle(trial_names)
 
         return trial_names
-    
+
+    def _load_audio(self, path):
+        try:
+            if path.endswith('.mp3'):
+                audio_segment = AudioSegment.from_mp3(path)
+            elif path.endswith('.wav'):
+                audio_segment = AudioSegment.from_wav(path)
+            else:
+                raise ValueError(f"Unsupported file format: {path}")
+        
+            # print(audio_segment.frame_rate)
+
+            # Convert to numpy array
+            samples = np.array(audio_segment.get_array_of_samples())
+            
+            # Reshape stereo audio to (n_samples, 2)
+            if audio_segment.channels == 2:
+                samples = samples.reshape((-1, 2))
+                
+            # Normalize to [-1, 1] range
+            return samples.astype(np.float32) / (2**15 - 1)
+
+            # return np.array(audio_segment.get_array_of_samples())
+
+        except Exception as e:
+            print(f"Error loading {path}: {e}")
+            return None
+
     def play_stimuli(self, trial):
 
         # add sentences list for lang and oddball orders
@@ -127,10 +160,10 @@ class AuditoryStimulator:
 
         print(f"Successfully administered {trial}")
 
-        time.sleep(random.uniform(1.2, 2.2))
+        time.sleep(random.uniform(1.2, 2.2)) # ????????
 
         return start_time, end_time, sentences
-    
+
     def _generate_language_stimuli(self, num_of_lang_trials):
         gen_bar = st.progress(0, text="0")
         for i in range(num_of_lang_trials):
@@ -175,15 +208,6 @@ class AuditoryStimulator:
         self.lang_audio.append(combined)
         # save sample IDs
         self.lang_trials_ids.append(sample_ids)
-
-    def _list_output_devices(self):
-        """List all available audio output devices"""
-        devices = sd.query_devices()
-        output_devices = []
-        for i, dev in enumerate(devices):
-            if dev['max_output_channels'] > 0:
-                output_devices.append((i, dev['name']))
-        return output_devices
 
     def _administer_lang(self, trial):
 
@@ -248,9 +272,10 @@ class AuditoryStimulator:
         for _ in range(5):
             audio_segment = Sine(1000).to_audio_segment(duration=100)
             samples = audio_segment.get_array_of_samples()
-            sd.play(samples, audio_segment.frame_rate, device=1)
+            sd.play(samples, audio_segment.frame_rate)
             sd.wait()
             sentences.append('standard')
+            time.sleep(1)
 
         # play 20 standard or rare tones 
         for i in range(20):
@@ -258,16 +283,18 @@ class AuditoryStimulator:
             if random.random() < 0.2:
                 audio_segment = Sine(2000).to_audio_segment(duration=100)
                 samples = audio_segment.get_array_of_samples()
-                sd.play(samples, audio_segment.frame_rate, device=1)
+                sd.play(samples, audio_segment.frame_rate)
                 sd.wait()
                 sentences.append('rare')
             # else play standard tone 
             else:
                 audio_segment = Sine(1000).to_audio_segment(duration=100)
                 samples = audio_segment.get_array_of_samples()
-                sd.play(samples, audio_segment.frame_rate, device=1)
+                sd.play(samples, audio_segment.frame_rate)
                 sd.wait()
-                sentences.append('standard')  
+                sentences.append('standard')
+            # pause one second after each beep
+            time.sleep(1) 
                     
         end_time = time.time()
 
@@ -277,14 +304,25 @@ class AuditoryStimulator:
         return start_time, end_time, sentences
 
     def _administer_control(self):
-        start_time = time.time()
         print(f"Playing control recording")
-        play(self.control_voice_audio)
+        start_time = time.time()
+        self._play_audio_segment(self.control_voice_audio)
         end_time = time.time()
         return start_time, end_time
 
     def _administer_loved_one(self):
+        print(f"Playing loved one recording")        
         start_time = time.time()
-        play(self.loved_one_voice_audio)
+        self._play_audio_segment(self.loved_one_voice_audio)
         end_time = time.time()
         return start_time, end_time
+    
+    def _play_audio_segment(self, audio_segment):
+        try:
+            if audio_segment is None:
+                print("Error: No audio data to play")
+                return False
+            sd.play(audio_segment, self.sample_rate, blocking=True)
+            sd.wait()
+        except Exception as e:
+            print(f"Warning: Could not play {audio_segment}: {e}")

@@ -1,18 +1,17 @@
 """
 GUI Stimulus Package
-
-This script provides a graphical user interface (GUI) for administering auditory stimuli to patients, managing patient records, and adding notes. It utilizes the Streamlit library to create a web-based interface. The main functionalities include:
-
-1. **Administer Auditory Stimuli:** Users can input patient/EEG ID and start administering auditory stimuli. If a patient has already been administered the stimulus protocol on the current date, an error message is displayed.
-
-2. **Search Patients Already Administered Stimuli:** Enables users to search for patients who have already been administered stimuli. Users can select a patient ID and date to view the administered stimuli and their order.
-
-3. **Add Notes to Your Selected Patient and Date:** Provides a text input field for users to add notes to a selected patient and date. Users can click the "Add Note" button to append the note to the patient's record.
-
-4. **Find Patient Notes:** Allows users to find notes written for a selected patient and date. Users can select a patient ID and date to view the notes.
-
+This script provides a graphical user interface (GUI) for administering auditory stimuli to patients, managing patient records, and adding notes. 
+It utilizes the Streamlit library to create a web-based interface. The main functionalities include:
+    1. **Administer Auditory Stimuli:** Users can input patient/EEG ID and start administering auditory stimuli. 
+        If a patient has already been administered the stimulus protocol on the current date, an error message is displayed.
+    2. **Search Patients Already Administered Stimuli:** Enables users to search for patients who have already been administered stimuli. 
+        Users can select a patient ID and date to view the administered stimuli and their order.
+    3. **Add Notes to Your Selected Patient and Date:** Provides a text input field for users to add notes to a selected patient and date. 
+        Users can click the "Add Note" button to append the note to the patient's record.
+    4. **Find Patient Notes:** Allows users to find notes written for a selected patient and date. 
+        Users can select a patient ID and date to view the notes.
 Output:
-The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
+    The script generates and saves data to 'patient_df.csv' and 'patient_notes.csv' files.
 """
 
 import pandas as pd
@@ -30,36 +29,30 @@ from eeg_auditory_stimulus import claassen_analysis
 ### main function ###
 def main():
     """Main function to run the EEG Stimulus Package GUI."""
-
     # set up configuration settings
     if 'config' not in st.session_state:
         st.session_state.config = Config()
-
     # set up audio stim
     if 'audio_stim' not in st.session_state:
         st.session_state.audio_stim = AuditoryStimulator()
-
     # Initialize playback state in session state
     if 'playback_state' not in st.session_state:
-        st.session_state.playback_state = "empty"  
-
+        st.session_state.playback_state = "empty"
+    if 'is_paused' not in st.session_state:
+        st.session_state.is_paused = False
     # Initialize trial types
     if 'trial_types' not in st.session_state:
         st.session_state.trial_types = []
-
     # Initialize current patient session state
     if 'current_patient' not in st.session_state:
         st.session_state.current_patient = None
     
     # Initialize Streamlit tabs
     tab1, tab2, tab3 = st.tabs(["Administer Stimuli", "Patient Information", "Results"])
-
     with tab1:
         handle_stimulus_administration()
-    
     with tab2:
-        handle_patient_information()
-    
+        handle_patient_information()    
     with tab3:
         handle_eeg_results() 
 
@@ -178,72 +171,57 @@ def handle_stimulus_administration():
     # patient ID input
     patient_id = st.text_input("Enter Patient/EEG ID").strip()
 
+    if st.session_state.playback_state == "empty" and patient_id and 'current_patient' in st.session_state:
+        st.session_state.playback_state = "ready"
+
     # Status message   
     status = st.empty()
-    if not patient_id:
+    if st.session_state.playback_state == "empty":
         st.error("Please enter a patient ID")
-    elif st.session_state.playback_state == "empty":
-        st.error("Please select at least one stimulus type.")
-    elif st.session_state.playback_state == "selected":
-        st.error("Please prepare stimulus")
-    elif st.session_state.playback_state == "stimulus_prepared":
-        status.success(f"Stimulus Prepared and the followint trials have been added: \n\n {st.session_state.trial_types}")
+    elif st.session_state.playback_state == "ready":
+        if st.session_state.trial_types:
+            status.success(f"Stimulus Prepared and the following trials have been added: \n\n {st.session_state.trial_types}")
+        else:
+            st.error("Please select at least one stimulus type and prepare stimulus")
     elif st.session_state.playback_state == "play_stimulus":
         status.success("Playing audio...")
 
-    # patient_id validation and reset 
-    if patient_id and patient_id != st.session_state.get('current_patient'):
-        st.session_state.current_patient = patient_id
-
-        # language_stim_selected = False
-        # right_cmd_stim_selected = False
-        # left_cmd_stim_selected = False
-        # beep_stim_selected = False
-        # oddball_stim_selected = False
-        # loved_one_stim_selected = False
-
-        st.session_state.playback_state = "empty"
+    print(f"playback state = {st.session_state.playback_state}")
  
     # create check boxes
-    language_stim_selected = st.checkbox("language_stim", key="language_checkbox")
-    right_cmd_stim_selected = st.checkbox("right_cmd_stim", key="right_cmd_checkbox")
-    left_cmd_stim_selected = st.checkbox("left_cmd_stim", key="rleft_cmd_checkbox")
-    beep_stim_selected = st.checkbox("beep_stim", key="beep_checkbox")
-    oddball_stim_selected = st.checkbox("oddball_stim", key="oddball_checkbox")
+    language_stim_selected = st.checkbox("language_stim", key="language_checkbox", disabled = st.session_state.playback_state != "ready")
+    right_cmd_stim_selected = st.checkbox("right_cmd_stim", key="right_cmd_checkbox", disabled = st.session_state.playback_state != "ready")
+    left_cmd_stim_selected = st.checkbox("left_cmd_stim", key="rleft_cmd_checkbox", disabled = st.session_state.playback_state != "ready")
+    beep_stim_selected = st.checkbox("beep_stim", key="beep_checkbox", disabled = st.session_state.playback_state != "ready")
+    oddball_stim_selected = st.checkbox("oddball_stim", key="oddball_checkbox", disabled = st.session_state.playback_state != "ready")
 
     # create loved one check box and file upload
     left_col, middle_col, right_col = st.columns(3)
     with left_col:
-        loved_one_stim_selected = st.checkbox("loved_one_stim", key="loved_one_checkbox")
+        loved_one_stim_selected = st.checkbox("loved_one_stim", 
+                                              key="loved_one_checkbox", 
+                                              disabled = st.session_state.playback_state != "ready")
     with middle_col:
-        st.session_state.audio_stim.family_member_gender = st.radio("Select Family Member Gender", ('Male', 'Female'), horizontal=True, disabled=not loved_one_stim_selected)
+        st.session_state.audio_stim.loved_one_gender = st.radio("Select Family Member Gender", ('Male', 'Female'), 
+                                                                horizontal=True, disabled = not loved_one_stim_selected)
     with right_col:
-        st.session_state.audio_stim.loved_one_file = st.file_uploader("Upload Loved One's Voice", type=['wav', 'mp3'], disabled=not loved_one_stim_selected)
+        st.session_state.audio_stim.loved_one_file = st.file_uploader("Upload Loved One's Voice", type=['wav', 'mp3'], 
+                                                                      disabled = not loved_one_stim_selected)
+
+
 
     # create prepare button
-    if st.button("Prepare Stimulus", disabled = st.session_state.playback_state == "empty" or st.session_state.playback_state == "play_stimulus"):
+    if st.button("Prepare Stimulus", disabled = not st.session_state.playback_state == "ready"):
         st.session_state.playback_state = "prepare_stimulus"
         st.rerun()
 
     # create play button
-    if st.button("Play Stimulus", disabled = not st.session_state.playback_state == "stimulus_prepared"):
+    if st.button("Play Stimulus", disabled = not st.session_state.playback_state == "ready"):
         st.session_state.playback_state = "play_stimulus"
         st.rerun()
 
-    # create and define stop button
-    if st.button("Stop", type="primary", disabled = not st.session_state.playback_state == "play_stimulus"):
-        st.session_state.playback_state = "stop_stimulus"
-        st.rerun()
-
-    # define checkboxes if empty
-    if st.session_state.playback_state == "empty" and patient_id:
-        if language_stim_selected or right_cmd_stim_selected or left_cmd_stim_selected or beep_stim_selected or oddball_stim_selected or loved_one_stim_selected:
-            st.session_state.playback_state = "selected"
-            st.rerun()
-
     # define prepare button
     if st.session_state.playback_state == "prepare_stimulus":
-
         num_of_each_trial = {
             "lang": 72 if language_stim_selected else 0,
             "rcmd": 3 if right_cmd_stim_selected else 0,
@@ -252,10 +230,9 @@ def handle_stimulus_administration():
             "odd": 4 if oddball_stim_selected else 0,
             "loved": 50 if loved_one_stim_selected else 0
         }
-
         try:
             st.session_state.trial_types = st.session_state.audio_stim.generate_trials(num_of_each_trial)
-            st.session_state.playback_state = "stimulus_prepared"
+            st.session_state.playback_state = "ready"
             st.rerun()
         except Exception as e:
             st.error(f"Error preparing stimulus: {str(e)}")
@@ -263,16 +240,13 @@ def handle_stimulus_administration():
     # define play button
     if st.session_state.playback_state == "play_stimulus":
 
+        st.session_state.config.current_date = time.strftime("%Y-%m-%d")
+        progress_bar = st.progress(0, text="0%")
+        administered_stimuli = []
+
         try:
-            st.session_state.config.current_date = time.strftime("%Y-%m-%d")
-
-            progress_bar = st.progress(0, text="0%")
-            administered_stimuli = []
-
             for i, trial in enumerate(st.session_state.trial_types):
-
                 start_time, end_time, sentences = st.session_state.audio_stim.play_stimuli(trial)
-
                 administered_stimuli.append({
                     'patient_id': patient_id,
                     'date': st.session_state.config.current_date,
@@ -281,31 +255,21 @@ def handle_stimulus_administration():
                     'start_time': start_time,
                     'end_time': end_time,
                     'duration': end_time - start_time
-                })
-                
+                })               
                 percent = int((i+1)/len(st.session_state.trial_types)*100)
                 progress_bar.progress(percent, text=f"{percent}%")
-                
-
-            # Save results
-            if administered_stimuli:
-                save_results(patient_id, administered_stimuli)
-                st.success(f"Stimuli administered to {patient_id} on {st.session_state.config.current_date}")
-        
-            st.session_state.playback_state = "empty"
-            progress_bar.empty()
-            st.rerun()
 
         except Exception as e:
-            st.session_state.playback_state = "stimulus_prepared"
-            st.error(f"Error during playback: {str(e)}")
+            st.session_state.playback_state = "ready"
+            print(f"Error during playback: {str(e)}")
             st.rerun()
 
-    # define stop button
-    if st.session_state.playback_state == "stop_stimulus":
-        st.warning("Stopping after current stimulus...")
-        time.sleep(30) # time length of longest stimulus 
-        st.session_state.playback_state = "empty"
+        # Save results
+        if administered_stimuli:
+            save_results(patient_id, administered_stimuli)
+            st.success(f"Stimuli administered to {patient_id} on {st.session_state.config.current_date}")
+        st.session_state.playback_state = "ready"
+        progress_bar.empty()
         st.rerun()
 
 
