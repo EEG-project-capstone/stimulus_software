@@ -1,0 +1,84 @@
+import os
+import mne
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from mne.time_frequency import tfr_multitaper
+
+def extract_and_compare_eeg_segments(
+    edf_path, csv_path, patient_id, date, 
+    output_dir='data/results/lang_tracking', 
+    tmin=0, tmax=2.0, 
+    freqs=[4, 8, 12, 20], n_cycles=4):
+    """
+    Extracts EEG segments for 'loved' and 'lang' trials and compares them using ITPC or spectral power.
+    """
+    # Load EDF file
+    raw = mne.io.read_raw_edf(edf_path, preload=True)
+    raw.filter(1., 30., fir_design='firwin')
+
+    # Load patient trial CSV
+    df = pd.read_csv(csv_path)
+    df.columns = df.columns.str.strip() # Remove leading/trailing whitespace
+    print("Columns:", df.columns.tolist())
+    df = df[(df['patient_id'] == patient_id) & (df['date'] == date)]
+    if df.empty:
+        print(f"No matching trials found for patient {patient_id} on {date}")
+        return
+
+    # Create annotations
+    annotations = []
+    for row in df.itertuples():
+        if row.trial_type in ['loved', 'lang']:
+            annotations.append(mne.Annotations(
+                onset=row.start_time, duration=row.duration, description=row.trial_type))
+
+    raw.set_annotations(sum(annotations[1:], annotations[0]))
+    events, event_id = mne.events_from_annotations(raw)
+
+    # Epoch the data
+    epochs = mne.Epochs(raw, events, event_id=event_id, tmin=tmin, tmax=tmax, 
+                        baseline=(0, 0.2), preload=True)
+
+    # Separate loved and lang epochs
+    epochs_loved = epochs['loved']
+    epochs_lang = epochs['lang']
+
+    # Run time-frequency analysis
+    power_loved = tfr_multitaper(epochs_loved, freqs=freqs, n_cycles=n_cycles, return_itc=False)
+    power_lang = tfr_multitaper(epochs_lang, freqs=freqs, n_cycles=n_cycles, return_itc=False)
+
+    # Compare average power for visual summary
+    loved_avg = power_loved.data.mean(axis=0).mean(axis=1)
+    lang_avg = power_lang.data.mean(axis=0).mean(axis=1)
+
+    # Plot and save
+    os.makedirs(os.path.join(output_dir, patient_id), exist_ok=True)
+    fig, ax = plt.subplots()
+    ax.plot(freqs, loved_avg, label='Loved', linewidth=2)
+    ax.plot(freqs, lang_avg, label='Lang', linewidth=2)
+    ax.set_title(f"Average Spectral Power: {patient_id}")
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Power")
+    ax.legend()
+    plot_path = os.path.join(output_dir, patient_id, "avg_spectral_comparison.png")
+    fig.savefig(plot_path)
+    plt.close(fig)
+
+    print(f"Saved spectral comparison plot at {plot_path}")
+
+
+# Example usage:
+# extract_and_compare_eeg_segments(
+#     edf_path='data/edfs/CON001a_20250430.edf',
+#     csv_path='data/patient_df.csv',
+#     patient_id='CON001a',
+#     date='2025-04-30'
+# )
+
+extract_and_compare_eeg_segments(
+    edf_path = 'C:/Python/brain-waves-2.0/data/edfs/CON006_20250512.edf',
+    csv_path = 'C:/Users/kushv/Downloads/CON006_patient_df.csv',
+    patient_id = 'CON006',
+    date = '5/12/2025'
+)
