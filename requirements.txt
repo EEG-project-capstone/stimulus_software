@@ -1,9 +1,4 @@
-gtts
-psychtoolbox
-playsound
 pandas
-streamlit
 pyyaml
 pydub
-pyttsx3
 sounddevice

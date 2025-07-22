@@ -2,34 +2,13 @@ import time
 import os
 import random
 import yaml
-import streamlit as st
 import numpy as np
 from pydub import AudioSegment
 from pydub.generators import Sine
 from pydub.playback import play
-
 import sounddevice as sd
 
 class AuditoryStimulator:
-
-    config: any
-
-    lang_audio: list[any]
-    lang_trials_ids: list[any]
-
-    right_keep_audio: any
-    right_stop_audio: any
-    left_keep_audio: any
-    left_stop_audio: any
-
-    beep_audio: any 
-
-    loved_one_file: any
-    loved_one_gender: any
-    loved_one_audio: np.array
-    control_audio: np.array
-
-    sample_rate: any
      
     def __init__(self, config_file_path='config.yml'):
         """Initialize the auditory stimulator with configuration"""
@@ -49,8 +28,8 @@ class AuditoryStimulator:
 
         self.beep_audio = None
 
-        self.loved_one_file = None
-        self.loved_one_gender = None
+        self.loved_one_file = ""
+        self.loved_one_gender = ""
         self.loved_one_audio = None
         self.control_audio = None
 
@@ -91,7 +70,7 @@ class AuditoryStimulator:
                         trial_names.append('oddball')
                 elif key == "loved":
                     # path to loved ones voice recording
-                    temp_path = os.path.join(self.config['loved_one_path'], self.loved_one_file.name)
+                    temp_path = os.path.join(self.config['loved_one_path'], self.loved_one_file)
                     # add loved ones voice recording
                     self.loved_one_voice_audio = self._load_audio(temp_path)
                     # add a gendered control voice recording
@@ -157,20 +136,23 @@ class AuditoryStimulator:
             start_time, end_time = self._administer_control()
         elif trial == "loved_one": 
             start_time, end_time = self._administer_loved_one()
+        else:
+            # Default values if trial type is unknown
+            start_time = time.time()
+            end_time = start_time
+            sentences = []
 
         print(f"Successfully administered {trial}")
 
-        time.sleep(random.uniform(1.2, 2.2)) # ????????
+        time.sleep(random.uniform(1.2, 2.2)) 
 
         return start_time, end_time, sentences
 
     def _generate_language_stimuli(self, num_of_lang_trials):
-        gen_bar = st.progress(0, text="0")
         for i in range(num_of_lang_trials):
             self._random_lang_stim()
             percent = int(i/num_of_lang_trials*100)
-            gen_bar.progress(percent, text=f"{percent}%")
-        gen_bar.progress(100, text=f"Done")
+            print(f"Generating language stimuli: {percent}% complete")
 
     def _random_lang_stim(self, num_sentence=12):
 

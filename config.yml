@@ -1,22 +1,20 @@
 # INPUT CHANGES HERE
 
 os: 'os' # 'windows' or 'linux' or 'os'
+
 # Define your output path:
-patient_df_path: 'data/patient_df.csv'  # Adjust the path if your file is in a different location
-patient_note_path: 'data/patient_notes.csv' # Adjust the path if your file is in a different location
-patient_history_path: 'data/patient_history.csv' # Adjust the path if your file is in a different location
-patient_output_dir: 'data/patients/' # Add folder to save output csv fiels from 'Prepare Stimulus' process
-patient_label_path: 'data/patient_records.csv' # Adjust the path if your file is in a different location
-edf_dir: 'data/edfs/' # Add folder to save edf files
-result_dir: 'data/results/' # Add folder to save results
-cmd_result_dir: 'data/results/cmd/' # Add folder to save results
-lang_tracking_dir: 'data/results/lang_tracking/' # Add folder to save results 
-#------------------------------
+patient_df_path: 'patient_data/patient_df.csv'
+patient_note_path: 'patient_data/patient_notes.csv'
+patient_history_path: 'patient_data/patient_history.csv'
+patient_output_dir: 'patient_data/patients/'
+patient_label_path: 'patient_data/patient_records.csv'
+edf_dir: 'patient_data/edfs/'
+result_dir: 'patient_data/results/'
+cmd_result_dir: 'patient_data/results/cmd/'
+lang_tracking_dir: 'patient_data/results/lang_tracking/' 
 
-# (Do not change)
-tts_package: 'pyttsx3'
+# Define your input path
 stimuli_dir: 'audio_data/lang_trials/'
-
 sentences_path: 'audio_data/sentences/'
 right_keep_path: 'audio_data/static/right_keep.mp3'
 right_stop_path: 'audio_data/static/right_stop.mp3'

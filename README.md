@@ -4,10 +4,7 @@
 ## Introduction
 The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
 
-In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The Streamlit GUI (`gui_stimulus.py`) now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights, with no separate pipelines required.
-
-Check out a video of our application here:
-<video src="https://github.com/user-attachments/assets/fcf604e9-d5cf-4985-b3c2-1fb92a1c226c" width="300" />
+In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The TKinter GUI now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights, with no separate pipelines required.
 
 ## Features
 ### Graphical User Interface (GUI):
@@ -41,66 +38,26 @@ Compatible with *Windows/Linux/MacOS* operating systems.
 ## Installation for Audio Stimilus Administration
 Please follow the steps below to download the depnedencies and files needed to deliver a randomized auditory stimulus to a patient. Read more about our auditory stimulus [here](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/EEG-TBI_AuditoryStimulusDetails.pdf).
 
-### *Prerequisites*
+### Prerequisites
 This software requires the installation of:
 * [Anaconda](https://docs.anaconda.com/anaconda/install/)/[Miniconda](https://docs.anaconda.com/miniconda/)
-* Python
-### *Setup Environment*
-#### 1. Create CONDA env
+* Python 3.8+
+
+### Setup CONDA Environment
 ```bash
-conda create -n "eeg"
+conda create -n eeg python=3.8
 conda activate eeg
+conda install tk
 conda install pip
 pip install -r requirements.txt
 ```
 
-#### 2. Install mpv package (*for Windows*)
-```bash
-pip install mpv
-```
-Go to this [repo](https://github.com/jaseg/python-mpv), download `mpv.py` to /Script folder.    
-To check where Script folder is, use command `conda env list`.    
-Go to this [link](https://sourceforge.net/projects/mpv-player-windows/) to download dev package.
-Choose the one with x84_64 if your computer is 64-bit. If 32 bit, choose the one with 32 bit.
-After downloading, extract libmpv-2.dll (or a combination of mpv.exe + mpv.com + mpv-1.dll) to /Script folder. Refer to this [issue](https://github.com/jaseg/python-mpv/issues/60#issuecomment-352719773).    
-Then run
-```bash
-pip install python-mpv
-```
-#### 3. Install ffmpeg (*for Windows or Mac if an error occurs*)
-##### For Windows
-Install [ffmpeg](https://github.com/BtbN/FFmpeg-Builds/releases) to current directory.    
-Extract and rename to `ffmpeg`.    
-Make sure to have these 2 files:    
-`ffmpeg\bin\ffmpeg.exe`    
-`ffmpeg\bin\ffprobe.exe`
-
-##### For Mac
-`brew install ffmpeg`.
-
-#### 4. Install audio folder
-Download the audio folder from this [link](https://drive.google.com/drive/folders/1VktnddvsY1kFihuCpRO4GKf7Z4wXVKIa) 
-to the `data` folder. Make sure the folder name matches the `sentences_path` field in `config.yml`.    
-If the `data/static/` is not already available, run `python auditory_stim/static_sound.py`
-to create the static audio files. 
-
-#### 5. Set File Upload Limit
-```bash
-export STREAMLIT_SERVER_MAX_UPLOAD_SIZE=400
-```
-
-## Usage
-### Steps to Run Stimuli App
-For a detailed step-by-step guide to setting up the repository to run analysis, please follow this [guide](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/Brain%20Waves%20Repository%20Step-by-Step%20Guide.pdf).
-
-For a detailed step-by-step guide to using the Brain Wave Application (on Streamlit) to run analysis, please follow this [guide](https://github.com/EEG-project-capstone/brain-waves-2.0/blob/main/doc/Brain%20Waves%20Application%20Step-by-Step%20Guide.pdf).
-
 ### Data
 
-This directory contains various datasets and analysis results related to patient studies. The files in this directory are ignored by Git and are structured as follows:
+This directory contains various datasets and analysis results related to patient studies and are structured as follows:
 
 ```
-data/
+patient_data/
 ├── edfs/
 │   ├── [PatientID]_[Date].edf
 ├── images/
@@ -185,6 +142,7 @@ Stores language tracking analysis data per patient.
 - Khanh Ha (Summer 2024)
 - Joobee Jung (Fall 2024)
 - Trisha Prasant (Fall 2024)
+- Joe Moore (Spring+Summer 2025)
 
 ## License
 - The license under which the project is distributed.
