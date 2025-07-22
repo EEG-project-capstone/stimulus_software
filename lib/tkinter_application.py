@@ -19,7 +19,7 @@ class Config:
             self.file = yaml.safe_load(f)
         self._initialize_data_structures()
         self._upload_data()
-        self._ouput_data()
+        self._output_data()
     
     def _initialize_data_structures(self):
         if not os.path.exists(self.file['patient_output_dir']):
@@ -66,7 +66,7 @@ class Config:
         ]
         self.gose_options = list(range(len(self.gose_scale)))
 
-    def _ouput_data(self):
+    def _output_data(self):
         if not os.path.exists(self.file['result_dir']):
             os.makedirs(self.file['result_dir'])
         if not os.path.exists(self.file['cmd_result_dir']):
