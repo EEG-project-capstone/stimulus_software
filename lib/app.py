@@ -135,8 +135,8 @@ class TkApp:
         self.prepare_button.pack(side='left', padx=5)
         self.play_button = ttk.Button(control_frame, text="Play Stimulus", command=self.play_stimulus)
         self.play_button.pack(side='left', padx=5)
-        self.pause_button = ttk.Button(control_frame, text="Pause", command=self.toggle_pause)
-        self.pause_button.pack(side='left', padx=5)
+        self.pause_button = ttk.Button(control_frame, text="Pause", command=self.toggle_pause,  )
+        self.pause_button.pack(side='left', padx=10)
         self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_stimulus)
         self.stop_button.pack(side='left', padx=5)
 
@@ -337,10 +337,13 @@ class TkApp:
     def toggle_pause(self):
         if self.playback_state == "playing":
             self.playback_state = "paused"
+            # self.is_paused = True # Managed by TrialManager
             self.pause_button.config(text="Resume")
+            self.status_label.config(text="Pausing stimulus...", foreground="red")
         elif self.playback_state == "paused":
             self.playback_state = "playing"
             self.pause_button.config(text="Pause")
+            self.status_label.config(text="Resuming stimulus...", foreground="blue")
 
         self.audio_stim.toggle_pause()
         self.update_button_states()
