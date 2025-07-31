@@ -27,8 +27,11 @@ class TkApp:
         self.current_patient = None
         self.language_var = tk.BooleanVar()
         self.right_cmd_var = tk.BooleanVar()
+        self.rcmd_prompt_var = tk.BooleanVar()
         self.left_cmd_var = tk.BooleanVar()
+        self.lcmd_prompt_var = tk.BooleanVar()
         self.oddball_var = tk.BooleanVar()
+        self.oddball_prompt_var = tk.BooleanVar()
         self.loved_one_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
         self.build_main_ui()
@@ -106,10 +109,27 @@ class TkApp:
         stim_frame = ttk.LabelFrame(main_frame, text="Stimulus Selection", padding="10")
         stim_frame.pack(fill='x', pady=5)
         ttk.Checkbutton(stim_frame, text="Language Stimulus", variable=self.language_var).grid(row=0, column=0, sticky='w')
-        ttk.Checkbutton(stim_frame, text="Right Command Stimulus", variable=self.right_cmd_var).grid(row=1, column=0, sticky='w')
-        ttk.Checkbutton(stim_frame, text="Left Command Stimulus", variable=self.left_cmd_var).grid(row=2, column=0, sticky='w')
-        ttk.Checkbutton(stim_frame, text="Oddball Stimulus", variable=self.oddball_var).grid(row=4, column=0, sticky='w')
-
+        # RCMD Section
+        rcmd_frame = ttk.Frame(stim_frame)
+        rcmd_frame.grid(row=1, column=0, columnspan=2, sticky='ew', pady=5)
+        ttk.Checkbutton(rcmd_frame, text="Right Command Stimulus", variable=self.right_cmd_var, 
+                        command=self.toggle_prompts).pack(side='left')
+        self.rcmd_prompt = ttk.Checkbutton(rcmd_frame, text="Include Prompt", variable=self.rcmd_prompt_var, state='disabled')
+        self.rcmd_prompt.pack(side='right')
+        # LCMD Section
+        lcmd_frame = ttk.Frame(stim_frame)
+        lcmd_frame.grid(row=2, column=0, columnspan=2, sticky='ew', pady=5)
+        ttk.Checkbutton(lcmd_frame, text="Left Command Stimulus", variable=self.left_cmd_var, 
+                        command=self.toggle_prompts).pack(side='left')
+        self.lcmd_prompt = ttk.Checkbutton(lcmd_frame, text="Include Prompt", variable=self.lcmd_prompt_var, state='disabled')
+        self.lcmd_prompt.pack(side='right')
+        # Oddball Section
+        oddball_frame = ttk.Frame(stim_frame)
+        oddball_frame.grid(row=4, column=0, columnspan=2, sticky='ew', pady=5)
+        ttk.Checkbutton(oddball_frame, text="Oddball Stimulus", variable=self.oddball_var, 
+                        command=self.toggle_prompts).pack(side='left')
+        self.oddball_prompt = ttk.Checkbutton(oddball_frame, text="Include Prompt", variable=self.oddball_prompt_var, state='disabled')
+        self.oddball_prompt.pack(side='right')
         # Loved one section
         loved_frame = ttk.Frame(stim_frame)
         loved_frame.grid(row=5, column=0, columnspan=3, sticky='ew', pady=5)
@@ -296,6 +316,11 @@ class TkApp:
         state = 'normal' if self.loved_one_var.get() else 'disabled'
         for widget in [self.male_radio, self.female_radio, self.file_button]:
             widget.config(state=state)
+
+    def toggle_prompts(self):
+        self.rcmd_prompt.config(state='disabled') if not self.right_cmd_var.get() else self.rcmd_prompt.config(state='normal')
+        self.lcmd_prompt.config(state='disabled') if not self.left_cmd_var.get() else self.lcmd_prompt.config(state='normal')
+        self.oddball_prompt.config(state='disabled') if not self.oddball_var.get() else self.oddball_prompt.config(state='normal')
 
     def upload_voice_file(self):
         file_path = filedialog.askopenfilename(
