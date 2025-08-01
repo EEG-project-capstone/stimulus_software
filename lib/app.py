@@ -152,11 +152,11 @@ class TkApp:
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill='x', pady=10)
         self.prepare_button = ttk.Button(control_frame, text="Prepare Stimulus", command=self.prepare_stimulus)
-        self.prepare_button.pack(side='left', padx=5)
+        self.prepare_button.pack(side='left', padx=5, ipady=10)
         self.play_button = ttk.Button(control_frame, text="Play Stimulus", command=self.play_stimulus)
-        self.play_button.pack(side='left', padx=5)
-        self.pause_button = ttk.Button(control_frame, text="Pause", command=self.toggle_pause,  )
-        self.pause_button.pack(side='left', padx=10)
+        self.play_button.pack(side='left', padx=5, ipady=10)
+        self.pause_button = ttk.Button(control_frame, text="Pause", command=self.toggle_pause)
+        self.pause_button.pack(side='right', padx=10, ipadx=30, ipady=10)
         self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_stimulus)
         self.stop_button.pack(side='left', padx=5)
 
@@ -318,9 +318,24 @@ class TkApp:
             widget.config(state=state)
 
     def toggle_prompts(self):
-        self.rcmd_prompt.config(state='disabled') if not self.right_cmd_var.get() else self.rcmd_prompt.config(state='normal')
-        self.lcmd_prompt.config(state='disabled') if not self.left_cmd_var.get() else self.lcmd_prompt.config(state='normal')
-        self.oddball_prompt.config(state='disabled') if not self.oddball_var.get() else self.oddball_prompt.config(state='normal')
+        # Right Command Prompt
+        if not self.right_cmd_var.get():
+            self.rcmd_prompt.config(state='disabled')
+            self.rcmd_prompt_var.set(False)
+        else:
+            self.rcmd_prompt.config(state='normal')
+        # Left Command Prompt
+        if not self.left_cmd_var.get():
+            self.lcmd_prompt.config(state='disabled')
+            self.lcmd_prompt_var.set(False)
+        else:
+            self.lcmd_prompt.config(state='normal')
+        # Oddball Prompt
+        if not self.oddball_var.get():
+            self.oddball_prompt.config(state='disabled')
+            self.oddball_prompt_var.set(False)
+        else:
+            self.oddball_prompt.config(state='normal')
 
     def upload_voice_file(self):
         file_path = filedialog.askopenfilename(
@@ -406,8 +421,11 @@ class TkApp:
             num_of_each_trial = {
                 "lang": 72 if self.language_var.get() else 0,
                 "rcmd": 3 if self.right_cmd_var.get() else 0,
+                "rcmd+p": 3 if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
                 "lcmd": 3 if self.left_cmd_var.get() else 0,
+                "lcmd+p": 3 if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
                 "odd": 4 if self.oddball_var.get() else 0,
+                "odd+p": 4 if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
                 "loved": 50 if self.loved_one_var.get() else 0
             }
         
