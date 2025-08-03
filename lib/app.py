@@ -1,28 +1,29 @@
-# gui/app.py
-import tkinter as tk
-from tkinter import messagebox, ttk, filedialog
+# lib/app.py
+
 import datetime
 import os
-import pandas as pd
 import time
-import sys
+import pandas as pd
+import tkinter as tk
+import sounddevice as sd
+from tkinter import messagebox, ttk, filedialog
 from lib.config import Config
+from lib.trials import Trials
 from lib.auditory_stimulator import AuditoryStimulator
-from lib.trial_manager import TrialManager
 from lib.stimulus_package_notes import add_notes, add_history
 
 class TkApp:
     def __init__(self, root):
         self.root = root
         self.root.title("EEG Stimulus Package")
-        self.root.geometry("800x600")
+        self.root.geometry("775x830")
+        
+        # create class instances 
         self.config = Config()
-        self.audio_stim = AuditoryStimulator()
-        # Instantiate TrialManager
-        self.trial_manager = TrialManager(self.audio_stim, self) # Pass self as callback
+        self.trials = Trials(self)
+        self.audio_stim = AuditoryStimulator(self)
+
         self.playback_state = "empty"
-        # self.is_paused = False # Moved to TrialManager
-        self.trial_types = []
         self.current_patient = None
         self.language_var = tk.BooleanVar()
         self.right_cmd_var = tk.BooleanVar()
@@ -30,48 +31,31 @@ class TkApp:
         self.oddball_var = tk.BooleanVar()
         self.loved_one_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
-        # Variables for non-blocking operations
-        # self.current_trial_index = 0 # Moved to TrialManager
-        # self.administered_stimuli = [] # Moved to TrialManager
-        # self.preparation_progress = 0 # Kept locally for preparation
-        # self.preparation_total = 0 # Kept locally for preparation
         self.build_main_ui()
 
-    # --- Callback methods for TrialManager ---
     def get_playback_state(self):
         return self.playback_state
-
+    
     def get_patient_id(self):
         return self.patient_id_entry.get().strip()
 
     def root_after(self, ms, func):
         self.root.after(ms, func)
 
-    def update_progress(self, progress):
-        self.progress_var.set(progress)
-
     def playback_complete(self):
         """Handle completion of stimulus playback"""
         patient_id = self.patient_id_entry.get().strip()
         self.playback_state = "ready"
-        # self.is_paused = False # Managed by TrialManager
-        self.trial_manager.is_paused = False # Ensure sync
+        self.audio_stim.is_paused = False # Ensure sync
         self.pause_button.config(text="Pause")
         self.update_button_states()
-        self.progress_var.set(100)
-        # Save results using data from TrialManager
-        self.save_results(patient_id, self.trial_manager.administered_stimuli)
         self.status_label.config(text=f"Stimulus completed for {patient_id}", foreground="green")
         messagebox.showinfo("Success", f"Stimulus administered successfully to {patient_id}")
-        # Reset progress
-        self.root.after(2000, lambda: self.progress_var.set(0))
 
     def playback_error(self, error_msg):
         """Handle playback errors"""
         self.playback_state = "ready"
-        # self.is_paused = False # Managed by TrialManager
-        self.trial_manager.is_paused = False # Ensure sync
-        # Add more error handling UI updates if needed
+        self.audio_stim.is_paused = False # Ensure sync
         self.update_button_states()
         messagebox.showerror("Playback Error", f"Error during playback: {error_msg}")
 
@@ -102,14 +86,13 @@ class TkApp:
         self.build_results_tab()
 
     def build_stimulus_tab(self):
-        canvas = tk.Canvas(self.tab1)
-        scrollbar = ttk.Scrollbar(self.tab1, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        """Build the stimulus tab with only the trial list having a scrollbar."""
+        # Main frame (no canvas or outer scrollbar)
+        main_frame = ttk.Frame(self.tab1)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
         # Patient ID Section
-        patient_frame = ttk.LabelFrame(scrollable_frame, text="Patient Information", padding="10")
+        patient_frame = ttk.LabelFrame(main_frame, text="Patient Information", padding="10")
         patient_frame.pack(fill='x', pady=5)
         ttk.Label(patient_frame, text="Patient/EEG ID:").grid(row=0, column=0, sticky='w', padx=5)
         self.patient_id_entry = ttk.Entry(patient_frame, width=30)
@@ -117,18 +100,21 @@ class TkApp:
         self.patient_id_entry.bind('<KeyRelease>', self.on_patient_id_change)
         self.status_label = ttk.Label(patient_frame, text="Please enter a patient ID", foreground="red")
         self.status_label.grid(row=1, column=0, columnspan=2, pady=5)
+        patient_frame.grid_columnconfigure(1, weight=1)
+
         # Stimulus Selection
-        stim_frame = ttk.LabelFrame(scrollable_frame, text="Stimulus Selection", padding="10")
+        stim_frame = ttk.LabelFrame(main_frame, text="Stimulus Selection", padding="10")
         stim_frame.pack(fill='x', pady=5)
         ttk.Checkbutton(stim_frame, text="Language Stimulus", variable=self.language_var).grid(row=0, column=0, sticky='w')
         ttk.Checkbutton(stim_frame, text="Right Command Stimulus", variable=self.right_cmd_var).grid(row=1, column=0, sticky='w')
         ttk.Checkbutton(stim_frame, text="Left Command Stimulus", variable=self.left_cmd_var).grid(row=2, column=0, sticky='w')
         ttk.Checkbutton(stim_frame, text="Oddball Stimulus", variable=self.oddball_var).grid(row=4, column=0, sticky='w')
+
         # Loved one section
         loved_frame = ttk.Frame(stim_frame)
         loved_frame.grid(row=5, column=0, columnspan=3, sticky='ew', pady=5)
         ttk.Checkbutton(loved_frame, text="Loved One Stimulus", variable=self.loved_one_var, 
-                       command=self.toggle_loved_one_options).pack(side='left')
+                    command=self.toggle_loved_one_options).pack(side='left')
         gender_frame = ttk.Frame(loved_frame)
         gender_frame.pack(side='left', padx=20)
         ttk.Label(gender_frame, text="Gender:").pack(side='left')
@@ -141,8 +127,9 @@ class TkApp:
         self.file_label = ttk.Label(loved_frame, text="No file selected")
         self.file_label.pack(side='left')
         self.toggle_loved_one_options()
+
         # Control buttons
-        control_frame = ttk.Frame(scrollable_frame)
+        control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill='x', pady=10)
         self.prepare_button = ttk.Button(control_frame, text="Prepare Stimulus", command=self.prepare_stimulus)
         self.prepare_button.pack(side='left', padx=5)
@@ -152,12 +139,29 @@ class TkApp:
         self.pause_button.pack(side='left', padx=5)
         self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_stimulus)
         self.stop_button.pack(side='left', padx=5)
-        # Progress bar
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(scrollable_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill='x', pady=5)
+
+        # Trial List Frame (with scrollbar)
+        trial_list_frame = ttk.LabelFrame(main_frame, text="Trial Sequence")
+        trial_list_frame.pack(fill='x', pady=5)
+
+        # Treeview with scrollbar
+        self.trial_tree = ttk.Treeview(trial_list_frame, columns=('Type', 'Status'), show='headings', height=8)
+        self.trial_tree.heading('Type', text='Trial Type')
+        self.trial_tree.heading('Status', text='Status')
+        self.trial_tree.column('Type', width=150)
+        self.trial_tree.column('Status', width=100)
+        self.trial_tree.tag_configure('pending', foreground='gray')
+        self.trial_tree.tag_configure('inprogress', foreground='blue')
+        self.trial_tree.tag_configure('completed', foreground='green')
+
+        # Scrollbar for trial list only
+        tree_scroll = ttk.Scrollbar(trial_list_frame, orient="vertical", command=self.trial_tree.yview)
+        tree_scroll.pack(side='right', fill='y')
+        self.trial_tree.configure(yscrollcommand=tree_scroll.set)
+        self.trial_tree.pack(side='left', fill='x', expand=True, padx=(5, 0), pady=5)
+
         # Notes section
-        notes_frame = ttk.LabelFrame(scrollable_frame, text="Notes", padding="10")
+        notes_frame = ttk.LabelFrame(main_frame, text="Notes", padding="10")
         notes_frame.pack(fill='both', expand=True, pady=5)
         ttk.Label(notes_frame, text="Add Note:").grid(row=0, column=0, sticky='w')
         self.note_entry = ttk.Entry(notes_frame, width=50)
@@ -167,8 +171,8 @@ class TkApp:
         self.notes_text = tk.Text(notes_frame, height=5, width=60)
         self.notes_text.grid(row=2, column=0, columnspan=3, sticky='ew', pady=5)
         notes_frame.grid_columnconfigure(1, weight=1)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+
+        # Update button states
         self.update_button_states()
 
     def build_patient_info_tab(self):
@@ -299,8 +303,8 @@ class TkApp:
             filetypes=[("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
         )
         if file_path:
-            self.audio_stim.loved_one_file = file_path
-            self.audio_stim.loved_one_gender = self.gender_var.get()
+            self.audio_stim.trials.loved_one_file = file_path
+            self.audio_stim.trials.loved_one_gender = self.gender_var.get()
             self.file_label.config(text=os.path.basename(file_path))
 
     def update_button_states(self):
@@ -311,7 +315,7 @@ class TkApp:
             self.stop_button.config(state='disabled')
         elif self.playback_state == "ready":
             self.prepare_button.config(state='normal')
-            self.play_button.config(state='normal' if self.trial_types else 'disabled')
+            self.play_button.config(state='normal')
             self.pause_button.config(state='disabled')
             self.stop_button.config(state='disabled')
         elif self.playback_state == "preparing":
@@ -333,31 +337,25 @@ class TkApp:
     def toggle_pause(self):
         if self.playback_state == "playing":
             self.playback_state = "paused"
-            # self.is_paused = True # Managed by TrialManager
+            self.pause_button.config(text="Resume")
         elif self.playback_state == "paused":
             self.playback_state = "playing"
-            # self.is_paused = False # Managed by TrialManager
             self.pause_button.config(text="Pause")
-        # Delegate pause logic to TrialManager
-        self.trial_manager.toggle_pause()
+
+        self.audio_stim.toggle_pause()
         self.update_button_states()
+        self.update_trial_list_status()
 
     def stop_stimulus(self):
         """Stop the current stimulus playback"""
         if self.playback_state in ["playing", "paused"]:
             self.playback_state = "ready"
-            # self.is_paused = False # Managed by TrialManager
             self.pause_button.config(text="Pause")
-            self.progress_var.set(0)
-            # self.current_trial_index = 0 # Managed by TrialManager
-            # self.administered_stimuli = [] # Managed by TrialManager
-            # Stop any playing audio (TrialManager also does this)
-            import sounddevice as sd
             sd.stop()
-            # Delegate stop logic to TrialManager
-            self.trial_manager.stop_stimulus()
+            self.audio_stim.stop_stimulus()
             self.status_label.config(text="Stimulus stopped", foreground="orange")
             self.update_button_states()
+            self.update_trial_list_status()
 
     def prepare_stimulus(self):
         if self.playback_state != "ready":
@@ -372,11 +370,10 @@ class TkApp:
         self.playback_state = "preparing"
         self.update_button_states()
         self.status_label.config(text="Preparing stimulus...", foreground="blue")
-        # Start preparation process
         self.root.after(10, self.start_preparation)
 
     def start_preparation(self):
-        """Start the non-blocking preparation process"""
+        """Start the preparation process"""
         try:
             num_of_each_trial = {
                 "lang": 72 if self.language_var.get() else 0,
@@ -385,61 +382,42 @@ class TkApp:
                 "odd": 4 if self.oddball_var.get() else 0,
                 "loved": 50 if self.loved_one_var.get() else 0
             }
+        
+            # set gender for loved one
             if self.loved_one_var.get():
-                self.audio_stim.loved_one_gender = self.gender_var.get()
-            # Calculate total preparation steps for progress
-            self.preparation_total = num_of_each_trial["lang"]
-            self.preparation_progress = 0
-            # Start the preparation - this will be done synchronously but with progress updates
-            self.trial_types = self.audio_stim.generate_trials(num_of_each_trial)
-            # Preparation complete
-            self.preparation_complete()
+                self.audio_stim.trials.loved_one_gender = self.gender_var.get()         
+            
+            self.audio_stim.trials.generate_trials(num_of_each_trial)
+
+            # Reset playback state
+            self.playback_state = "ready"
+
+            # update GUI
+            self.update_button_states()
+            self.status_label.config(text=f"Stimulus prepared! {len(self.trials.trial_dictionary)} trials ready.", foreground="green")
+            self.populate_trial_list()
+            messagebox.showinfo("Success", f"Stimulus prepared successfully!\n{len(self.trials.trial_dictionary)} trials ready.")
+        
         except Exception as e:
-            self.preparation_error(str(e))
-
-    def preparation_complete(self):
-        self.playback_state = "ready"
-        self.update_button_states()
-        self.progress_var.set(0)  # Reset progress bar
-        self.status_label.config(text=f"Stimulus prepared! {len(self.trial_types)} trials ready.", foreground="green")
-        messagebox.showinfo("Success", f"Stimulus prepared successfully!\n{len(self.trial_types)} trials ready.")
-
-    def preparation_error(self, error_msg):
-        self.playback_state = "ready"
-        self.update_button_states()
-        self.progress_var.set(0)
-        self.status_label.config(text="Error preparing stimulus", foreground="red")
-        messagebox.showerror("Error", f"Error preparing stimulus: {error_msg}")
+            self.playback_state = "ready"
+            self.update_button_states()
+            self.status_label.config(text="Error preparing stimulus", foreground="red")
+            messagebox.showerror("Error", f"Error preparing stimulus: {e}")
 
     def play_stimulus(self):
-        if self.playback_state != "ready" or not self.trial_types:
+        if self.playback_state != "ready" or not self.trials.trial_dictionary:
             return
         patient_id = self.patient_id_entry.get().strip()
         if not patient_id:
             messagebox.showwarning("No Patient ID", "Please enter a patient ID.")
             return
-        # Initialize playback variables via TrialManager
         self.playback_state = "playing"
-        # self.current_trial_index = 0 # Managed by TrialManager
-        # self.administered_stimuli = [] # Managed by TrialManager
-        # self.is_paused = False # Managed by TrialManager
-        self.trial_manager.reset_trial_state() # Reset TrialManager state
         self.config.current_date = time.strftime("%Y-%m-%d")
         self.update_button_states()
         self.status_label.config(text="Playing stimulus...", foreground="blue")
-        # Start playback via TrialManager
-        self.trial_manager.play_trial_sequence(self.trial_types)
-
-    def save_results(self, patient_id, administered_stimuli):
-        """Save administered stimuli results to a CSV file."""
-        # import pandas as pd # Assume imported globally or handled
-        # import os # Assume imported globally or handled
-        results_dir = self.config.file.get('result_dir', '.')
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-        results_path = os.path.join(results_dir, f"{patient_id}_{self.config.current_date}_stimulus_results.csv")
-        df = pd.DataFrame(administered_stimuli)
-        df.to_csv(results_path, index=False)
+        self.update_trial_list_status()
+        # Start playback via auditory stimulator 
+        self.audio_stim.play_trial_sequence()
 
     def add_note(self):
         """Add a note to the notes section."""
@@ -501,8 +479,6 @@ class TkApp:
             return
         # Save patient info to CSV
         label_path = self.config.file.get('patient_label_path', 'patient_labels.csv')
-        # import pandas as pd # Assume imported globally or handled
-        # import os # Assume imported globally or handled
         if os.path.exists(label_path):
             df = pd.read_csv(label_path)
         else:
@@ -516,3 +492,53 @@ class TkApp:
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         df.to_csv(label_path, index=False)
         messagebox.showinfo("Success", "Patient information submitted successfully.")
+
+    def populate_trial_list(self):
+        """Populate the Treeview with all trials from trial_dictionary."""
+        # Clear existing items
+        for item in self.trial_tree.get_children():
+            self.trial_tree.delete(item)
+
+        # Map internal type to display name
+        type_display_names = {
+            "language": "Language",
+            "right_command": "Right Command",
+            "left_command": "Left Command",
+            "oddball": "Oddball",
+            "loved_one_voice": "Loved One Voice"
+        }
+
+        # Insert each trial
+        for idx, trial in enumerate(self.trials.trial_dictionary):
+            trial_type = trial['type']
+            display_type = type_display_names.get(trial_type, trial_type.replace('_', ' ').title())
+            status = trial['status'].title()  # "pending" → "Pending"
+            self.trial_tree.insert('', 'end', iid=str(idx), values=(display_type, status))
+
+    def update_trial_list_status(self):
+        """Update the status column in the trial list from trial_dictionary."""
+        type_display_names = {
+            "language": "Language",
+            "right_command": "Right Command",
+            "left_command": "Left Command",
+            "oddball": "Oddball",
+            "loved_one_voice": "Loved One Voice"
+        }
+
+        for idx, trial in enumerate(self.trials.trial_dictionary):
+            if str(idx) in self.trial_tree.get_children():
+                display_type = type_display_names.get(trial['type'], trial['type'].replace('_', ' ').title())
+                status = trial['status'].title()  # "pending" → "Pending"
+                self.trial_tree.item(str(idx), values=(display_type, status))
+
+                # Determine which tag to use
+                status_key = trial['status'].lower()
+                if 'complete' in status_key:
+                    tag = 'completed'
+                elif 'in progress' in status_key:
+                    tag = 'inprogress'
+                else:
+                    tag = 'pending'
+
+                # Update row with values AND tag
+                self.trial_tree.item(str(idx), values=(display_type, status), tags=(tag,))
