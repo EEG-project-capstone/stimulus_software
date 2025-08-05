@@ -130,6 +130,7 @@ class TkApp:
                         command=self.toggle_prompts).pack(side='left')
         self.oddball_prompt = ttk.Checkbutton(oddball_frame, text="Include Prompt", variable=self.oddball_prompt_var, state='disabled')
         self.oddball_prompt.pack(side='right')
+        
         # Loved one section
         loved_frame = ttk.Frame(stim_frame)
         loved_frame.grid(row=5, column=0, columnspan=3, sticky='ew', pady=5)
@@ -377,7 +378,6 @@ class TkApp:
     def toggle_pause(self):
         if self.playback_state == "playing":
             self.playback_state = "paused"
-            # self.is_paused = True # Managed by TrialManager
             self.pause_button.config(text="Resume")
             self.status_label.config(text="Pausing stimulus...", foreground="red")
         elif self.playback_state == "paused":
