@@ -150,16 +150,17 @@ class TkApp:
         self.toggle_loved_one_options()
 
         # Control buttons
+        self.button_styles()
         control_frame = ttk.Frame(main_frame)
         control_frame.pack(fill='x', pady=10)
         self.prepare_button = ttk.Button(control_frame, text="Prepare Stimulus", command=self.prepare_stimulus)
-        self.prepare_button.pack(side='left', padx=5, ipady=10)
+        self.prepare_button.pack(side='left', padx=5, ipady=12)
         self.play_button = ttk.Button(control_frame, text="Play Stimulus", command=self.play_stimulus)
-        self.play_button.pack(side='left', padx=5, ipady=10)
-        self.pause_button = ttk.Button(control_frame, text="Pause", command=self.toggle_pause)
-        self.pause_button.pack(side='right', padx=10, ipadx=30, ipady=10)
-        self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_stimulus)
-        self.stop_button.pack(side='left', padx=5)
+        self.play_button.pack(side='left', padx=5, ipady=12)
+        self.pause_button = ttk.Button(control_frame, text="Pause", image=self.pause_sym, compound=tk.LEFT, command=self.toggle_pause)
+        self.pause_button.pack(side='left', padx=10, ipady=2)
+        self.stop_button = ttk.Button(control_frame, text="Stop", image=self.stop_sym, compound=tk.LEFT, command=self.stop_stimulus)
+        self.stop_button.pack(side='right', padx=10, ipady=2)
 
         # Trial List Frame (with scrollbar)
         trial_list_frame = ttk.LabelFrame(main_frame, text="Trial Sequence")
@@ -378,10 +379,12 @@ class TkApp:
     def toggle_pause(self):
         if self.playback_state == "playing":
             self.playback_state = "paused"
+            self.pause_button.config(image=self.play_sym)
             self.pause_button.config(text="Resume")
             self.status_label.config(text="Pausing stimulus...", foreground="red")
         elif self.playback_state == "paused":
             self.playback_state = "playing"
+            self.pause_button.config(image=self.pause_sym)
             self.pause_button.config(text="Pause")
             self.status_label.config(text="Resuming stimulus...", foreground="blue")
 
@@ -588,3 +591,8 @@ class TkApp:
 
                 # Update row with values AND tag
                 self.trial_tree.item(str(idx), values=(display_type, status), tags=(tag,))
+
+    def button_styles(self):
+        self.play_sym = tk.PhotoImage(file="lib/assets/play_sym.png").subsample(15, 15)
+        self.pause_sym = tk.PhotoImage(file="lib/assets/pause_sym.png").subsample(15, 15)
+        self.stop_sym = tk.PhotoImage(file="lib/assets/stop_sym1.png").subsample(15, 15)
