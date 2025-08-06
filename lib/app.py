@@ -423,11 +423,11 @@ class TkApp:
         try:
             num_of_each_trial = {
                 "lang": 72 if self.language_var.get() else 0,
-                "rcmd": 3 if self.right_cmd_var.get() else 0,
+                "rcmd": 3 if self.right_cmd_var.get() and not self.rcmd_prompt_var.get() else 0,
                 "rcmd+p": 3 if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
-                "lcmd": 3 if self.left_cmd_var.get() else 0,
+                "lcmd": 3 if self.left_cmd_var.get() and not self.lcmd_prompt_var.get() else 0,
                 "lcmd+p": 3 if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
-                "odd": 4 if self.oddball_var.get() else 0,
+                "odd": 4 if self.oddball_var.get() and not self.oddball_prompt_var.get() else 0,
                 "odd+p": 4 if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
                 "loved": 50 if self.loved_one_var.get() else 0
             }

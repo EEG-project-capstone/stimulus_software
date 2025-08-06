@@ -29,6 +29,9 @@ class Trials:
         self.loved_one_voice_audio = None
         self.control_voice_audio = None
 
+        self.motor_prompt_audio = None
+        self.oddball_prompt_audio = None
+
         self.sample_rate = 44100
  
     def generate_trials(self, num_of_each_trials):
@@ -64,6 +67,17 @@ class Trials:
                         "status": "pending"
                     })
 
+            # prepare right hand commands + prompt
+            elif key == "rcmd+p":
+                self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
+                self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
+                self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
+                for i in range(num_of_each_trials[key]):
+                    self.trial_dictionary.append({
+                        "type": "right_command+p",
+                        "status": "pending"
+                    })
+
             # prepare left hand commands
             elif key == "lcmd":
                 self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
@@ -74,11 +88,31 @@ class Trials:
                         "status": "pending"
                     })
 
+            # prepare left hand commands + prompt
+            elif key == "lcmd+p":
+                self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
+                self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
+                self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
+                for i in range(num_of_each_trials[key]):
+                    self.trial_dictionary.append({
+                        "type": "left_command+p",
+                        "status": "pending"
+                    })
+
             # prepare oddball trials
             elif key == "odd":
                 for i in range(num_of_each_trials[key]):
                     self.trial_dictionary.append({
                         "type": "oddball",
+                        "status": "pending"
+                    })
+
+            # prepare oddball trials + prompt
+            elif key == "odd+p":
+                self.oddball_prompt_audio = AudioSegment.from_wav(self.config.file['oddball_prompt_path'])
+                for i in range(num_of_each_trials[key]):
+                    self.trial_dictionary.append({
+                        "type": "oddball+p",
                         "status": "pending"
                     })
                 

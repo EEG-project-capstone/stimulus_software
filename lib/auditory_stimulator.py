@@ -23,6 +23,7 @@ class AuditoryStimulator:
     def reset_trial_state(self):
         self.trials.current_trial_index = 0
         self.is_paused = False
+        self.prompt = False
         self.current_trial_start_time = None
         self.current_trial_sentences = []
         # Command trial state
@@ -44,6 +45,7 @@ class AuditoryStimulator:
     def play_trial_sequence(self):
         self.trials.current_trial_index = 0
         self.is_paused = False
+        self.prompt = False
         self.continue_playback()
 
     def continue_playback(self):
@@ -75,17 +77,25 @@ class AuditoryStimulator:
 
     def start_trial_playback(self, trial, patient_id):
         """Start playback for a specific trial type"""
-
         trial_type = trial.get('type', '')
 
-        if trial_type == "lang":
+        if trial_type == "language":
             self.start_lang_trial(trial)
-        elif trial_type == "rcmd":
-            self.start_cmd_trial("right")
-        elif trial_type == "lcmd":
-            self.start_cmd_trial("left")
+        elif trial_type == "right_command":
+            self.start_cmd_trial("right", self.prompt)
+        elif trial_type == "right_command+p":
+            self.prompt = True
+            self.start_cmd_trial("right", self.prompt)
+        elif trial_type == "left_command":
+            self.start_cmd_trial("left", self.prompt)
+        elif trial_type == "left_command+p":
+            self.prompt = True
+            self.start_cmd_trial("left", self.prompt)
         elif trial_type == "oddball":
-            self.start_oddball_trial()
+            self.start_oddball_trial(self.prompt)
+        elif trial_type == "oddball+p":
+            self.prompt = True
+            self.start_oddball_trial(self.prompt)
         elif trial_type == "control":
             self.start_voice_trial("control")
         elif trial_type == "loved_one":
@@ -112,11 +122,14 @@ class AuditoryStimulator:
         else:
             self.finish_current_trial()
 
-    def start_cmd_trial(self, side):
+    def start_cmd_trial(self, side, prompt):
         """Start a command trial (right or left)"""
         self.cmd_trial_side = side
         self.cmd_trial_cycle = 0
         self.cmd_trial_phase = "keep"  # "keep" or "stop" or "pause"
+        if prompt:  # Play audio prompt
+            self.audio_prompt = self.trials.motor_prompt_audio
+            sd.play(self.audio_prompt, self.audio_prompt.frame_rate, blocking=False)
         self.continue_cmd_trial()
 
     def continue_cmd_trial(self):
@@ -156,11 +169,14 @@ class AuditoryStimulator:
         self.cmd_trial_phase = "keep"
         self.continue_cmd_trial()
 
-    def start_oddball_trial(self):
+    def start_oddball_trial(self, prompt):
         """Start an oddball trial"""
         self.oddball_tone_count = 0
         self.oddball_phase = "initial_standard"  # "initial_standard" or "main_sequence"
         self.current_trial_sentences = []
+        if prompt:  # Play audio prompt
+            self.audio_prompt = self.trials.oddball_prompt_audio
+            sd.play(self.audio_prompt, self.audio_prompt.frame_rate, blocking=False)
         self.continue_oddball_trial()
 
     def continue_oddball_trial(self):
