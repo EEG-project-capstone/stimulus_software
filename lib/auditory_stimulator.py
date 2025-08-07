@@ -4,6 +4,7 @@ import os
 import time
 import random
 import pandas as pd
+import numpy as np
 import sounddevice as sd
 from pydub.generators import Sine
 
@@ -129,7 +130,11 @@ class AuditoryStimulator:
         self.cmd_trial_phase = "keep"  # "keep" or "stop" or "pause"
         if prompt:  # Play audio prompt
             self.audio_prompt = self.trials.motor_prompt_audio
-            sd.play(self.audio_prompt, self.audio_prompt.frame_rate, blocking=False)
+            samples = np.array(self.audio_prompt.get_array_of_samples())
+            if self.audio_prompt.channels == 2:
+                samples = samples.reshape((-1, 2))
+            sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
+            sd.wait()
         self.continue_cmd_trial()
 
     def continue_cmd_trial(self):
@@ -176,7 +181,11 @@ class AuditoryStimulator:
         self.current_trial_sentences = []
         if prompt:  # Play audio prompt
             self.audio_prompt = self.trials.oddball_prompt_audio
-            sd.play(self.audio_prompt, self.audio_prompt.frame_rate, blocking=False)
+            samples = np.array(self.audio_prompt.get_array_of_samples())
+            if self.audio_prompt.channels == 2:
+                samples = samples.reshape((-1, 2))
+            sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
+            sd.wait()
         self.continue_oddball_trial()
 
     def continue_oddball_trial(self):
