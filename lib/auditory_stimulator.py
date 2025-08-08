@@ -3,6 +3,7 @@
 import os
 import time
 import random
+import time
 import pandas as pd
 import numpy as np
 import sounddevice as sd
@@ -135,6 +136,7 @@ class AuditoryStimulator:
                 samples = samples.reshape((-1, 2))
             sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
             sd.wait()
+            time.sleep(2)
         self.continue_cmd_trial()
 
     def continue_cmd_trial(self):
@@ -186,6 +188,7 @@ class AuditoryStimulator:
                 samples = samples.reshape((-1, 2))
             sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
             sd.wait()
+            time.sleep(2)
         self.continue_oddball_trial()
 
     def continue_oddball_trial(self):
