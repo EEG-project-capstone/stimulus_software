@@ -119,7 +119,8 @@ class Trials:
             # prepare loved ones voice trials
             elif key == "loved":
                 # path to loved ones voice recording
-                temp_path = os.path.join(self.config.file['loved_one_path'], self.loved_one_file)
+                lof = self.loved_one_file
+                temp_path = lof if os.path.isabs(lof) else os.path.join(self.config.file['loved_one_path'], lof)
                 # add loved ones voice recording
                 self.loved_one_voice_audio = self._load_audio(temp_path)
                 # add a gendered control voice recording

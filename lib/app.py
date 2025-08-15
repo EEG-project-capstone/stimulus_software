@@ -410,7 +410,7 @@ class TkApp:
                     self.oddball_var.get(), self.loved_one_var.get()]):
             messagebox.showwarning("No Stimulus Selected", "Please select at least one stimulus type.")
             return
-        if self.loved_one_var.get() and not hasattr(self.audio_stim, 'loved_one_file'):
+        if self.loved_one_var.get() and not self.audio_stim.trials.loved_one_file:
             messagebox.showwarning("Missing File", "Please upload a voice file for loved one stimulus.")
             return
         self.playback_state = "preparing"

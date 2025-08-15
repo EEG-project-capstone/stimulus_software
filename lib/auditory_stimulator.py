@@ -100,7 +100,7 @@ class AuditoryStimulator:
             self.start_oddball_trial(self.prompt)
         elif trial_type == "control":
             self.start_voice_trial("control")
-        elif trial_type == "loved_one":
+        elif trial_type == "loved_one_voice":
             self.start_voice_trial("loved_one")
         else:
             # Unknown trial type, skip
