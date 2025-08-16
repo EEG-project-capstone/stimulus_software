@@ -133,7 +133,7 @@ class Trials:
                 # add loved ones or control voice recording
                 for i in range(num_of_each_trials[key]):
                     self.trial_dictionary.append({
-                        "type": "loved_one_voice",
+                        "type": "control",
                         "voice_type": "control",
                         "status": "pending"
                     })
