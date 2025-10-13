@@ -39,112 +39,88 @@ class Trials:
         # Clear existing trials before generating new ones
         self.trial_dictionary = []      
 
-        # interate through each trial type
-        for key in num_of_each_trials:
+        # We'll collect blocks: each block is a list of trials of the same type
+        blocks = []
 
-            # skip if no trials of this type
-            if num_of_each_trials[key] <= 0:
-                continue
+        # Language trials
+        if num_of_each_trials.get("lang", 0) > 0:
+            self._generate_language_stimuli(num_of_each_trials["lang"])
+            lang_block = []
+            for i in range(num_of_each_trials["lang"]):
+                lang_block.append({
+                    "type": "language",
+                    "subtype": f"lang_{i}",
+                    "audio_index": i,
+                    "status": "pending"
+                })
+            blocks.append(lang_block)
 
-            # prepare language stims
-            if key == "lang":
-                self._generate_language_stimuli(num_of_each_trials[key])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "language",
-                        "subtype": f"lang_{i}",
-                        "audio_index": i, # Index into self.lang_audio
-                        "status": "pending"
-                    })
+        # Right command (no prompt)
+        if num_of_each_trials.get("rcmd", 0) > 0:
+            self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
+            self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
+            rcmd_block = [{"type": "right_command", "status": "pending"} for _ in range(num_of_each_trials["rcmd"])]
+            blocks.append(rcmd_block)
 
-            # prepare right hand commands
-            elif key == "rcmd":
-                self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
-                self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "right_command",
-                        "status": "pending"
-                    })
+        # Right command + prompt
+        if num_of_each_trials.get("rcmd+p", 0) > 0:
+            self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
+            self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
+            self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
+            rcmd_p_block = [{"type": "right_command+p", "status": "pending"} for _ in range(num_of_each_trials["rcmd+p"])]
+            blocks.append(rcmd_p_block)
 
-            # prepare right hand commands + prompt
-            elif key == "rcmd+p":
-                self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
-                self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
-                self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "right_command+p",
-                        "status": "pending"
-                    })
+        # Left command (no prompt)
+        if num_of_each_trials.get("lcmd", 0) > 0:
+            self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
+            self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
+            lcmd_block = [{"type": "left_command", "status": "pending"} for _ in range(num_of_each_trials["lcmd"])]
+            blocks.append(lcmd_block)
 
-            # prepare left hand commands
-            elif key == "lcmd":
-                self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
-                self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "left_command",
-                        "status": "pending"
-                    })
+        # Left command + prompt
+        if num_of_each_trials.get("lcmd+p", 0) > 0:
+            self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
+            self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
+            self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
+            lcmd_p_block = [{"type": "left_command+p", "status": "pending"} for _ in range(num_of_each_trials["lcmd+p"])]
+            blocks.append(lcmd_p_block)
 
-            # prepare left hand commands + prompt
-            elif key == "lcmd+p":
-                self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
-                self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
-                self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "left_command+p",
-                        "status": "pending"
-                    })
+        # Oddball (no prompt)
+        if num_of_each_trials.get("odd", 0) > 0:
+            odd_block = [{"type": "oddball", "status": "pending"} for _ in range(num_of_each_trials["odd"])]
+            blocks.append(odd_block)
 
-            # prepare oddball trials
-            elif key == "odd":
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "oddball",
-                        "status": "pending"
-                    })
-
-            # prepare oddball trials + prompt
-            elif key == "odd+p":
-                self.oddball_prompt_audio = AudioSegment.from_wav(self.config.file['oddball_prompt_path'])
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "oddball+p",
-                        "status": "pending"
-                    })
+        # Oddball + prompt
+        if num_of_each_trials.get("odd+p", 0) > 0:
+            self.oddball_prompt_audio = AudioSegment.from_wav(self.config.file['oddball_prompt_path'])
+            odd_p_block = [{"type": "oddball+p", "status": "pending"} for _ in range(num_of_each_trials["odd+p"])]
+            blocks.append(odd_p_block)
                 
-            # prepare loved ones voice trials
-            elif key == "loved":
-                # path to loved ones voice recording
-                lof = self.loved_one_file
-                temp_path = lof if os.path.isabs(lof) else os.path.join(self.config.file['loved_one_path'], lof)
-                # add loved ones voice recording
-                self.loved_one_voice_audio = self._load_audio(temp_path)
-                # add a gendered control voice recording
-                if self.loved_one_gender == 'Male':
-                    self.control_voice_audio = self._load_audio(self.config.file['male_control_path'])
-                elif self.loved_one_gender == 'Female':
-                    self.control_voice_audio = self._load_audio(self.config.file['female_control_path'])
-                else:
-                    raise ValueError(f"No gender selected")
-                # add loved ones or control voice recording
-                for i in range(num_of_each_trials[key]):
-                    self.trial_dictionary.append({
-                        "type": "control",
-                        "voice_type": "control",
-                        "status": "pending"
-                    })
-                    self.trial_dictionary.append({
-                        "type": "loved_one_voice",
-                        "voice_type": "loved_one",
-                        "status": "pending"
-                    })
+        # Loved one trials
+        if num_of_each_trials.get("loved", 0) > 0:
+            lof = self.loved_one_file
+            temp_path = lof if os.path.isabs(lof) else os.path.join(self.config.file['loved_one_path'], lof)
+            self.loved_one_voice_audio = self._load_audio(temp_path)
+            
+            if self.loved_one_gender == 'Male':
+                self.control_voice_audio = self._load_audio(self.config.file['male_control_path'])
+            elif self.loved_one_gender == 'Female':
+                self.control_voice_audio = self._load_audio(self.config.file['female_control_path'])
+            else:
+                raise ValueError(f"No gender selected")
+            
+            loved_block = []
+            for i in range(num_of_each_trials["loved"]):
+                loved_block.append({"type": "control", "voice_type": "control", "status": "pending"})
+                loved_block.append({"type": "loved_one_voice", "voice_type": "loved_one", "status": "pending"})
+            blocks.append(loved_block)
 
-        # Shuffle the list of dictionaries
-        random.shuffle(self.trial_dictionary)
+        # Randomize the order of blocks
+        random.shuffle(blocks)
+
+        # Flatten blocks into final trial list
+        for block in blocks:
+            self.trial_dictionary.extend(block)
     
     def _generate_language_stimuli(self, num_of_lang_trials):
         """Generate the specified number of language stimuli"""

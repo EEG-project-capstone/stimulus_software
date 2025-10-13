@@ -190,9 +190,10 @@ class TkApp:
         self.note_entry.grid(row=0, column=1, sticky='ew', padx=5)
         ttk.Button(notes_frame, text="Add Note", command=self.add_note).grid(row=0, column=2, padx=5)
         ttk.Label(notes_frame, text="Find Notes:").grid(row=1, column=0, sticky='w', pady=(10,0))
-        self.notes_text = tk.Text(notes_frame, height=5, width=60)
+        self.notes_text = tk.Text(notes_frame, height=12, width=60)  # Increased height from 5 to 8
         self.notes_text.grid(row=2, column=0, columnspan=3, sticky='ew', pady=5)
         notes_frame.grid_columnconfigure(1, weight=1)
+        notes_frame.grid_rowconfigure(2, weight=1)  # Allow the text widget to expand vertically
 
         # Update button states
         self.update_button_states()
@@ -445,7 +446,6 @@ class TkApp:
             self.update_button_states()
             self.status_label.config(text=f"Stimulus prepared! {len(self.trials.trial_dictionary)} trials ready.", foreground="green")
             self.populate_trial_list()
-            messagebox.showinfo("Success", f"Stimulus prepared successfully!\n{len(self.trials.trial_dictionary)} trials ready.")
         
         except Exception as e:
             self.playback_state = "ready"

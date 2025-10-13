@@ -3,7 +3,6 @@
 import os
 import time
 import random
-import time
 import pandas as pd
 import numpy as np
 import sounddevice as sd
@@ -28,6 +27,7 @@ class AuditoryStimulator:
         self.prompt = False
         self.current_trial_start_time = None
         self.current_trial_sentences = []
+        self.expected_audio_end_time = 0
         # Command trial state
         self.cmd_trial_side = None
         self.cmd_trial_cycle = 0
@@ -130,14 +130,12 @@ class AuditoryStimulator:
         self.cmd_trial_cycle = 0
         self.cmd_trial_phase = "keep"  # "keep" or "stop" or "pause"
         if prompt:  # Play audio prompt
-            self.audio_prompt = self.trials.motor_prompt_audio
-            samples = np.array(self.audio_prompt.get_array_of_samples())
-            if self.audio_prompt.channels == 2:
-                samples = samples.reshape((-1, 2))
-            sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
-            sd.wait()
-            time.sleep(2)
-        self.continue_cmd_trial()
+            self.play_audio_segment(
+                self.trials.motor_prompt_audio,
+                lambda: self.start_interruptible_delay(2000, self.continue_cmd_trial)
+            )
+        else:
+            self.continue_cmd_trial()
 
     def continue_cmd_trial(self):
         """Continue the command trial cycle"""
@@ -152,7 +150,7 @@ class AuditoryStimulator:
             # Play keep audio
             audio = (self.trials.right_keep_audio if self.cmd_trial_side == "right" 
                     else self.trials.left_keep_audio)
-            self.play_audio_segment_non_blocking(audio, lambda: self.set_cmd_phase("pause_after_keep"))
+            self.play_audio_segment(audio, lambda: self.set_cmd_phase("pause_after_keep"))
         elif self.cmd_trial_phase == "pause_after_keep":
             # 10 second pause after keep
             self.start_interruptible_delay(10000, lambda: self.set_cmd_phase("stop"))
@@ -160,7 +158,7 @@ class AuditoryStimulator:
             # Play stop audio
             audio = (self.trials.right_stop_audio if self.cmd_trial_side == "right" 
                     else self.trials.left_stop_audio)
-            self.play_audio_segment_non_blocking(audio, lambda: self.set_cmd_phase("pause_after_stop"))
+            self.play_audio_segment(audio, lambda: self.set_cmd_phase("pause_after_stop"))
         elif self.cmd_trial_phase == "pause_after_stop":
             # 10 second pause after stop
             self.start_interruptible_delay(10000, lambda: self.next_cmd_cycle())
@@ -182,20 +180,20 @@ class AuditoryStimulator:
         self.oddball_phase = "initial_standard"  # "initial_standard" or "main_sequence"
         self.current_trial_sentences = []
         if prompt:  # Play audio prompt
-            self.audio_prompt = self.trials.oddball_prompt_audio
-            samples = np.array(self.audio_prompt.get_array_of_samples())
-            if self.audio_prompt.channels == 2:
-                samples = samples.reshape((-1, 2))
-            sd.play(samples, self.audio_prompt.frame_rate, blocking=False)
-            sd.wait()
-            time.sleep(2)
-        self.continue_oddball_trial()
+        # Play prompt audio non-blocking, then wait 2 seconds before continuing
+            self.play_audio_segment(
+                self.trials.oddball_prompt_audio,
+                lambda: self.start_interruptible_delay(2000, self.continue_oddball_trial)
+            )
+        else:
+            self.continue_oddball_trial()
 
     def continue_oddball_trial(self):
         """Continue the oddball trial"""
         if self.gui_callback.get_playback_state() != "playing" or self.is_paused:
             self.gui_callback.root_after(100, self.continue_oddball_trial) # Use callback
             return
+        ################# first 5 beeps ##############
         if self.oddball_phase == "initial_standard":
             if self.oddball_tone_count < 5:
                 # Play standard tone
@@ -207,6 +205,7 @@ class AuditoryStimulator:
                 self.oddball_phase = "main_sequence"
                 self.oddball_tone_count = 0
                 self.continue_oddball_trial()
+        ################## next 20 beeps ###############
         elif self.oddball_phase == "main_sequence":
             if self.oddball_tone_count < 20:
                 # 20% chance for rare tone
@@ -234,7 +233,7 @@ class AuditoryStimulator:
         else:
             self.finish_current_trial()
 
-    def play_audio_segment_non_blocking(self, audio_segment, callback=None):
+    def play_audio_segment(self, audio_segment, callback=None):
         """Play a pydub AudioSegment non-blocking"""
         if audio_segment is None:
             if callback:
@@ -243,6 +242,10 @@ class AuditoryStimulator:
         samples = audio_segment.get_array_of_samples()
         if audio_segment.channels == 2:
             samples = samples.reshape((-1, 2))
+        # monitor stimulus duration 
+        duration_sec = len(samples) / audio_segment.frame_rate
+        self.expected_audio_end_time = time.time() + duration_sec
+        # play audio segment
         sd.play(samples, audio_segment.frame_rate, blocking=False)
         if callback:
             self.monitor_audio_playback(callback)
@@ -265,8 +268,10 @@ class AuditoryStimulator:
             # Stop audio if playback was stopped/paused
             sd.stop()
             return
-        if sd.get_stream() is None or not sd.get_stream().active:
-            # Audio finished
+        # is stimulus longer than expected
+        if time.time() >= self.expected_audio_end_time:
+        # stream = sd.get_stream()
+        # if stream is None or not stream.active:
             if callback:
                 callback()
             else:
