@@ -10,7 +10,7 @@ from tkinter import messagebox, ttk, filedialog
 from lib.config import Config
 from lib.trials import Trials
 from lib.auditory_stimulator import AuditoryStimulator
-from lib.stimulus_package_notes import add_notes, add_history
+from lib.notes import add_notes
 
 class TkApp:
     def __init__(self, root):
@@ -309,11 +309,25 @@ class TkApp:
             self.current_patient = patient_id
             self.playback_state = "ready"
             self.status_label.config(text="Ready to prepare stimulus", foreground="green")
+            self.load_patient_notes(patient_id)
         else:
             self.current_patient = None
             self.playback_state = "empty"
             self.status_label.config(text="Please enter a patient ID", foreground="red")
         self.update_button_states()
+
+    def load_patient_notes(self, patient_id):
+        """Load and display saved notes for the patient."""
+        self.notes_text.delete(1.0, tk.END)
+        try:
+            from lib.notes import load_notes
+            notes = load_notes(patient_id)
+            for note in notes:
+                self.notes_text.insert(tk.END, note + "\n")
+            if notes:
+                self.notes_text.see(tk.END)
+        except Exception as e:
+            print(f"Could not load notes: {e}")
 
     def toggle_loved_one_options(self):
         state = 'normal' if self.loved_one_var.get() else 'disabled'
@@ -471,11 +485,26 @@ class TkApp:
     def add_note(self):
         """Add a note to the notes section."""
         note = self.note_entry.get().strip()
-        if note:
-            self.notes_text.insert(tk.END, f"{note}\n")
-            self.note_entry.delete(0, tk.END)
-        else:
+        patient_id = self.get_patient_id()
+        if not patient_id:
+            messagebox.showwarning("No Patient ID", "Please enter a patient ID before adding a note.")
+            return
+        if not note:
             messagebox.showwarning("Empty Note", "Please enter a note before adding.")
+            return
+        
+        try:
+            # Save the note persistently
+            current_date = time.strftime("%Y-%m-%d")
+            add_notes(patient_id=patient_id, note=note, recorded_date=current_date)
+            
+            # Display in UI
+            self.notes_text.insert(tk.END, f"[{current_date}] {note}\n")
+            self.notes_text.see(tk.END)  # Scroll to bottom
+            self.note_entry.delete(0, tk.END)
+            
+        except Exception as e:
+            messagebox.showerror("Note Error", f"Failed to save note: {e}")
 
     # Placeholder methods for Results tab (keep as is or implement)
     def run_lang_analysis(self):
