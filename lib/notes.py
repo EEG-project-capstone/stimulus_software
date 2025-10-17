@@ -6,6 +6,7 @@ import yaml
 import os
 import pandas as pd
 import yaml
+from tkinter import messagebox
 
 def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/00/0000"):
     """
@@ -42,22 +43,19 @@ def add_notes(patient_id="patient0", note="blank test note", recorded_date="00/0
     # Check if patient_df exists — if not, abort
     df_path = config['patient_df_path']
     if not os.path.exists(df_path):
-        print('Stimulus has never been run (patient_df.csv missing). Cannot add note.')
+        print('patient_df.csv missing.')
         return  # Early exit
     
     # Now safe to load
     patient_df = pd.read_csv(df_path)
 
-    # Check to see if patient has already been given stimulus
-    if (patient_df['patient_id'] == patient_id).any():
-        # Create a DataFrame with the new note
-        new_note = pd.DataFrame([{'patient_id': patient_id, 'date': recorded_date, 'notes': note}])
-        # Concatenate the new note with the existing patient notes DataFrame
-        patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
-        # Save the updated DataFrame to CSV
-        patient_notes.to_csv(notes_path, index=False)    
-    else:
-        print('Patient has not been administered stimulus yet, double-check patient_id number.')
+    # Create a DataFrame with the new note
+    new_note = pd.DataFrame([{'patient_id': patient_id, 'date': recorded_date, 'notes': note}])
+    # Concatenate the new note with the existing patient notes DataFrame
+    patient_notes = pd.concat([patient_notes, new_note], ignore_index=True)
+    # Save the updated DataFrame to CSV
+    patient_notes.to_csv(notes_path, index=False)    
+
 
 
 def load_notes(patient_id):

@@ -5,7 +5,6 @@ os: 'os' # 'windows' or 'linux' or 'os'
 # Define your output path:
 patient_df_path: 'patient_data/patient_df.csv'
 patient_note_path: 'patient_data/patient_notes.csv'
-patient_history_path: 'patient_data/patient_history.csv'
 patient_output_dir: 'patient_data/patients/'
 patient_label_path: 'patient_data/patient_records.csv'
 edf_dir: 'patient_data/edfs/'
