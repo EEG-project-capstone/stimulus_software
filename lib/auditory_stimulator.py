@@ -263,15 +263,16 @@ class AuditoryStimulator:
             self.monitor_audio_playback(callback)
 
     def monitor_audio_playback(self, callback=None):
-        """Monitor audio playback and call callback when done"""
+        """Monitor audio playback and call callback when done"""     
         if self.gui_callback.get_playback_state() != "playing":
             # Stop audio if playback was stopped/paused
             sd.stop()
             return
+        current_time = time.time()
+        # Add a small tolerance (100 ms) to account for scheduling jitter
+        tolerance = 0.1  # seconds
         # is stimulus longer than expected
-        if time.time() >= self.expected_audio_end_time:
-        # stream = sd.get_stream()
-        # if stream is None or not stream.active:
+        if current_time >= (self.expected_audio_end_time + tolerance):
             if callback:
                 callback()
             else:
