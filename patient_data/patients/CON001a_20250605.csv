@@ -1,2 +1,0 @@
-patient_id,date,trial_type,sentences,start_time,end_time,duration
-CON001a,2025-06-05,oddball,"['standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'rare', 'standard', 'rare', 'standard', 'standard', 'rare', 'rare', 'standard', 'rare']",1749171633.172747,1749171664.8076842,31.634937286376953

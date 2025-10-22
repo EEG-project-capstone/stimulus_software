@@ -1,0 +1,2 @@
+patient_id,date,trial_type,sentences,start_time,end_time,duration
+jo,2025-10-22,oddball,"['standard', 'standard', 'standard', 'standard', 'standard', 'rare', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'rare', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'standard', 'rare']",1761160452.5404959,1761160483.780673,31.240177154541016

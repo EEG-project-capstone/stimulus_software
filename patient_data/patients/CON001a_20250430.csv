@@ -1,5 +1,0 @@
-patient_id,date,trial_type,sentences,start_time,end_time,duration
-CON001a,2025-04-30,oddball,"['standard', 'standard', 'standard', 'standard', 'standard']",1746042712.6153889,1746042714.9903429,2.3749539852142334
-CON001a,2025-04-30,oddball,"['standard', 'standard', 'standard', 'standard', 'standard']",1746042716.3686342,1746042718.5196722,2.1510379314422607
-CON001a,2025-04-30,oddball,"['standard', 'standard', 'standard', 'standard', 'standard']",1746042720.584599,1746042722.758867,2.1742680072784424
-CON001a,2025-04-30,oddball,"['standard', 'standard', 'standard', 'standard', 'standard']",1746042724.944181,1746042727.10931,2.1651289463043213
