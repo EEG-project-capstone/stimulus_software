@@ -294,14 +294,22 @@ class AuditoryStimulator:
             self.finish_current_trial()
 
     def _generate_tone(self, frequency, duration_ms, sample_rate=44100):
-        """Generate a pure tone as int16 numpy array (mono)."""
-        duration_sec = duration_ms / 1000.0
-        num_samples = int(sample_rate * duration_sec)
-        if num_samples <= 0:
-            num_samples = 1  # avoid empty array
-        t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), False)
+        """Generate a pure tone with a short silence tail for reliable playback."""
+        # Actual tone duration
+        tone_duration_sec = duration_ms / 1000.0
+        # Add 100ms silence tail (adjustable)
+        tail_duration_sec = 0.1  # 100 ms
+        total_duration_sec = tone_duration_sec + tail_duration_sec
+
+        num_samples = int(sample_rate * total_duration_sec)
+        tone_samples = int(sample_rate * tone_duration_sec)
+
+        # Create full buffer (tone + silence)
+        t = np.linspace(0, tone_duration_sec, tone_samples, False)
         tone = np.sin(2 * np.pi * frequency * t)
-        return (tone * 32767).astype(np.int16)
+        full = np.zeros(num_samples, dtype=np.float64)
+        full[:tone_samples] = tone
+        return (full * 32767).astype(np.int16)
 
     def play_audio(self, samples, sample_rate, callback=None, log_label=None):
         """
