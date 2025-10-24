@@ -412,7 +412,7 @@ class TkApp:
         self.playback_state = "preparing"
         self.update_button_states()
         self.status_label.config(text="Preparing stimulus...", foreground="blue")
-        self.start_preparation
+        self.start_preparation()
 
     def start_preparation(self):
         """Start the preparation process"""
@@ -449,7 +449,7 @@ class TkApp:
             messagebox.showerror("Error", f"Error preparing stimulus: {e}")
 
     def play_stimulus(self):
-        if self.playback_state != "ready" or not self.trials.trial_dictionary:
+        if self.playback_state != "ready" or len(self.trials.trial_dictionary) == 0:
             return
         patient_id = self.patient_id_entry.get().strip()
         if not patient_id:
