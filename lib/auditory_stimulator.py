@@ -315,6 +315,10 @@ class AuditoryStimulator:
         """
         Play audio reliably using OutputStream.
         """
+        # Cancel any previous playback
+        if hasattr(self, '_active_stream'):
+            self._safe_stop_stream()
+
         if samples.ndim == 1:
             samples = samples.reshape(-1, 1)
         elif samples.ndim != 2:
@@ -344,7 +348,8 @@ class AuditoryStimulator:
         def on_finish():
             if hasattr(self, '_active_stream'):
                 del self._active_stream
-            if callback:
+            # Only invoke callback if playback is still active
+            if (self.gui_callback.playback_state == "playing" and not self.is_paused and callback is not None):
                 self._schedule(10, callback)
 
         try:
@@ -402,13 +407,7 @@ class AuditoryStimulator:
             self.play_current_trial()  # Start over
         else:
             # Pause: stop everything and mark trial as pending
-            if hasattr(self, '_active_stream'):
-                try:
-                    self._active_stream.stop()
-                    self._active_stream.close()
-                except:
-                    pass
-                del self._active_stream
+            self._safe_stop_stream()
             self._cancel_scheduled_callbacks()
             self.is_paused = True
             current_trial = self.trials.trial_dictionary[self.trials.current_trial_index]
@@ -445,15 +444,22 @@ class AuditoryStimulator:
         # Mark trial as pending (in case it was 'in progress')
         trial['status'] = 'pending'
 
-    def stop_stimulus(self):
-        """Stop current audio and reset."""
+    def _safe_stop_stream(self):
+        """Safely stop and close the active audio stream, if it exists and is alive."""
         if hasattr(self, '_active_stream'):
             try:
-                self._active_stream.stop()
+                # Check if stream is still active
+                if self._active_stream.active or self._active_stream.stopped:
+                    self._active_stream.stop()
                 self._active_stream.close()
-            except:
+            except Exception as e:
+                # Ignore errors — stream may already be closed
                 pass
-            del self._active_stream
+            finally:
+                del self._active_stream
+
+    def stop_stimulus(self):
+        self._safe_stop_stream()
         self.reset_trial_state()
 
     def save_single_trial_result(self, trial_result):
