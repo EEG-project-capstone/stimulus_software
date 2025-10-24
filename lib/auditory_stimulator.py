@@ -135,7 +135,7 @@ class AuditoryStimulator:
             self.play_audio(
                 samples=samples,
                 sample_rate=prompt_seg.frame_rate,
-                callback=lambda: self.gui_callback.root_after(2000, self.continue_cmd_trial),
+                callback=lambda: self._schedule(2000, self.continue_cmd_trial),
                 log_label="motor_prompt"
             )
         else:
@@ -244,7 +244,7 @@ class AuditoryStimulator:
                 self.play_audio(
                     samples=tone_samples,
                     sample_rate=44100,
-                    callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                    callback=lambda: self._schedule(1000, self.continue_oddball_trial),
                     log_label="standard_tone"
                 )
                 self.oddball_tone_count += 1
@@ -262,7 +262,7 @@ class AuditoryStimulator:
                     self.play_audio(
                         samples=tone_samples,
                         sample_rate=44100,
-                        callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                        callback=lambda: self._schedule(1000, self.continue_oddball_trial),
                         log_label="rare_tone"
                     )
                 else:
@@ -270,7 +270,7 @@ class AuditoryStimulator:
                     self.play_audio(
                         samples=tone_samples,
                         sample_rate=44100,
-                        callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                        callback=lambda: self._schedule(1000, self.continue_oddball_trial),
                         log_label="standard_tone"
                     )
                 self.oddball_tone_count += 1
@@ -337,7 +337,7 @@ class AuditoryStimulator:
             if hasattr(self, '_active_stream'):
                 del self._active_stream
             if callback:
-                self.gui_callback.root_after(10, callback)
+                self._schedule(10, callback)
 
         try:
             stream = sd.OutputStream(

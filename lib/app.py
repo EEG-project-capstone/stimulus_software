@@ -38,9 +38,6 @@ class TkApp:
     
     def get_patient_id(self):
         return self.patient_id_entry.get().strip()
-    
-    def root_after(self, ms, callback):
-        return self.root.after(ms, callback)
 
     def playback_complete(self):
         """Handle completion of stimulus playback"""
