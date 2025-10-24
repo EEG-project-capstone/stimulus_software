@@ -6,7 +6,6 @@ import random
 import pandas as pd
 import numpy as np
 import sounddevice as sd
-from pydub.generators import Sine
 
 class AuditoryStimulator:
      
@@ -18,16 +17,16 @@ class AuditoryStimulator:
         self.trials = gui_callback.trials
         self.config = gui_callback.config
 
+        self.scheduled_callbacks = []  # Track Tkinter after IDs
+
         self.reset_trial_state()
 
 
     def reset_trial_state(self):
         self.trials.current_trial_index = 0
         self.is_paused = False
-        self.prompt = False
-        self.current_trial_start_time = None
+        self.current_trial_start_time = 0
         self.current_trial_sentences = []
-        self.expected_audio_end_time = 0
         # Command trial state
         self.cmd_trial_side = None
         self.cmd_trial_cycle = 0
@@ -35,9 +34,7 @@ class AuditoryStimulator:
         # Oddball trial state
         self.oddball_tone_count = 0
         self.oddball_phase = None
-        # Delay state
-        self.delay_end_time = None
-        self.delay_callback = None
+
 
         # Reset all trial statuses to pending
         for trial in self.trials.trial_dictionary:
@@ -52,7 +49,7 @@ class AuditoryStimulator:
 
     def continue_playback(self):
         """Continue playback from current trial index"""
-        if self.gui_callback.get_playback_state() != "playing" or self.is_paused:
+        if self.gui_callback.playback_state != "playing" or self.is_paused:
             return
         if self.trials.current_trial_index >= len(self.trials.trial_dictionary):
             # Playback complete
@@ -72,32 +69,29 @@ class AuditoryStimulator:
             self.current_trial_start_time = time.time()
             self.current_trial_sentences = []
             # Start playing the trial (non-blocking)
-            self.start_trial_playback(trial, patient_id)
+            self.start_trial_playback(trial)
             self.gui_callback.update_trial_list_status()
         except Exception as e:
             self.gui_callback.playback_error(str(e))
 
-    def start_trial_playback(self, trial, patient_id):
+    def start_trial_playback(self, trial):
         """Start playback for a specific trial type"""
         trial_type = trial.get('type', '')
 
         if trial_type == "language":
             self.start_lang_trial(trial)
         elif trial_type == "right_command":
-            self.start_cmd_trial("right", self.prompt)
+            self.start_cmd_trial("right")
         elif trial_type == "right_command+p":
-            self.prompt = True
-            self.start_cmd_trial("right", self.prompt)
+            self.start_cmd_trial("right", prompt=True)
         elif trial_type == "left_command":
-            self.start_cmd_trial("left", self.prompt)
+            self.start_cmd_trial("left")
         elif trial_type == "left_command+p":
-            self.prompt = True
-            self.start_cmd_trial("left", self.prompt)
+            self.start_cmd_trial("left", prompt=True)
         elif trial_type == "oddball":
-            self.start_oddball_trial(self.prompt)
+            self.start_oddball_trial()
         elif trial_type == "oddball+p":
-            self.prompt = True
-            self.start_oddball_trial(self.prompt)
+            self.start_oddball_trial(prompt=True)
         elif trial_type == "control":
             self.start_voice_trial("control")
         elif trial_type == "loved_one_voice":
@@ -107,40 +101,50 @@ class AuditoryStimulator:
             self.finish_current_trial()
 
     def start_lang_trial(self, trial):
-        """Start a language trial"""
         n = trial.get('audio_index', 0)
-        if 0 <= n < len(self.trials.lang_trials_ids):
-            self.current_trial_sentences = self.trials.lang_trials_ids[n]
         if 0 <= n < len(self.trials.lang_audio):
-            # Convert pydub AudioSegment to numpy array for sounddevice
             audio_segment = self.trials.lang_audio[n]
-            samples = audio_segment.get_array_of_samples()
+            samples = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
             if audio_segment.channels == 2:
-                samples = samples.reshape((-1, 2))
-            # Start non-blocking playback
-            sd.play(samples, audio_segment.frame_rate, blocking=False)
-            # Monitor playback
-            self.monitor_audio_playback()
+                samples = samples.reshape(-1, 2)
+            else:
+                samples = samples.reshape(-1, 1)
+            self.play_audio(
+                samples=samples,
+                sample_rate=audio_segment.frame_rate,
+                callback=self.finish_current_trial,
+                log_label="language_audio"
+            )
         else:
             self.finish_current_trial()
 
-    def start_cmd_trial(self, side, prompt):
+    def start_cmd_trial(self, side, prompt=False):
         """Start a command trial (right or left)"""
         self.cmd_trial_side = side
         self.cmd_trial_cycle = 0
         self.cmd_trial_phase = "keep"  # "keep" or "stop" or "pause"
         if prompt:  # Play audio prompt
-            self.play_audio_segment(
-                self.trials.motor_prompt_audio,
-                lambda: self.start_interruptible_delay(2000, self.continue_cmd_trial)
+            # Convert prompt audio to numpy
+            prompt_seg = self.trials.motor_prompt_audio
+            samples = np.array(prompt_seg.get_array_of_samples(), dtype=np.int16)
+            if prompt_seg.channels == 2:
+                samples = samples.reshape(-1, 2)
+            else:
+                samples = samples.reshape(-1, 1)
+
+            self.play_audio(
+                samples=samples,
+                sample_rate=prompt_seg.frame_rate,
+                callback=lambda: self.gui_callback.root_after(2000, self.continue_cmd_trial),
+                log_label="motor_prompt"
             )
         else:
             self.continue_cmd_trial()
 
     def continue_cmd_trial(self):
         """Continue the command trial cycle"""
-        if self.gui_callback.get_playback_state() != "playing" or self.is_paused:
-            self.gui_callback.root_after(100, self.continue_cmd_trial) # Use callback for Tkinter after
+        if self.gui_callback.playback_state != "playing" or self.is_paused:
+            self._schedule(100, self.continue_cmd_trial) # Use callback for Tkinter after
             return
         if self.cmd_trial_cycle >= 8:
             # All 8 cycles complete
@@ -148,20 +152,51 @@ class AuditoryStimulator:
             return
         if self.cmd_trial_phase == "keep":
             # Play keep audio
-            audio = (self.trials.right_keep_audio if self.cmd_trial_side == "right" 
-                    else self.trials.left_keep_audio)
-            self.play_audio_segment(audio, lambda: self.set_cmd_phase("pause_after_keep"))
+            if self.cmd_trial_side == "right":
+                audio = self.trials.right_keep_audio
+                samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+                self.play_audio(
+                    samples=samples,
+                    sample_rate=audio.frame_rate,
+                    callback=lambda: self.set_cmd_phase("pause_after_keep"),
+                    log_label="right_keep"
+                )
+            else: 
+                audio = self.trials.left_keep_audio
+                samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+                self.play_audio(
+                    samples=samples,
+                    sample_rate=audio.frame_rate,
+                    callback=lambda: self.set_cmd_phase("pause_after_keep"),
+                    log_label="left_keep"
+                )
         elif self.cmd_trial_phase == "pause_after_keep":
             # 10 second pause after keep
-            self.start_interruptible_delay(10000, lambda: self.set_cmd_phase("stop"))
+            self._schedule(10000, lambda: self.set_cmd_phase("stop"))
         elif self.cmd_trial_phase == "stop":
             # Play stop audio
-            audio = (self.trials.right_stop_audio if self.cmd_trial_side == "right" 
-                    else self.trials.left_stop_audio)
-            self.play_audio_segment(audio, lambda: self.set_cmd_phase("pause_after_stop"))
+
+            if self.cmd_trial_side == "right":
+                audio = self.trials.right_stop_audio
+                samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+                self.play_audio(
+                    samples=samples,
+                    sample_rate=audio.frame_rate,
+                    callback=lambda: self.set_cmd_phase("pause_after_stop"),
+                    log_label="right_stop"
+                )       
+            else:
+                audio = self.trials.left_stop_audio
+                samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+                self.play_audio(
+                    samples=samples,
+                    sample_rate=audio.frame_rate,
+                    callback=lambda: self.set_cmd_phase("pause_after_stop"),
+                    log_label="left_stop"
+                )
         elif self.cmd_trial_phase == "pause_after_stop":
             # 10 second pause after stop
-            self.start_interruptible_delay(10000, lambda: self.next_cmd_cycle())
+            self._schedule(10000, lambda: self.next_cmd_cycle())
 
     def set_cmd_phase(self, phase):
         """Set the command trial phase"""
@@ -174,31 +209,44 @@ class AuditoryStimulator:
         self.cmd_trial_phase = "keep"
         self.continue_cmd_trial()
 
-    def start_oddball_trial(self, prompt):
+    def start_oddball_trial(self, prompt=False):
         """Start an oddball trial"""
         self.oddball_tone_count = 0
-        self.oddball_phase = "initial_standard"  # "initial_standard" or "main_sequence"
+        self.oddball_phase = "initial_standard"
         self.current_trial_sentences = []
-        if prompt:  # Play audio prompt
-        # Play prompt audio non-blocking, then wait 2 seconds before continuing
-            self.play_audio_segment(
-                self.trials.oddball_prompt_audio,
-                lambda: self.start_interruptible_delay(2000, self.continue_oddball_trial)
+        if prompt:
+            # Convert oddball prompt audio to numpy
+            prompt_seg = self.trials.oddball_prompt_audio
+            samples = np.array(prompt_seg.get_array_of_samples(), dtype=np.int16)
+            if prompt_seg.channels == 2:
+                samples = samples.reshape(-1, 2)
+            else:
+                samples = samples.reshape(-1, 1)
+            self.play_audio(
+                samples=samples,
+                sample_rate=prompt_seg.frame_rate,
+                callback=lambda: self._schedule(2000, self.continue_oddball_trial),
+                log_label="oddball_prompt"
             )
         else:
             self.continue_oddball_trial()
 
     def continue_oddball_trial(self):
         """Continue the oddball trial"""
-        if self.gui_callback.get_playback_state() != "playing" or self.is_paused:
-            self.gui_callback.root_after(100, self.continue_oddball_trial) # Use callback
+        if self.gui_callback.playback_state != "playing" or self.is_paused:
+            self._schedule(100, self.continue_oddball_trial) # Use callback
             return
         ################# first 5 beeps ##############
         if self.oddball_phase == "initial_standard":
             if self.oddball_tone_count < 5:
                 # Play standard tone
-                self.play_tone_non_blocking(1000, 100, "standard", 
-                    lambda: self.start_interruptible_delay(1000, self.continue_oddball_trial))
+                tone_samples = self._generate_tone(1000, 100)  # standard
+                self.play_audio(
+                    samples=tone_samples,
+                    sample_rate=44100,
+                    callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                    log_label="standard_tone"
+                )
                 self.oddball_tone_count += 1
             else:
                 # Switch to main sequence
@@ -210,109 +258,105 @@ class AuditoryStimulator:
             if self.oddball_tone_count < 20:
                 # 20% chance for rare tone
                 if random.random() < 0.2:
-                    self.play_tone_non_blocking(2000, 100, "rare",
-                        lambda: self.start_interruptible_delay(1000, self.continue_oddball_trial))
+                    tone_samples = self._generate_tone(2000, 100)  # rare
+                    self.play_audio(
+                        samples=tone_samples,
+                        sample_rate=44100,
+                        callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                        log_label="rare_tone"
+                    )
                 else:
-                    self.play_tone_non_blocking(1000, 100, "standard",
-                        lambda: self.start_interruptible_delay(1000, self.continue_oddball_trial))
+                    tone_samples = self._generate_tone(1000, 100)  # standard
+                    self.play_audio(
+                        samples=tone_samples,
+                        sample_rate=44100,
+                        callback=lambda: self.gui_callback.root_after(1000, self.continue_oddball_trial),
+                        log_label="standard_tone"
+                    )
                 self.oddball_tone_count += 1
             else:
                 # Oddball trial complete
                 self.finish_current_trial()
 
     def start_voice_trial(self, voice_type):
-        """Start a voice trial (control or loved_one)"""
-        if voice_type == "control":
-            audio_data = self.trials.control_voice_audio
-        else:  # loved_one
-            audio_data = self.trials.loved_one_voice_audio
+        audio_data = self.trials.control_voice_audio if voice_type == "control" else self.trials.loved_one_voice_audio
         if audio_data is not None:
-            # Play the voice audio
-            sd.play(audio_data, self.trials.sample_rate, blocking=False)
-            self.monitor_audio_playback()
+            # Ensure it's int16
+            if audio_data.dtype != np.int16:
+                audio_data = audio_data.astype(np.int16)
+            self.play_audio(
+                samples=audio_data,
+                sample_rate=self.trials.sample_rate,
+                callback=self.finish_current_trial,
+                log_label=f"{voice_type}_voice"
+            )
         else:
             self.finish_current_trial()
 
-    def play_audio_segment(self, audio_segment, callback=None):
-        """Play a pydub AudioSegment non-blocking"""
-        if audio_segment is None:
+    def _generate_tone(self, frequency, duration_ms, sample_rate=44100):
+        """Generate a pure tone as int16 numpy array (mono)."""
+        duration_sec = duration_ms / 1000.0
+        num_samples = int(sample_rate * duration_sec)
+        if num_samples <= 0:
+            num_samples = 1  # avoid empty array
+        t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), False)
+        tone = np.sin(2 * np.pi * frequency * t)
+        return (tone * 32767).astype(np.int16)
+
+    def play_audio(self, samples, sample_rate, callback=None, log_label=None):
+        """
+        Play audio reliably using OutputStream.
+        """
+        if samples.ndim == 1:
+            samples = samples.reshape(-1, 1)
+        elif samples.ndim != 2:
+            raise ValueError("Samples must be 1D or 2D array")
+
+        if log_label is not None:
+            onset_time = time.time() + 0.01
+            self.current_trial_sentences.append({
+                'event': log_label,
+                'onset_time': onset_time
+            })
+
+        # Make a copy to avoid external mutation
+        audio_buffer = samples.copy()
+
+        def stream_callback(outdata, frames, time_info, status):
+            nonlocal audio_buffer
+            if status:
+                print(f"Audio stream warning: {status}")
+            if len(audio_buffer) == 0:
+                outdata.fill(0)
+                raise sd.CallbackStop
+            chunk = audio_buffer[:frames]
+            outdata[:len(chunk)] = chunk
+            audio_buffer = audio_buffer[len(chunk):]
+
+        def on_finish():
+            if hasattr(self, '_active_stream'):
+                del self._active_stream
             if callback:
-                callback()
-            return
-        samples = audio_segment.get_array_of_samples()
-        if audio_segment.channels == 2:
-            samples = samples.reshape((-1, 2))
-        # monitor stimulus duration 
-        duration_sec = len(samples) / audio_segment.frame_rate
-        self.expected_audio_end_time = time.time() + duration_sec
-        # play audio segment
-        sd.play(samples, audio_segment.frame_rate, blocking=False)
-        if callback:
-            self.monitor_audio_playback(callback)
+                self.gui_callback.root_after(10, callback)
 
-    def play_tone_non_blocking(self, frequency, duration_ms, tone_type, callback=None):
-        """Play a tone non-blocking"""
-        # Generate tone
-        audio_segment = Sine(frequency).to_audio_segment(duration=duration_ms)
-        samples = audio_segment.get_array_of_samples()
-        # Record the tone type
-        self.current_trial_sentences.append(tone_type)
-        # Play non-blocking
-        sd.play(samples, audio_segment.frame_rate, blocking=False)
-        if callback:
-            self.monitor_audio_playback(callback)
-
-    def monitor_audio_playback(self, callback=None):
-        """Monitor audio playback and call callback when done"""     
-        if self.gui_callback.get_playback_state() != "playing":
-            # Stop audio if playback was stopped/paused
-            sd.stop()
-            return
-        current_time = time.time()
-        # Add a small tolerance (100 ms) to account for scheduling jitter
-        tolerance = 0.1  # seconds
-        # is stimulus longer than expected
-        if current_time >= (self.expected_audio_end_time + tolerance):
-            if callback:
-                callback()
-            else:
-                self.finish_current_trial()
-        else:
-            # Still playing, check again in 50ms
-            self.gui_callback.root_after(50, lambda: self.monitor_audio_playback(callback)) # Use callback
-
-    def start_interruptible_delay(self, delay_ms, callback):
-        """Start an interruptible delay"""
-        self.delay_end_time = time.time() + (delay_ms / 1000.0)
-        self.delay_callback = callback
-        self.continue_interruptible_delay()
-
-    def continue_interruptible_delay(self):
-        """Continue the interruptible delay"""
-        if self.gui_callback.get_playback_state() != "playing": # Use callback
-            return  # Delay interrupted
-        if self.is_paused:
-            # Extend delay time while paused
-            current_time = time.time()
-            if self.delay_end_time is not None:
-                remaining_time = self.delay_end_time - current_time
-                self.delay_end_time = time.time() + remaining_time
-            self.gui_callback.root_after(100, self.continue_interruptible_delay) # Use callback
-            return
-        if self.delay_end_time is not None and time.time() >= self.delay_end_time:
-            # Delay complete
-            if hasattr(self, 'delay_callback') and self.delay_callback:
-                self.delay_callback()
-        else:
-            # Continue delay
-            self.gui_callback.root_after(50, self.continue_interruptible_delay) # Use callback
+        try:
+            stream = sd.OutputStream(
+                samplerate=sample_rate,
+                channels=samples.shape[1],
+                dtype='int16',
+                callback=stream_callback,
+                finished_callback=on_finish
+            )
+            stream.start()
+            self._active_stream = stream
+        except Exception as e:
+            self.gui_callback.playback_error(f"Audio playback failed: {e}")
+            on_finish()
 
     def finish_current_trial(self):
         """Finish the current trial and move to next"""
-        if self.gui_callback.get_playback_state() != "playing":
+        if self.gui_callback.playback_state != "playing":
             return
-        # Stop any remaining audio
-        sd.stop()
         # Record the trial result
         patient_id = self.gui_callback.get_patient_id() # Use callback
         trial = self.trials.trial_dictionary[self.trials.current_trial_index]
@@ -326,7 +370,7 @@ class AuditoryStimulator:
             'end_time': end_time,
             'duration': end_time - self.current_trial_start_time if self.current_trial_start_time is not None else 0
         }
-        #
+        
         self.save_single_trial_result(trial_result)
         # Mark as completed
         trial['status'] = 'completed'
@@ -336,29 +380,72 @@ class AuditoryStimulator:
         self.trials.current_trial_index += 1
         # Add inter-trial delay (1.2-2.2 seconds)
         delay = random.uniform(1200, 2200)  # milliseconds
-        self.start_interruptible_delay(delay, self.continue_playback)
+        self._schedule(delay, self.continue_playback)
 
     def toggle_pause(self):
-        """Toggle pause state"""
         if self.is_paused:
-            # Currently paused, so resume
+            # Resume: restart the current trial from the beginning
             self.is_paused = False
-            self.gui_callback.root_after(100, self.continue_playback)
+            self.gui_callback.playback_state = "playing"
+            self.gui_callback.update_button_states()
+            self.gui_callback.status_label.config(text="Resuming stimulus...", foreground="blue")
+            # Reset trial state and replay it
+            self.reset_current_trial_state()
+            self.play_current_trial()  # Start over
         else:
-            # Currently playing, so pause
+            # Pause: stop everything and mark trial as pending
+            if hasattr(self, '_active_stream'):
+                try:
+                    self._active_stream.stop()
+                    self._active_stream.close()
+                except:
+                    pass
+                del self._active_stream
+            self._cancel_scheduled_callbacks()
             self.is_paused = True
-            sd.stop()
-            # check if currently in progress and reset to pending 
             current_trial = self.trials.trial_dictionary[self.trials.current_trial_index]
-            if current_trial['status'] == 'in progress':
-                current_trial['status'] = 'pending'
-                self.gui_callback.update_trial_list_status()
+            current_trial['status'] = 'pending'
+            self.gui_callback.update_trial_list_status()
+            self.gui_callback.playback_state = "paused"
+            self.gui_callback.update_button_states()
+            self.gui_callback.status_label.config(text="Stimulus paused – trial will restart", foreground="orange")
 
+    def reset_current_trial_state(self):
+        """Reset state variables specific to the current trial to prepare for a clean restart."""
+        if not self.trials.trial_dictionary:
+            return
+
+        trial = self.trials.trial_dictionary[self.trials.current_trial_index]
+
+        # Reset common trial state
+        self.current_trial_start_time = None
+        self.current_trial_sentences = []
+        self.prompt = False  # Safe to reset; will be set again based on trial_type
+
+        # Reset command-specific state
+        self.cmd_trial_side = None
+        self.cmd_trial_cycle = 0
+        self.cmd_trial_phase = None
+
+        # Reset oddball-specific state
+        self.oddball_tone_count = 0
+        self.oddball_phase = None
+
+        # Reset delay-related state (if you keep any simple delays)
+        self.delay_callback = None
+
+        # Mark trial as pending (in case it was 'in progress')
+        trial['status'] = 'pending'
 
     def stop_stimulus(self):
-        """Stop the current stimulus playback"""
-        # Stop any playing audio
-        sd.stop()
+        """Stop current audio and reset."""
+        if hasattr(self, '_active_stream'):
+            try:
+                self._active_stream.stop()
+                self._active_stream.close()
+            except:
+                pass
+            del self._active_stream
         self.reset_trial_state()
 
     def save_single_trial_result(self, trial_result):
@@ -380,3 +467,16 @@ class AuditoryStimulator:
         # If the file doesn't exist, it will be created. 
         # If it does exist, the new row is appended without a header.
         df.to_csv(results_path, mode='a', header=not os.path.exists(results_path), index=False)
+
+    def _schedule(self, delay_ms, callback):
+        """Wrapper to track scheduled callbacks"""
+        id = self.gui_callback.root.after(delay_ms, callback)
+        self.scheduled_callbacks.append(id)
+        return id
+    
+    def _cancel_scheduled_callbacks(self):
+        """Cancel all pending Tkinter after callbacks"""
+        for id in self.scheduled_callbacks:
+            self.gui_callback.root.after_cancel(id)
+        self.scheduled_callbacks.clear()
+    

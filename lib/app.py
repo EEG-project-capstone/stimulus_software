@@ -35,15 +35,9 @@ class TkApp:
         self.loved_one_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
         self.build_main_ui()
-
-    def get_playback_state(self):
-        return self.playback_state
     
     def get_patient_id(self):
         return self.patient_id_entry.get().strip()
-
-    def root_after(self, ms, func):
-        self.root.after(ms, func)
 
     def playback_complete(self):
         """Handle completion of stimulus playback"""
@@ -365,31 +359,18 @@ class TkApp:
             self.file_label.config(text=os.path.basename(file_path))
 
     def update_button_states(self):
-        if self.playback_state == "empty":
-            self.prepare_button.config(state='disabled')
-            self.play_button.config(state='disabled')
-            self.pause_button.config(state='disabled')
-            self.stop_button.config(state='disabled')
-        elif self.playback_state == "ready":
-            self.prepare_button.config(state='normal')
-            self.play_button.config(state='normal')
-            self.pause_button.config(state='disabled')
-            self.stop_button.config(state='disabled')
-        elif self.playback_state == "preparing":
-            self.prepare_button.config(state='disabled')
-            self.play_button.config(state='disabled')
-            self.pause_button.config(state='disabled')
-            self.stop_button.config(state='disabled')
-        elif self.playback_state == "paused":
-            self.prepare_button.config(state='disabled')
-            self.play_button.config(state='disabled')
-            self.pause_button.config(state='normal')
-            self.stop_button.config(state='normal')
-        elif self.playback_state == "playing":
-            self.prepare_button.config(state='disabled')
-            self.play_button.config(state='disabled')
-            self.pause_button.config(state='normal')
-            self.stop_button.config(state='normal')
+        config = {
+            "empty":     {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled'},
+            "ready":     {'prepare': 'normal',   'play': 'normal',   'pause': 'disabled', 'stop': 'disabled'},
+            "preparing": {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled'},
+            "paused":    {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal'},
+            "playing":   {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal'},
+        }
+        states = config.get(self.playback_state, config["empty"])
+        self.prepare_button.config(state=states['prepare'])
+        self.play_button.config(state=states['play'])
+        self.pause_button.config(state=states['pause'])
+        self.stop_button.config(state=states['stop'])
 
     def toggle_pause(self):
         if self.playback_state == "playing":
@@ -431,7 +412,7 @@ class TkApp:
         self.playback_state = "preparing"
         self.update_button_states()
         self.status_label.config(text="Preparing stimulus...", foreground="blue")
-        self.root.after(10, self.start_preparation)
+        self.start_preparation
 
     def start_preparation(self):
         """Start the preparation process"""
