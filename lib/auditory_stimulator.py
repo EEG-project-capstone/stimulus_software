@@ -464,22 +464,24 @@ class AuditoryStimulator:
 
     def save_single_trial_result(self, trial_result):
         """Save a single trial result to the stimulus results CSV file by appending"""
-        # Get the results directory and patient ID from the config and GUI
-        results_dir = self.config.file.get('result_dir', '.')
+        results_dir = self.config.file.get('result_dir', 'data/results')
         patient_id = self.gui_callback.get_patient_id()
-        
-        # Create the directory if it doesn't exist
         os.makedirs(results_dir, exist_ok=True)
-        
-        # Define the file path
         results_path = os.path.join(results_dir, f"{patient_id}_{self.config.current_date}_stimulus_results.csv")
         
-        # Create a DataFrame for the single trial
-        df = pd.DataFrame([trial_result])
+        # Ensure consistent schema: add 'notes' field if missing
+        trial_result = {
+            'patient_id': patient_id,
+            'date': self.config.current_date,
+            'trial_type': trial_result.get('trial_type', ''),
+            'sentences': trial_result.get('sentences', ''),
+            'start_time': trial_result.get('start_time', ''),
+            'end_time': trial_result.get('end_time', ''),
+            'duration': trial_result.get('duration', ''),
+            'notes': '' 
+        }
         
-        # Append to the CSV file. 
-        # If the file doesn't exist, it will be created. 
-        # If it does exist, the new row is appended without a header.
+        df = pd.DataFrame([trial_result])
         df.to_csv(results_path, mode='a', header=not os.path.exists(results_path), index=False)
 
     def _schedule(self, delay_ms, callback):

@@ -1,19 +1,12 @@
-# INPUT CHANGES HERE
+# config.yml
 
-os: 'os' # 'windows' or 'linux' or 'os'
+os: 'os'  # 'windows', 'linux', or 'os'
 
-# Define your output path:
-patient_df_path: 'patient_data/patient_df.csv'
-patient_note_path: 'patient_data/patient_notes.csv'
-patient_output_dir: 'patient_data/patients/'
-patient_label_path: 'patient_data/patient_records.csv'
-edf_dir: 'patient_data/edfs/'
-result_dir: 'patient_data/results/'
-cmd_result_dir: 'patient_data/results/cmd/'
-lang_tracking_dir: 'patient_data/results/lang_tracking/' 
+# === OUTPUT PATHS ===
+edf_dir: 'data/edfs/'
+result_dir: 'data/results/'
 
-# Define your input path
-stimuli_dir: 'audio_data/lang_trials/'
+# === AUDIO INPUT PATHS ===
 sentences_path: 'audio_data/sentences/'
 right_keep_path: 'audio_data/static/right_keep.mp3'
 right_stop_path: 'audio_data/static/right_stop.mp3'

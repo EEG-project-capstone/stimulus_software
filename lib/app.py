@@ -10,13 +10,12 @@ from tkinter import messagebox, ttk, filedialog
 from lib.config import Config
 from lib.trials import Trials
 from lib.auditory_stimulator import AuditoryStimulator
-from lib.notes import add_notes
 
 class TkApp:
     def __init__(self, root):
         self.root = root
         self.root.title("EEG Stimulus Package")
-        self.root.geometry("775x830")
+        self.root.geometry("1050x830")
         
         # create class instances 
         self.config = Config()
@@ -37,6 +36,7 @@ class TkApp:
         self.build_main_ui()
     
     def get_patient_id(self):
+        """Get patient ID from Stimulus tab"""
         return self.patient_id_entry.get().strip()
 
     def playback_complete(self):
@@ -44,7 +44,7 @@ class TkApp:
         patient_id = self.patient_id_entry.get().strip()
         self.playback_state = "ready"
         self.audio_stim.is_paused = False # Ensure sync
-        self.pause_button.config(text="Pause")
+        self.pause_button.config(text="Pause", image=self.pause_sym)
         self.update_button_states()
         self.status_label.config(text=f"Stimulus completed for {patient_id}", foreground="green")
         messagebox.showinfo("Success", f"Stimulus administered successfully to {patient_id}")
@@ -53,21 +53,9 @@ class TkApp:
         """Handle playback errors"""
         self.playback_state = "ready"
         self.audio_stim.is_paused = False # Ensure sync
+        self.pause_button.config(text="Pause", image=self.pause_sym)
         self.update_button_states()
         messagebox.showerror("Playback Error", f"Error during playback: {error_msg}")
-
-    def browse_edf_file(self):
-        """Open a file dialog to select an EDF file and update the label."""
-        file_path = filedialog.askopenfilename(
-            title="Select EDF File",
-            filetypes=[("EDF files", "*.edf"), ("All files", "*.*")]
-        )
-        if file_path:
-            self.edf_file_label.config(text=os.path.basename(file_path))
-            self.selected_edf_file = file_path
-        else:
-            self.edf_file_label.config(text="No file selected")
-            self.selected_edf_file = None
 
     def build_main_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -156,16 +144,25 @@ class TkApp:
         self.stop_button = ttk.Button(control_frame, text="", image=self.stop_sym, compound=tk.CENTER, command=self.stop_stimulus)
         self.stop_button.pack(side='right', padx=10, ipady=4)
 
-        # Trial List Frame (with scrollbar)
-        trial_list_frame = ttk.LabelFrame(main_frame, text="Trial Sequence")
-        trial_list_frame.pack(fill='x', pady=5)
+        # === SIDE-BY-SIDE: Trial List + Notes ===
+        side_by_side_frame = ttk.Frame(main_frame)
+        side_by_side_frame.pack(fill='both', expand=True, pady=5)
+        side_by_side_frame.grid_columnconfigure(0, weight=1)  # Trial list gets more space
+        side_by_side_frame.grid_columnconfigure(1, weight=1)  # Notes gets equal space
+        side_by_side_frame.grid_rowconfigure(0, weight=1)
+
+        # Trial List Frame (left)
+        trial_list_frame = ttk.LabelFrame(side_by_side_frame, text="Trial Sequence")
+        trial_list_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+        trial_list_frame.grid_columnconfigure(0, weight=1)
+        trial_list_frame.grid_rowconfigure(0, weight=1)
 
         # Treeview with scrollbar
-        self.trial_tree = ttk.Treeview(trial_list_frame, columns=('Type', 'Status'), show='headings', height=8)
+        self.trial_tree = ttk.Treeview(trial_list_frame, columns=('Type', 'Status'), show='headings', height=12)
         self.trial_tree.heading('Type', text='Trial Type')
         self.trial_tree.heading('Status', text='Status')
-        self.trial_tree.column('Type', width=150)
-        self.trial_tree.column('Status', width=100)
+        self.trial_tree.column('Type', width=150, minwidth=100)
+        self.trial_tree.column('Status', width=100, minwidth=80)
         self.trial_tree.tag_configure('pending', foreground='gray')
         self.trial_tree.tag_configure('inprogress', foreground='blue')
         self.trial_tree.tag_configure('completed', foreground='green')
@@ -174,128 +171,181 @@ class TkApp:
         tree_scroll = ttk.Scrollbar(trial_list_frame, orient="vertical", command=self.trial_tree.yview)
         tree_scroll.pack(side='right', fill='y')
         self.trial_tree.configure(yscrollcommand=tree_scroll.set)
-        self.trial_tree.pack(side='left', fill='x', expand=True, padx=(5, 0), pady=5)
+        self.trial_tree.pack(side='left', fill='both', expand=True, padx=(5, 0), pady=5)
 
-        # Notes section
-        notes_frame = ttk.LabelFrame(main_frame, text="Notes", padding="10")
-        notes_frame.pack(fill='both', expand=True, pady=5)
+        # Notes Frame (right)
+        notes_frame = ttk.LabelFrame(side_by_side_frame, text="Notes", padding="10")
+        notes_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
+        notes_frame.grid_columnconfigure(1, weight=1)
+        notes_frame.grid_rowconfigure(1, weight=1)
+
         ttk.Label(notes_frame, text="Add Note:").grid(row=0, column=0, sticky='w')
-        self.note_entry = ttk.Entry(notes_frame, width=50)
+        self.note_entry = ttk.Entry(notes_frame, width=40)
         self.note_entry.grid(row=0, column=1, sticky='ew', padx=5)
         ttk.Button(notes_frame, text="Add Note", command=self.add_note).grid(row=0, column=2, padx=5)
-        ttk.Label(notes_frame, text="Find Notes:").grid(row=1, column=0, sticky='w', pady=(10,0))
-        self.notes_text = tk.Text(notes_frame, height=12, width=60)  # Increased height from 5 to 8
-        self.notes_text.grid(row=2, column=0, columnspan=3, sticky='ew', pady=5)
-        notes_frame.grid_columnconfigure(1, weight=1)
-        notes_frame.grid_rowconfigure(2, weight=1)  # Allow the text widget to expand vertically
+        self.notes_text = tk.Text(notes_frame, height=10, width=40)
+        self.notes_text.grid(row=1, column=0, columnspan=3, sticky='nsew', pady=5)
 
         # Update button states
         self.update_button_states()
 
     def build_patient_info_tab(self):
-        info_frame = ttk.LabelFrame(self.tab2, text="Upload EEG Files", padding="20")
-        info_frame.pack(fill='x', pady=10)
-        ttk.Label(info_frame, text="Patient ID:").grid(row=0, column=0, sticky='w', pady=5)
-        self.info_patient_id = ttk.Entry(info_frame, width=30)
-        self.info_patient_id.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        ttk.Label(info_frame, text="Recording Date:").grid(row=1, column=0, sticky='w', pady=5)
-        self.date_entry = ttk.Entry(info_frame, width=30)
-        self.date_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        self.date_entry.insert(0, datetime.date.today().strftime("%Y-%m-%d"))
-        ttk.Label(info_frame, text="EDF File:").grid(row=2, column=0, sticky='w', pady=5)
-        file_frame = ttk.Frame(info_frame)
-        file_frame.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
-        self.edf_file_label = ttk.Label(file_frame, text="No file selected")
-        self.edf_file_label.pack(side='left')
-        ttk.Button(file_frame, text="Browse", command=self.browse_edf_file).pack(side='right')
-        ttk.Label(info_frame, text="CPC Score:").grid(row=3, column=0, sticky='w', pady=5)
-        self.cpc_combo = ttk.Combobox(info_frame, values=self.config.cpc_scale, state="readonly")
-        self.cpc_combo.grid(row=3, column=1, sticky='ew', padx=5, pady=5)
-        ttk.Label(info_frame, text="GOSE Score:").grid(row=4, column=0, sticky='w', pady=5)
-        self.gose_combo = ttk.Combobox(info_frame, values=self.config.gose_scale, state="readonly")
-        self.gose_combo.grid(row=4, column=1, sticky='ew', padx=5, pady=5)
-        ttk.Button(info_frame, text="Submit", command=self.submit_patient_info).grid(row=5, column=0, columnspan=2, pady=20)
-        info_frame.grid_columnconfigure(1, weight=1)
+        info_frame = ttk.LabelFrame(self.tab2, text="Select Session Files", padding="20")
+        info_frame.pack(fill='both', expand=True, padx=20, pady=10)
+
+        # Stimulus CSV selection
+        ttk.Label(info_frame, text="Stimulus Results File:").grid(row=0, column=0, sticky='w', pady=5)
+        self.stimulus_file_combo = ttk.Combobox(info_frame, state="readonly")
+        self.stimulus_file_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.stimulus_file_combo.bind('<<ComboboxSelected>>', self.on_stimulus_file_selected)
+
+        # EDF file selection
+        ttk.Label(info_frame, text="EDF File:").grid(row=1, column=0, sticky='w', pady=5)
+        self.edf_file_combo = ttk.Combobox(info_frame, state="readonly")
+        self.edf_file_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        self.edf_file_combo.bind('<<ComboboxSelected>>', self.on_edf_file_selected)
+
+        # Info label
+        self.file_info_label = ttk.Label(info_frame, text="No files selected", foreground="gray")
+        self.file_info_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=(10, 0))
+
+        # === READ-ONLY NOTES DISPLAY ===
+        notes_frame = ttk.LabelFrame(self.tab2, text="Session Notes (Read-Only)", padding="10")
+        notes_frame.pack(fill='both', expand=True, padx=20, pady=10)
+
+        self.patient_info_notes_text = tk.Text(notes_frame, height=10, width=60, state="disabled")
+        self.patient_info_notes_text.grid(row=0, column=0, columnspan=3, sticky='nsew', pady=5)
+        
+        notes_frame.grid_columnconfigure(0, weight=1)
+        notes_frame.grid_rowconfigure(0, weight=1)
+
+        # Initialize file lists
+        self.selected_stimulus_path = None
+        self.selected_edf_path = None
+        self.refresh_file_lists()
 
     def build_results_tab(self):
         results_frame = ttk.LabelFrame(self.tab3, text="EEG Analysis", padding="20")
         results_frame.pack(fill='both', expand=True, pady=10)
         ttk.Label(results_frame, text="Select Patient:").grid(row=0, column=0, sticky='w', pady=5)
-        self.results_patient_combo = ttk.Combobox(results_frame, state="readonly")
-        self.results_patient_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        self.results_patient_combo.bind('<<ComboboxSelected>>', self.update_dates_combo)
-        ttk.Label(results_frame, text="Select Date:").grid(row=1, column=0, sticky='w', pady=5)
-        self.results_date_combo = ttk.Combobox(results_frame, state="readonly")
-        self.results_date_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        ttk.Label(results_frame, text="Graph Type:").grid(row=2, column=0, sticky='w', pady=5)
-        self.graph_type_combo = ttk.Combobox(results_frame, values=self.config.graphs, state="readonly")
-        self.graph_type_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
-        self.graph_type_combo.bind('<<ComboboxSelected>>', self.on_graph_type_change)
-        self.lang_options_frame = ttk.LabelFrame(results_frame, text="Language Tracking Options", padding="10")
-        ttk.Label(self.lang_options_frame, text="Bad Channels:").grid(row=0, column=0, sticky='w', pady=5)
-        self.bad_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
-        self.bad_channels_entry.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        self.bad_channels_entry.insert(0, "T7,Fp1,Fp2")
-        ttk.Label(self.lang_options_frame, text="EOG Channels:").grid(row=1, column=0, sticky='w', pady=5)
-        self.eog_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
-        self.eog_channels_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        self.eog_channels_entry.insert(0, "Fp1,Fp2,T7")
-        ttk.Label(self.lang_options_frame, text="Display:").grid(row=2, column=0, sticky='w', pady=5)
-        self.display_option_combo = ttk.Combobox(self.lang_options_frame, values=["Average ITPC", "Individual Channel"], state="readonly")
-        self.display_option_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
-        self.display_option_combo.bind('<<ComboboxSelected>>', self.on_display_option_change)
-        self.channel_label = ttk.Label(self.lang_options_frame, text="Channel:")
-        self.channel_combo = ttk.Combobox(self.lang_options_frame, values=['C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8','Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8'], state="readonly")
-        button_frame = ttk.Frame(results_frame)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
-        self.cmd_button = ttk.Button(button_frame, text="Run CMD Analysis", command=self.run_cmd_analysis)
-        self.cmd_button.pack(side='left', padx=5)
-        self.lang_button = ttk.Button(button_frame, text="Run Language Analysis", command=self.run_lang_analysis)
-        self.lang_button.pack(side='left', padx=5)
-        self.image_frame = ttk.Frame(results_frame)
-        self.image_frame.grid(row=5, column=0, columnspan=2, sticky='nsew', pady=10)
-        self.image_canvas = tk.Canvas(self.image_frame, bg='white')
-        self.image_v_scrollbar = ttk.Scrollbar(self.image_frame, orient="vertical", command=self.image_canvas.yview)
-        self.image_h_scrollbar = ttk.Scrollbar(self.image_frame, orient="horizontal", command=self.image_canvas.xview)
-        self.image_canvas.configure(yscrollcommand=self.image_v_scrollbar.set, xscrollcommand=self.image_h_scrollbar.set)
-        self.image_canvas.grid(row=0, column=0, sticky='nsew')
-        self.image_v_scrollbar.grid(row=0, column=1, sticky='ns')
-        self.image_h_scrollbar.grid(row=1, column=0, sticky='ew')
-        self.image_frame.grid_rowconfigure(0, weight=1)
-        self.image_frame.grid_columnconfigure(0, weight=1)
-        results_frame.grid_columnconfigure(1, weight=1)
-        results_frame.grid_rowconfigure(5, weight=1)
-        self.update_patients_combo()
+        # self.results_patient_combo = ttk.Combobox(results_frame, state="disabled")
+        # self.results_patient_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        # self.results_patient_combo.bind('<<ComboboxSelected>>', self.update_dates_combo)
+        # ttk.Label(results_frame, text="Select Date:").grid(row=1, column=0, sticky='w', pady=5)
+        # self.results_date_combo = ttk.Combobox(results_frame, state="disabled")
+        # self.results_date_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        # ttk.Label(results_frame, text="Graph Type:").grid(row=2, column=0, sticky='w', pady=5)
+        # self.graph_type_combo = ttk.Combobox(results_frame, values=self.config.graphs, state="readonly")
+        # self.graph_type_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
+        # self.graph_type_combo.bind('<<ComboboxSelected>>', self.on_graph_type_change)
+        # self.lang_options_frame = ttk.LabelFrame(results_frame, text="Language Tracking Options", padding="10")
+        # ttk.Label(self.lang_options_frame, text="Bad Channels:").grid(row=0, column=0, sticky='w', pady=5)
+        # self.bad_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
+        # self.bad_channels_entry.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        # self.bad_channels_entry.insert(0, "T7,Fp1,Fp2")
+        # ttk.Label(self.lang_options_frame, text="EOG Channels:").grid(row=1, column=0, sticky='w', pady=5)
+        # self.eog_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
+        # self.eog_channels_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        # self.eog_channels_entry.insert(0, "Fp1,Fp2,T7")
+        # ttk.Label(self.lang_options_frame, text="Display:").grid(row=2, column=0, sticky='w', pady=5)
+        # self.display_option_combo = ttk.Combobox(self.lang_options_frame, values=["Average ITPC", "Individual Channel"], state="readonly")
+        # self.display_option_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
+        # self.display_option_combo.bind('<<ComboboxSelected>>', self.on_display_option_change)
+        # self.channel_label = ttk.Label(self.lang_options_frame, text="Channel:")
+        # self.channel_combo = ttk.Combobox(self.lang_options_frame, values=['C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8','Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8'], state="readonly")
+        # button_frame = ttk.Frame(results_frame)
+        # button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        # self.cmd_button = ttk.Button(button_frame, text="Run CMD Analysis", command=self.run_cmd_analysis)
+        # self.cmd_button.pack(side='left', padx=5)
+        # self.lang_button = ttk.Button(button_frame, text="Run Language Analysis", command=self.run_lang_analysis)
+        # self.lang_button.pack(side='left', padx=5)
+        # self.image_frame = ttk.Frame(results_frame)
+        # self.image_frame.grid(row=5, column=0, columnspan=2, sticky='nsew', pady=10)
+        # self.image_canvas = tk.Canvas(self.image_frame, bg='white')
+        # self.image_v_scrollbar = ttk.Scrollbar(self.image_frame, orient="vertical", command=self.image_canvas.yview)
+        # self.image_h_scrollbar = ttk.Scrollbar(self.image_frame, orient="horizontal", command=self.image_canvas.xview)
+        # self.image_canvas.configure(yscrollcommand=self.image_v_scrollbar.set, xscrollcommand=self.image_h_scrollbar.set)
+        # self.image_canvas.grid(row=0, column=0, sticky='nsew')
+        # self.image_v_scrollbar.grid(row=0, column=1, sticky='ns')
+        # self.image_h_scrollbar.grid(row=1, column=0, sticky='ew')
+        # self.image_frame.grid_rowconfigure(0, weight=1)
+        # self.image_frame.grid_columnconfigure(0, weight=1)
+        # results_frame.grid_columnconfigure(1, weight=1)
+        # results_frame.grid_rowconfigure(5, weight=1)
 
-    def update_patients_combo(self):
-        """Update the patient combo box with available patient IDs."""
-        # Load patient IDs from the patient label CSV file
-        label_path = self.config.file.get('patient_label_path', 'patient_labels.csv')
-        if os.path.exists(label_path):
-            df = pd.read_csv(label_path)
-            patient_ids = df['patient_id'].unique().tolist()
+    def refresh_file_lists(self):
+        # Stimulus CSVs
+        results_dir = self.config.file.get('result_dir', 'data/results')
+        os.makedirs(results_dir, exist_ok=True)
+        stim_files = [f for f in os.listdir(results_dir) if f.endswith('_stimulus_results.csv')]
+        stim_files.sort()
+        self.stimulus_file_combo['values'] = stim_files
+        if stim_files:
+            self.stimulus_file_combo.set(stim_files[0])
+            self.on_stimulus_file_selected()
         else:
-            patient_ids = []
-        self.results_patient_combo['values'] = patient_ids
-        if patient_ids:
-            self.results_patient_combo.set(patient_ids[0])
-        else:
-            self.results_patient_combo.set('')
+            self.stimulus_file_combo.set('')
+            self.selected_stimulus_path = None
 
-    def update_dates_combo(self, event=None):
-        """Update the date combo box based on selected patient."""
-        selected_patient = self.results_patient_combo.get()
-        label_path = self.config.file.get('patient_label_path', 'patient_labels.csv')
-        if os.path.exists(label_path) and selected_patient:
-            df = pd.read_csv(label_path)
-            dates = df[df['patient_id'] == selected_patient]['date'].unique().tolist()
+        # EDF files
+        edf_dir = self.config.file.get('edf_dir', 'data/edfs')
+        os.makedirs(edf_dir, exist_ok=True)
+        edf_files = [f for f in os.listdir(edf_dir) if f.lower().endswith('.edf')]
+        edf_files.sort()
+        self.edf_file_combo['values'] = edf_files
+        if edf_files:
+            self.edf_file_combo.set(edf_files[0])
+            self.on_edf_file_selected()
         else:
-            dates = []
-        self.results_date_combo['values'] = dates
-        if dates:
-            self.results_date_combo.set(dates[0])
-        else:
-            self.results_date_combo.set('')
+            self.edf_file_combo.set('')
+            self.selected_edf_path = None
+
+    def on_stimulus_file_selected(self, event=None):
+        filename = self.stimulus_file_combo.get()
+        results_dir = self.config.file.get('result_dir', 'data/results')
+        self.selected_stimulus_path = os.path.join(results_dir, filename) if filename else None
+        self.update_file_info_label()
+        
+        # Clear and load notes into Patient Info tab
+        self.patient_info_notes_text.config(state="normal")
+        self.patient_info_notes_text.delete(1.0, tk.END)
+        
+        if filename:
+            self.load_notes_from_stimulus_file(
+                self.selected_stimulus_path, 
+                text_widget=self.patient_info_notes_text
+            )
+        
+        self.patient_info_notes_text.config(state="disabled")
+
+    def on_edf_file_selected(self, event=None):
+        filename = self.edf_file_combo.get()
+        edf_dir = self.config.file.get('edf_dir', 'data/edfs')
+        self.selected_edf_path = os.path.join(edf_dir, filename) if filename else None
+        self.update_file_info_label()
+
+    def update_file_info_label(self):
+        stim = os.path.basename(self.selected_stimulus_path) if self.selected_stimulus_path else "None"
+        edf = os.path.basename(self.selected_edf_path) if self.selected_edf_path else "None"
+        self.file_info_label.config(text=f"Stimulus: {stim} | EDF: {edf}")
+
+    def load_notes_from_stimulus_file(self, filepath, text_widget=None):
+        """Load notes from stimulus CSV into specified text widget."""
+        if text_widget is None:
+            text_widget = self.notes_text  # Default to Stimulus tab
+        
+        try:
+            df = pd.read_csv(filepath)
+            if 'trial_type' in df.columns and 'notes' in df.columns:
+                note_rows = df[df['trial_type'] == 'session_note']
+                for _, row in note_rows.iterrows():
+                    date = row.get('date', 'Unknown')
+                    note_text = str(row.get('notes', '')).strip()
+                    if note_text:
+                        text_widget.insert(tk.END, f"[{date}] {note_text}\n")
+                text_widget.see(tk.END)
+        except Exception as e:
+            print(f"Could not load notes from {filepath}: {e}")
 
     def on_patient_id_change(self, event=None):
         patient_id = self.patient_id_entry.get().strip()
@@ -303,25 +353,11 @@ class TkApp:
             self.current_patient = patient_id
             self.playback_state = "ready"
             self.status_label.config(text="Ready to prepare stimulus", foreground="green")
-            self.load_patient_notes(patient_id)
         else:
             self.current_patient = None
             self.playback_state = "empty"
             self.status_label.config(text="Please enter a patient ID", foreground="red")
         self.update_button_states()
-
-    def load_patient_notes(self, patient_id):
-        """Load and display saved notes for the patient."""
-        self.notes_text.delete(1.0, tk.END)
-        try:
-            from lib.notes import load_notes
-            notes = load_notes(patient_id)
-            for note in notes:
-                self.notes_text.insert(tk.END, note + "\n")
-            if notes:
-                self.notes_text.see(tk.END)
-        except Exception as e:
-            print(f"Could not load notes: {e}")
 
     def toggle_loved_one_options(self):
         state = 'normal' if self.loved_one_var.get() else 'disabled'
@@ -392,8 +428,7 @@ class TkApp:
         """Stop the current stimulus playback"""
         if self.playback_state in ["playing", "paused"]:
             self.playback_state = "ready"
-            self.pause_button.config(text="Pause")
-            sd.stop()
+            self.pause_button.config(text="Pause", image=self.pause_sym)
             self.audio_stim.stop_stimulus()
             self.status_label.config(text="Stimulus stopped", foreground="orange")
             self.update_button_states()
@@ -464,29 +499,55 @@ class TkApp:
         self.audio_stim.play_trial_sequence()
 
     def add_note(self):
-        """Add a note to the notes section."""
+        """Add a note by appending a row to the stimulus results CSV in real time."""
         note = self.note_entry.get().strip()
         patient_id = self.get_patient_id()
+        
         if not patient_id:
             messagebox.showwarning("No Patient ID", "Please enter a patient ID before adding a note.")
             return
         if not note:
             messagebox.showwarning("Empty Note", "Please enter a note before adding.")
             return
+
+        # Use the same result directory and filename pattern as AuditoryStimulator
+        results_dir = self.config.file.get('result_dir', 'data/results')
+        date_str = time.strftime("%Y-%m-%d")
+        results_path = os.path.join(results_dir, f"{patient_id}_{date_str}_stimulus_results.csv")
         
+        # Ensure directory exists
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Create note row with same structure as trial rows
+        note_row = {
+            'patient_id': patient_id,
+            'date': date_str,
+            'trial_type': 'session_note',
+            'sentences': '',
+            'start_time': '',
+            'end_time': '',
+            'duration': '',
+            'notes': note
+        }
+
         try:
-            # Save the note persistently
-            current_date = time.strftime("%Y-%m-%d")
-            add_notes(patient_id=patient_id, note=note, recorded_date=current_date)
+            # Append to CSV (header only if file doesn't exist)
+            note_df = pd.DataFrame([note_row])
+            note_df.to_csv(
+                results_path,
+                mode='a',
+                header=not os.path.exists(results_path),
+                index=False
+            )
             
             # Display in UI
-            self.notes_text.insert(tk.END, f"[{current_date}] {note}\n")
-            self.notes_text.see(tk.END)  # Scroll to bottom
+            self.notes_text.insert(tk.END, f"[{date_str}] {note}\n")
+            self.notes_text.see(tk.END)
             self.note_entry.delete(0, tk.END)
             
         except Exception as e:
-            messagebox.showerror("Note Error", f"Failed to save note: {e}")
-
+            messagebox.showerror("Note Save Error", f"Failed to save note:\n{str(e)}")
+            
     # Placeholder methods for Results tab (keep as is or implement)
     def run_lang_analysis(self):
         """Run language analysis for the selected patient and date."""
@@ -495,62 +556,6 @@ class TkApp:
     def run_cmd_analysis(self):
         """Run CMD analysis for the selected patient and date."""
         messagebox.showinfo("CMD Analysis", "CMD analysis is not yet implemented.")
-
-    def on_display_option_change(self, event=None):
-        """Handle changes in display option selection for Language Tracking."""
-        selected_option = self.display_option_combo.get()
-        if selected_option == "Individual Channel":
-            self.channel_label.grid(row=3, column=0, sticky='w', pady=5)
-            self.channel_combo.grid(row=3, column=1, sticky='ew', padx=5, pady=5)
-        else:
-            self.channel_label.grid_remove()
-            self.channel_combo.grid_remove()
-
-    def on_graph_type_change(self, event=None):
-        """Handle changes in graph type selection."""
-        selected_graph = self.graph_type_combo.get()
-        if selected_graph == "Language Tracking":
-            self.lang_options_frame.grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
-        else:
-            self.lang_options_frame.grid_remove()
-
-    def submit_patient_info(self):
-        """Handle submission of patient information from the Patient Information tab."""
-        patient_id = self.info_patient_id.get().strip()
-        recording_date = self.date_entry.get().strip()
-        edf_file = getattr(self, 'selected_edf_file', None)
-        cpc_score = self.cpc_combo.get()
-        gose_score = self.gose_combo.get()
-        if not patient_id:
-            messagebox.showwarning("Missing Patient ID", "Please enter a patient ID.")
-            return
-        if not recording_date:
-            messagebox.showwarning("Missing Date", "Please enter a recording date.")
-            return
-        if not edf_file:
-            messagebox.showwarning("Missing EDF File", "Please select an EDF file.")
-            return
-        if not cpc_score or cpc_score == "":
-            messagebox.showwarning("Missing CPC Score", "Please select a CPC score.")
-            return
-        if not gose_score or gose_score == "":
-            messagebox.showwarning("Missing GOSE Score", "Please select a GOSE score.")
-            return
-        # Save patient info to CSV
-        label_path = self.config.file.get('patient_label_path', 'patient_labels.csv')
-        if os.path.exists(label_path):
-            df = pd.read_csv(label_path)
-        else:
-            df = pd.DataFrame(columns=['patient_id', 'date', 'cpc', 'gose'])
-        new_row = {
-            'patient_id': patient_id,
-            'date': recording_date,
-            'cpc': cpc_score,
-            'gose': gose_score
-        }
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        df.to_csv(label_path, index=False)
-        messagebox.showinfo("Success", "Patient information submitted successfully.")
 
     def populate_trial_list(self):
         """Populate the Treeview with all trials from trial_dictionary."""

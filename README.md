@@ -61,13 +61,8 @@ patient_data/
 ├── edfs/
 │   ├── [PatientID]_[Date].edf
 ├── images/
-├── patient_df.csv
-├── patient_history.csv
-├── patient_notes.csv
-├── patient_records.csv
-├── patients/
-│   └── [PatientName]_[Date].csv
 └── results/
+    ├── [PatientName]_[Date].csv
     ├── cmd/
     │   ├── [PatientID]_[Date]/
     │   │   ├── EEG_spatial_patterns.png
