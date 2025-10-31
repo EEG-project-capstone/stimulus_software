@@ -392,7 +392,7 @@ class AuditoryStimulator:
         # Move to next trial
         self.trials.current_trial_index += 1
         # Add inter-trial delay (1.2-2.2 seconds)
-        delay = random.uniform(1200, 2200)  # milliseconds
+        delay = random.randint(1200, 2200)  # random int in milliseconds
         self._schedule(delay, self.continue_playback)
 
     def toggle_pause(self):
@@ -464,7 +464,7 @@ class AuditoryStimulator:
 
     def save_single_trial_result(self, trial_result):
         """Save a single trial result to the stimulus results CSV file by appending"""
-        results_dir = self.config.file.get('result_dir', 'data/results')
+        results_dir = self.config.file.get('result_dir', 'patient_data/results')
         patient_id = self.gui_callback.get_patient_id()
         os.makedirs(results_dir, exist_ok=True)
         results_path = os.path.join(results_dir, f"{patient_id}_{self.config.current_date}_stimulus_results.csv")

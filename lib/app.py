@@ -1,15 +1,14 @@
 # lib/app.py
 
-import datetime
 import os
 import time
 import pandas as pd
 import tkinter as tk
-import sounddevice as sd
 from tkinter import messagebox, ttk, filedialog
 from lib.config import Config
 from lib.trials import Trials
 from lib.auditory_stimulator import AuditoryStimulator
+from lib.cmd_analysis import CMDAnalyzer
 
 class TkApp:
     def __init__(self, root):
@@ -190,34 +189,64 @@ class TkApp:
         self.update_button_states()
 
     def build_patient_info_tab(self):
-        info_frame = ttk.LabelFrame(self.tab2, text="Select Session Files", padding="20")
-        info_frame.pack(fill='both', expand=True, padx=20, pady=10)
-
-        # Stimulus CSV selection
-        ttk.Label(info_frame, text="Stimulus Results File:").grid(row=0, column=0, sticky='w', pady=5)
-        self.stimulus_file_combo = ttk.Combobox(info_frame, state="readonly")
-        self.stimulus_file_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        # File selection and info section (compact but informative)
+        top_frame = ttk.Frame(self.tab2)
+        top_frame.pack(fill='x', padx=20, pady=(10, 5))
+        
+        # File selectors
+        selector_frame = ttk.Frame(top_frame)
+        selector_frame.pack(fill='x', pady=(0, 5))
+        
+        ttk.Label(selector_frame, text="Stimulus:").pack(side='left', padx=(0, 5))
+        self.stimulus_file_combo = ttk.Combobox(selector_frame, state="readonly", width=45)
+        self.stimulus_file_combo.pack(side='left', fill='x', expand=True, padx=(0, 15))
         self.stimulus_file_combo.bind('<<ComboboxSelected>>', self.on_stimulus_file_selected)
 
-        # EDF file selection
-        ttk.Label(info_frame, text="EDF File:").grid(row=1, column=0, sticky='w', pady=5)
-        self.edf_file_combo = ttk.Combobox(info_frame, state="readonly")
-        self.edf_file_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        ttk.Label(selector_frame, text="EDF:").pack(side='left', padx=(0, 5))
+        self.edf_file_combo = ttk.Combobox(selector_frame, state="readonly", width=35)
+        self.edf_file_combo.pack(side='left', fill='x', expand=True)
         self.edf_file_combo.bind('<<ComboboxSelected>>', self.on_edf_file_selected)
 
-        # Info label
-        self.file_info_label = ttk.Label(info_frame, text="No files selected", foreground="gray")
-        self.file_info_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=(10, 0))
+        # File info label (shows selected files clearly)
+        self.file_info_label = ttk.Label(top_frame, text="No files selected", foreground="gray")
+        self.file_info_label.pack(fill='x', pady=(5, 0))
 
-        # === READ-ONLY NOTES DISPLAY ===
-        notes_frame = ttk.LabelFrame(self.tab2, text="Session Notes (Read-Only)", padding="10")
-        notes_frame.pack(fill='both', expand=True, padx=20, pady=10)
+        # Main content area - takes ALL remaining space for maximum height
+        session_view_frame = ttk.Frame(self.tab2)
+        session_view_frame.pack(fill='both', expand=True, padx=20, pady=(0, 10))
+        session_view_frame.grid_columnconfigure(0, weight=1)
+        session_view_frame.grid_columnconfigure(1, weight=1)
+        session_view_frame.grid_rowconfigure(0, weight=1)
 
-        self.patient_info_notes_text = tk.Text(notes_frame, height=10, width=60, state="disabled")
-        self.patient_info_notes_text.grid(row=0, column=0, columnspan=3, sticky='nsew', pady=5)
-        
+        # === SIDE-BY-SIDE: Trial List + Notes (for selected session) ===
+        # Trial List Frame (left) - now much taller!
+        trial_list_frame = ttk.LabelFrame(session_view_frame, text="Trial Sequence")
+        trial_list_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+        trial_list_frame.grid_columnconfigure(0, weight=1)
+        trial_list_frame.grid_rowconfigure(0, weight=1)
+
+        # Treeview for trials - increased height
+        self.patient_info_trial_tree = ttk.Treeview(trial_list_frame, columns=('Type', 'Status'), show='headings')
+        self.patient_info_trial_tree.heading('Type', text='Trial Type')
+        self.patient_info_trial_tree.heading('Status', text='Status')
+        self.patient_info_trial_tree.column('Type', width=160)
+        self.patient_info_trial_tree.column('Status', width=100)
+        self.patient_info_trial_tree.tag_configure('completed', foreground='green')
+        self.patient_info_trial_tree.tag_configure('session_note', foreground='purple')
+
+        tree_scroll = ttk.Scrollbar(trial_list_frame, orient="vertical", command=self.patient_info_trial_tree.yview)
+        tree_scroll.pack(side='right', fill='y')
+        self.patient_info_trial_tree.configure(yscrollcommand=tree_scroll.set)
+        self.patient_info_trial_tree.pack(side='left', fill='both', expand=True, padx=(5, 0), pady=5)
+
+        # Notes Frame (right)
+        notes_frame = ttk.LabelFrame(session_view_frame, text="Session Notes (Read-Only)", padding="10")
+        notes_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
         notes_frame.grid_columnconfigure(0, weight=1)
         notes_frame.grid_rowconfigure(0, weight=1)
+
+        self.patient_info_notes_text = tk.Text(notes_frame, state="disabled")
+        self.patient_info_notes_text.grid(row=0, column=0, sticky='nsew', pady=5)
 
         # Initialize file lists
         self.selected_stimulus_path = None
@@ -227,55 +256,124 @@ class TkApp:
     def build_results_tab(self):
         results_frame = ttk.LabelFrame(self.tab3, text="EEG Analysis", padding="20")
         results_frame.pack(fill='both', expand=True, pady=10)
-        ttk.Label(results_frame, text="Select Patient:").grid(row=0, column=0, sticky='w', pady=5)
-        # self.results_patient_combo = ttk.Combobox(results_frame, state="disabled")
-        # self.results_patient_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        # self.results_patient_combo.bind('<<ComboboxSelected>>', self.update_dates_combo)
-        # ttk.Label(results_frame, text="Select Date:").grid(row=1, column=0, sticky='w', pady=5)
-        # self.results_date_combo = ttk.Combobox(results_frame, state="disabled")
-        # self.results_date_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        # ttk.Label(results_frame, text="Graph Type:").grid(row=2, column=0, sticky='w', pady=5)
-        # self.graph_type_combo = ttk.Combobox(results_frame, values=self.config.graphs, state="readonly")
-        # self.graph_type_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
-        # self.graph_type_combo.bind('<<ComboboxSelected>>', self.on_graph_type_change)
-        # self.lang_options_frame = ttk.LabelFrame(results_frame, text="Language Tracking Options", padding="10")
-        # ttk.Label(self.lang_options_frame, text="Bad Channels:").grid(row=0, column=0, sticky='w', pady=5)
-        # self.bad_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
-        # self.bad_channels_entry.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
-        # self.bad_channels_entry.insert(0, "T7,Fp1,Fp2")
-        # ttk.Label(self.lang_options_frame, text="EOG Channels:").grid(row=1, column=0, sticky='w', pady=5)
-        # self.eog_channels_entry = ttk.Entry(self.lang_options_frame, width=40)
-        # self.eog_channels_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        # self.eog_channels_entry.insert(0, "Fp1,Fp2,T7")
-        # ttk.Label(self.lang_options_frame, text="Display:").grid(row=2, column=0, sticky='w', pady=5)
-        # self.display_option_combo = ttk.Combobox(self.lang_options_frame, values=["Average ITPC", "Individual Channel"], state="readonly")
-        # self.display_option_combo.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
-        # self.display_option_combo.bind('<<ComboboxSelected>>', self.on_display_option_change)
-        # self.channel_label = ttk.Label(self.lang_options_frame, text="Channel:")
-        # self.channel_combo = ttk.Combobox(self.lang_options_frame, values=['C3','C4','O1','O2','FT9','FT10','Cz','F3','F4','F7','F8','Fz','Fp1','Fp2','Fpz','P3','P4','Pz','T7','T8','P7','P8'], state="readonly")
-        # button_frame = ttk.Frame(results_frame)
-        # button_frame.grid(row=4, column=0, columnspan=2, pady=20)
-        # self.cmd_button = ttk.Button(button_frame, text="Run CMD Analysis", command=self.run_cmd_analysis)
-        # self.cmd_button.pack(side='left', padx=5)
-        # self.lang_button = ttk.Button(button_frame, text="Run Language Analysis", command=self.run_lang_analysis)
-        # self.lang_button.pack(side='left', padx=5)
-        # self.image_frame = ttk.Frame(results_frame)
-        # self.image_frame.grid(row=5, column=0, columnspan=2, sticky='nsew', pady=10)
-        # self.image_canvas = tk.Canvas(self.image_frame, bg='white')
-        # self.image_v_scrollbar = ttk.Scrollbar(self.image_frame, orient="vertical", command=self.image_canvas.yview)
-        # self.image_h_scrollbar = ttk.Scrollbar(self.image_frame, orient="horizontal", command=self.image_canvas.xview)
-        # self.image_canvas.configure(yscrollcommand=self.image_v_scrollbar.set, xscrollcommand=self.image_h_scrollbar.set)
-        # self.image_canvas.grid(row=0, column=0, sticky='nsew')
-        # self.image_v_scrollbar.grid(row=0, column=1, sticky='ns')
-        # self.image_h_scrollbar.grid(row=1, column=0, sticky='ew')
-        # self.image_frame.grid_rowconfigure(0, weight=1)
-        # self.image_frame.grid_columnconfigure(0, weight=1)
-        # results_frame.grid_columnconfigure(1, weight=1)
-        # results_frame.grid_rowconfigure(5, weight=1)
+        
+        # Analysis type selection
+        ttk.Label(results_frame, text="Analysis Type:").grid(row=0, column=0, sticky='w', pady=5)
+        self.analysis_type_combo = ttk.Combobox(
+            results_frame, 
+            values=["CMD Analysis", "Language Tracking"], 
+            state="readonly"
+        )
+        self.analysis_type_combo.grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        self.analysis_type_combo.set("CMD Analysis")
+        
+        # Bad channels input (for CMD)
+        ttk.Label(results_frame, text="Bad Channels:").grid(row=1, column=0, sticky='w', pady=5)
+        self.bad_channels_entry = ttk.Entry(results_frame, width=40)
+        self.bad_channels_entry.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        self.bad_channels_entry.insert(0, "")
+        
+        # EOG channels input (for CMD)
+        ttk.Label(results_frame, text="EOG Channels:").grid(row=2, column=0, sticky='w', pady=5)
+        self.eog_channels_entry = ttk.Entry(results_frame, width=40)
+        self.eog_channels_entry.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
+        self.eog_channels_entry.insert(0, "")
+        
+        # Run button
+        self.run_analysis_button = ttk.Button(
+            results_frame, 
+            text="Run Analysis", 
+            command=self.run_selected_analysis
+        )
+        self.run_analysis_button.grid(row=3, column=0, columnspan=2, pady=20)
+        
+        # Results display
+        self.analysis_results_text = tk.Text(results_frame, height=8, width=60)
+        self.analysis_results_text.grid(row=4, column=0, columnspan=2, sticky='nsew', pady=10)
+        
+        # Configure grid weights
+        results_frame.grid_columnconfigure(1, weight=1)
+        results_frame.grid_rowconfigure(4, weight=1)
+
+    def run_selected_analysis(self):
+        """Run selected analysis type with current file selections."""
+        if not self.selected_stimulus_path or not self.selected_edf_path:
+            messagebox.showwarning("Missing Files", "Please select both a stimulus file and an EDF file.")
+            return
+            
+        analysis_type = self.analysis_type_combo.get()
+        
+        if analysis_type == "CMD Analysis":
+            self.run_cmd_analysis()
+        elif analysis_type == "Language Tracking":
+            messagebox.showinfo("Not Implemented", "Language tracking is not yet implemented.")
+        
+    def run_cmd_analysis(self):
+        """Run CMD analysis using selected files."""
+        try:
+            # Parse bad channels
+            bad_chs = [ch.strip() for ch in self.bad_channels_entry.get().split(',') if ch.strip()]
+            eog_chs = [ch.strip() for ch in self.eog_channels_entry.get().split(',') if ch.strip()]
+            
+            # Create analyzer
+            analyzer = CMDAnalyzer(
+                eeg_path=self.selected_edf_path,
+                stimulus_csv_path=self.selected_stimulus_path,
+                bad_channels=bad_chs,
+                eog_channels=eog_chs
+            )
+            
+            # Run pipeline
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, "Loading EEG data...\n")
+            self.root.update()
+            analyzer.load_and_preprocess_eeg()
+            
+            self.analysis_results_text.insert(tk.END, "Loading stimulus events...\n")
+            self.root.update()
+            analyzer.load_stimulus_events()
+            
+            self.analysis_results_text.insert(tk.END, "Creating epochs...\n")
+            self.root.update()
+            analyzer.create_epochs()
+            
+            self.analysis_results_text.insert(tk.END, "Computing PSD features...\n")
+            self.root.update()
+            analyzer.compute_psd_features()
+            
+            self.analysis_results_text.insert(tk.END, "Running CMD analysis (this may take 1-2 minutes)...\n")
+            self.root.update()
+            results = analyzer.run_analysis(n_permutations=500)
+            
+            # Display results
+            diagnosis = "POSITIVE for CMD" if results['is_cmd'] else "NEGATIVE for CMD"
+            result_text = f"""
+    CMD Analysis Results:
+    ====================
+    AUC: {results['auc']:.3f} ± {results['auc_std']:.3f}
+    p-value: {results['p_value']:.4f}
+    Diagnosis: {diagnosis}
+
+    Interpretation:
+    - AUC > 0.5 indicates brain activation differs between "keep" and "stop" commands
+    - p < 0.05 indicates this is unlikely due to chance
+    - POSITIVE result suggests cognitive-motor dissociation (covert command-following)
+    """
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, result_text)
+            
+        except Exception as e:
+            messagebox.showerror("Analysis Error", f"CMD analysis failed:\n{str(e)}")
+            self.analysis_results_text.insert(tk.END, f"Error: {str(e)}\n")
+
+    def update_file_info_label(self):
+        stim = os.path.basename(self.selected_stimulus_path) if self.selected_stimulus_path else "None"
+        edf = os.path.basename(self.selected_edf_path) if self.selected_edf_path else "None"
+        self.file_info_label.config(text=f"Stimulus: {stim} | EDF: {edf}")
 
     def refresh_file_lists(self):
         # Stimulus CSVs
-        results_dir = self.config.file.get('result_dir', 'data/results')
+        results_dir = self.config.file.get('result_dir', 'patient_data/results')
         os.makedirs(results_dir, exist_ok=True)
         stim_files = [f for f in os.listdir(results_dir) if f.endswith('_stimulus_results.csv')]
         stim_files.sort()
@@ -288,7 +386,7 @@ class TkApp:
             self.selected_stimulus_path = None
 
         # EDF files
-        edf_dir = self.config.file.get('edf_dir', 'data/edfs')
+        edf_dir = self.config.file.get('edf_dir', 'patient_data/edfs')
         os.makedirs(edf_dir, exist_ok=True)
         edf_files = [f for f in os.listdir(edf_dir) if f.lower().endswith('.edf')]
         edf_files.sort()
@@ -302,32 +400,72 @@ class TkApp:
 
     def on_stimulus_file_selected(self, event=None):
         filename = self.stimulus_file_combo.get()
-        results_dir = self.config.file.get('result_dir', 'data/results')
+        results_dir = self.config.file.get('result_dir', 'patient_data/results')
         self.selected_stimulus_path = os.path.join(results_dir, filename) if filename else None
         self.update_file_info_label()
         
-        # Clear and load notes into Patient Info tab
+        # Clear both displays
+        self.patient_info_trial_tree.delete(*self.patient_info_trial_tree.get_children())
         self.patient_info_notes_text.config(state="normal")
         self.patient_info_notes_text.delete(1.0, tk.END)
         
         if filename:
-            self.load_notes_from_stimulus_file(
-                self.selected_stimulus_path, 
-                text_widget=self.patient_info_notes_text
-            )
+            self.load_session_data_from_csv(self.selected_stimulus_path)
         
         self.patient_info_notes_text.config(state="disabled")
 
+    def load_session_data_from_csv(self, filepath):
+        """Load trial sequence and notes from stimulus CSV for Patient Info tab."""
+        try:
+            df = pd.read_csv(filepath)
+            
+            # Map trial types to display names
+            type_display_names = {
+                "language": "Language",
+                "right_command": "Right Command",
+                "right_command+p": "Right Command + Prompt",
+                "left_command": "Left Command", 
+                "left_command+p": "Left Command + Prompt",
+                "oddball": "Oddball",
+                "oddball+p": "Oddball + Prompt",
+                "loved_one_voice": "Loved One Voice",
+                "control": "Control Statement",
+                "session_note": "Session Note"
+            }
+            
+            # Insert all rows (trials + notes)
+            for idx, row in df.iterrows():
+                trial_type = row.get('trial_type', 'unknown')
+                display_type = type_display_names.get(trial_type, trial_type.replace('_', ' ').title())
+                
+                if trial_type == 'session_note':
+                    status = "Note"
+                    tag = 'session_note'
+                else:
+                    status = "Completed"
+                    tag = 'completed'
+                
+                self.patient_info_trial_tree.insert('', 'end', values=(display_type, status), tags=(tag,))
+                
+                # Also extract notes for the notes panel
+                if trial_type == 'session_note':
+                    date = row.get('date', 'Unknown')
+                    note_text = str(row.get('notes', '')).strip()
+                    if note_text:
+                        self.patient_info_notes_text.insert(tk.END, f"[{date}] {note_text}\n")
+            
+            if self.patient_info_notes_text.get(1.0, tk.END).strip():
+                self.patient_info_notes_text.see(tk.END)
+                        
+        except Exception as e:
+            print(f"Could not load session data from {filepath}: {e}")
+
     def on_edf_file_selected(self, event=None):
         filename = self.edf_file_combo.get()
-        edf_dir = self.config.file.get('edf_dir', 'data/edfs')
+        edf_dir = self.config.file.get('edf_dir', 'patient_data/edfs')
         self.selected_edf_path = os.path.join(edf_dir, filename) if filename else None
         self.update_file_info_label()
 
-    def update_file_info_label(self):
-        stim = os.path.basename(self.selected_stimulus_path) if self.selected_stimulus_path else "None"
-        edf = os.path.basename(self.selected_edf_path) if self.selected_edf_path else "None"
-        self.file_info_label.config(text=f"Stimulus: {stim} | EDF: {edf}")
 
     def load_notes_from_stimulus_file(self, filepath, text_widget=None):
         """Load notes from stimulus CSV into specified text widget."""
@@ -511,7 +649,7 @@ class TkApp:
             return
 
         # Use the same result directory and filename pattern as AuditoryStimulator
-        results_dir = self.config.file.get('result_dir', 'data/results')
+        results_dir = self.config.file.get('result_dir', 'patient_data/results')
         date_str = time.strftime("%Y-%m-%d")
         results_path = os.path.join(results_dir, f"{patient_id}_{date_str}_stimulus_results.csv")
         
@@ -552,10 +690,6 @@ class TkApp:
     def run_lang_analysis(self):
         """Run language analysis for the selected patient and date."""
         messagebox.showinfo("Language Analysis", "Language analysis is not yet implemented.")
-
-    def run_cmd_analysis(self):
-        """Run CMD analysis for the selected patient and date."""
-        messagebox.showinfo("CMD Analysis", "CMD analysis is not yet implemented.")
 
     def populate_trial_list(self):
         """Populate the Treeview with all trials from trial_dictionary."""

@@ -10,8 +10,8 @@ class Config:
             self.file = yaml.safe_load(f)
         
         # Only create directories you actually use
-        os.makedirs(self.file.get('result_dir', 'data/results'), exist_ok=True)
-        os.makedirs(self.file.get('edf_dir', 'data/edfs'), exist_ok=True)
+        os.makedirs(self.file.get('result_dir', 'patient_data/results'), exist_ok=True)
+        os.makedirs(self.file.get('edf_dir', 'patient_data/edfs'), exist_ok=True)
         
         # Set up UI options (no legacy data loading)
         self.cpc_scale = [

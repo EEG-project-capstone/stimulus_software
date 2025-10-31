@@ -3,8 +3,8 @@
 os: 'os'  # 'windows', 'linux', or 'os'
 
 # === OUTPUT PATHS ===
-edf_dir: 'data/edfs/'
-result_dir: 'data/results/'
+edf_dir: 'patient_data/edfs/'
+result_dir: 'patient_data/results/'
 
 # === AUDIO INPUT PATHS ===
 sentences_path: 'audio_data/sentences/'
