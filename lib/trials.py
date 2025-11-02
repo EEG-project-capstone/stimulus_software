@@ -139,12 +139,19 @@ class Trials:
             else:
                 raise ValueError(f"Unsupported file format: {path}")
         
+            # Resample to 44100 Hz to standardize
+            if audio_segment.frame_rate != 44100:
+                audio_segment = audio_segment.set_frame_rate(44100)
+            
             # Convert to numpy array
             samples = np.array(audio_segment.get_array_of_samples())
             
             # Reshape stereo audio to (n_samples, 2)
             if audio_segment.channels == 2:
                 samples = samples.reshape((-1, 2))
+            else:
+                # Ensure mono is 2D: (n_samples, 1)
+                samples = samples.reshape((-1, 1))
                 
             # Normalize to [-1, 1] range
             return samples.astype(np.float32) / (2**15 - 1)

@@ -315,9 +315,8 @@ class AuditoryStimulator:
         """
         Play audio reliably using OutputStream.
         """
-        # Cancel any previous playback
-        if hasattr(self, '_active_stream'):
-            self._safe_stop_stream()
+        # ALWAYS stop any previous stream before starting a new one
+        self._safe_stop_stream()
 
         if samples.ndim == 1:
             samples = samples.reshape(-1, 1)
@@ -353,6 +352,7 @@ class AuditoryStimulator:
                 self._schedule(10, callback)
 
         try:
+            # Create new stream with current parameters
             stream = sd.OutputStream(
                 samplerate=sample_rate,
                 channels=samples.shape[1],
