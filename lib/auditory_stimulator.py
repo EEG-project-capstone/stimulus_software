@@ -1,5 +1,3 @@
-# lib/auditory_stimulator.py
-
 import os
 import time
 import random
@@ -11,7 +9,6 @@ class AuditoryStimulator:
      
     def __init__(self, gui_callback):
         """Initialize the auditory stimulator with configuration"""
-
         # Initialize attributes
         self.gui_callback = gui_callback # Callback to TkApp for UI updates and state changes
         self.trials = gui_callback.trials
@@ -19,8 +16,11 @@ class AuditoryStimulator:
 
         self.scheduled_callbacks = []  # Track Tkinter after IDs
 
+        # Audio stream management
+        self._active_stream = None
+        self._stream_lock = None  # Not needed for basic sounddevice, but good practice
+        
         self.reset_trial_state()
-
 
     def reset_trial_state(self):
         self.trials.current_trial_index = 0
@@ -35,11 +35,9 @@ class AuditoryStimulator:
         self.oddball_tone_count = 0
         self.oddball_phase = None
 
-
         # Reset all trial statuses to pending
         for trial in self.trials.trial_dictionary:
             trial['status'] = 'pending'
-
 
     def play_trial_sequence(self):
         self.trials.current_trial_index = 0
@@ -348,14 +346,14 @@ class AuditoryStimulator:
             # Safely remove the stream reference
             if hasattr(self, '_active_stream'):
                 try:
-                    if self._active_stream.active:
-                        self._active_stream.stop()
-                    self._active_stream.close()
+                    if self._active_stream:
+                        if self._active_stream.active:
+                            self._active_stream.stop()
+                        self._active_stream.close()
                 except Exception:
                     pass
                 finally:
-                    delattr(self, '_active_stream')
-                    
+                    self._active_stream = None           
             # Only invoke callback if playback is still active
             if (self.gui_callback.playback_state == "playing" and not self.is_paused and callback is not None):
                 self._schedule(10, callback)
@@ -455,22 +453,20 @@ class AuditoryStimulator:
 
     def _safe_stop_stream(self):
         """Safely stop and close the active audio stream, if it exists."""
-        if hasattr(self, '_active_stream'):
+        if self._active_stream:
             try:
-                # Stop and close the stream if it exists and is active
-                if self._active_stream:
-                    if self._active_stream.active:
-                        self._active_stream.stop()
-                    self._active_stream.close()
+                if self._active_stream.active:
+                    self._active_stream.stop()
+                self._active_stream.close()
             except Exception:
                 # Ignore errors — stream may already be closed or invalid
                 pass
             finally:
-                # Remove the attribute safely
-                delattr(self, '_active_stream')
+                self._active_stream = None  # Clear the reference
 
     def stop_stimulus(self):
         self._safe_stop_stream()
+        self._cancel_scheduled_callbacks()
         self.reset_trial_state()
 
     def save_single_trial_result(self, trial_result):
@@ -506,4 +502,3 @@ class AuditoryStimulator:
         for id in self.scheduled_callbacks:
             self.gui_callback.root.after_cancel(id)
         self.scheduled_callbacks.clear()
-    
