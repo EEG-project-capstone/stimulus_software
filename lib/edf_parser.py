@@ -1,4 +1,5 @@
 # lib/edf_parser.py
+
 import mne
 import numpy as np
 import pandas as pd
@@ -83,4 +84,3 @@ class EDFParser:
         return self.raw
 
     # Optional: Add methods for filtering, resampling, etc., later if needed.
-    

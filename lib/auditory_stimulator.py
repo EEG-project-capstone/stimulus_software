@@ -345,8 +345,17 @@ class AuditoryStimulator:
             audio_buffer = audio_buffer[len(chunk):]
 
         def on_finish():
+            # Safely remove the stream reference
             if hasattr(self, '_active_stream'):
-                del self._active_stream
+                try:
+                    if self._active_stream.active:
+                        self._active_stream.stop()
+                    self._active_stream.close()
+                except Exception:
+                    pass
+                finally:
+                    delattr(self, '_active_stream')
+                    
             # Only invoke callback if playback is still active
             if (self.gui_callback.playback_state == "playing" and not self.is_paused and callback is not None):
                 self._schedule(10, callback)
@@ -445,18 +454,20 @@ class AuditoryStimulator:
         trial['status'] = 'pending'
 
     def _safe_stop_stream(self):
-        """Safely stop and close the active audio stream, if it exists and is alive."""
+        """Safely stop and close the active audio stream, if it exists."""
         if hasattr(self, '_active_stream'):
             try:
-                # Check if stream is still active
-                if self._active_stream.active or self._active_stream.stopped:
-                    self._active_stream.stop()
-                self._active_stream.close()
-            except Exception as e:
-                # Ignore errors — stream may already be closed
+                # Stop and close the stream if it exists and is active
+                if self._active_stream:
+                    if self._active_stream.active:
+                        self._active_stream.stop()
+                    self._active_stream.close()
+            except Exception:
+                # Ignore errors — stream may already be closed or invalid
                 pass
             finally:
-                del self._active_stream
+                # Remove the attribute safely
+                delattr(self, '_active_stream')
 
     def stop_stimulus(self):
         self._safe_stop_stream()
