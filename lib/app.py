@@ -11,6 +11,10 @@ from lib.auditory_stimulator import AuditoryStimulator
 from lib.cmd_analysis import CMDAnalyzer
 from lib.edf_parser import EDFParser
 
+import matplotlib.pyplot as plt
+# import matplotlib
+# matplotlib.use('TkAgg')
+
 class TkApp:
     def __init__(self, root):
         self.root = root
@@ -386,11 +390,11 @@ class TkApp:
         ttk.Label(results_frame, text="Analysis Type:").grid(row=1, column=0, sticky='w', pady=5)
         self.analysis_type_combo = ttk.Combobox(
             results_frame,
-            values=["EDF Parse Only", "CMD Analysis", "Language Tracking"],
+            values=["EDF Parser", "CMD Analysis", "Language Tracking"],
             state="readonly"
         )
         self.analysis_type_combo.grid(row=1, column=1, sticky='ew', padx=5, pady=5)
-        self.analysis_type_combo.set("CMD Analysis")
+        self.analysis_type_combo.set("EDF Parser")
 
         ttk.Label(results_frame, text="Bad Channels (comma-separated):").grid(row=2, column=0, sticky='w', pady=5)
         self.bad_channels_entry = ttk.Entry(results_frame, width=40)
@@ -436,7 +440,7 @@ class TkApp:
 
         analysis_type = self.analysis_type_combo.get()
 
-        if analysis_type == "EDF Parse Only":  # 🔥 Add this new case
+        if analysis_type == "EDF Parser":
             self.run_edf_parse_only()
         elif analysis_type == "CMD Analysis":
             self.run_cmd_analysis()
@@ -444,7 +448,7 @@ class TkApp:
             messagebox.showinfo("Not Implemented", "Language tracking is not yet implemented.")
 
     def run_edf_parse_only(self):
-        """Parse the selected EDF file and display basic information."""
+        """Parse the selected EDF file and display basic information + signals."""
         try:
             # Create parser instance
             parser = EDFParser(self.edf_file_path)
@@ -472,6 +476,24 @@ class TkApp:
             # Clear and update display
             self.analysis_results_text.delete(1.0, tk.END)
             self.analysis_results_text.insert(tk.END, result_text)
+            
+            # Use ALL channels
+            channels_to_plot = info['ch_names']
+            
+            # Use longer duration (30 seconds, or file duration if shorter)
+            duration = min(30, info['duration'])
+            data, times = parser.get_data_segment(start_sec=0, duration_sec=duration, ch_names=channels_to_plot)
+            
+            # Create a separate window for each channel
+            for ch_name, ch_data in zip(channels_to_plot, data):
+                plt.figure(figsize=(12, 6))  # Reasonable size for one channel
+                plt.plot(times, ch_data, linewidth=0.5, color='blue')
+                plt.title(f'Channel: {ch_name} - First {duration}s')
+                plt.xlabel('Time (seconds)')
+                plt.ylabel('Amplitude')
+                plt.grid(True, alpha=0.3)
+                plt.tight_layout()
+                plt.show()  # This will pop up in a separate window for each channel
             
         except Exception as e:
             error_msg = f"EDF Parse Error:\n{str(e)}"
