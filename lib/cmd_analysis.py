@@ -9,6 +9,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import cross_val_score, LeaveOneGroupOut
 from tqdm import tqdm
+import logging
+
+# --- Configure logging ---
+# You can configure this globally in your main app if desired
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class CMDAnalyzer:
     def __init__(self, eeg_path, stimulus_csv_path, bad_channels=None, eog_channels=None):
@@ -32,13 +38,18 @@ class CMDAnalyzer:
         
     def load_and_preprocess_eeg(self):
         """Load EDF and apply 1-30 Hz bandpass filter, keeping only EEG channels."""
+        logger.info(f"Loading EDF file: {self.eeg_path}")
         self.raw = mne.io.read_raw_edf(self.eeg_path, preload=True)
+        logger.info(f"Loaded raw data with {len(self.raw.ch_names)} channels, sfreq={self.raw.info['sfreq']} Hz")
 
         # Ensure sampling rate is 512 Hz (Claassen used 512 Hz)
-        if self.raw.info['sfreq'] != 512:
+        original_sfreq = self.raw.info['sfreq']
+        if original_sfreq != 512:
+            logger.info(f"Resampling from {original_sfreq} Hz to 512 Hz")
             self.raw.resample(512)
 
         # Filter 1-30 Hz
+        logger.info("Applying 1-30 Hz bandpass filter")
         self.raw.filter(l_freq=1, h_freq=30, fir_design='firwin')
         
         # Identify EEG channels (standard 10-20 names)
@@ -54,110 +65,156 @@ class CMDAnalyzer:
         
         # Find intersection: channels that exist in both raw data AND standard EEG list
         eeg_channels = [ch for ch in self.raw.ch_names if ch in eeg_ch_names]
+        logger.info(f"Found {len(eeg_channels)} standard EEG channels: {eeg_channels}")
         
         if not eeg_channels:
             # Fallback: assume first 19-21 channels are EEG (common in clinical EDFs)
-            eeg_channels = self.raw.ch_names[:21]  # Adjust number as needed
+            fallback_num = min(21, len(self.raw.ch_names))
+            eeg_channels = self.raw.ch_names[:fallback_num]
+            logger.warning(f"No standard EEG channels found. Using first {len(eeg_channels)} channels: {eeg_channels}")
             
         # Pick only EEG channels
         self.raw.pick(eeg_channels)
+        logger.info(f"Picked {len(self.raw.ch_names)} EEG channels")
         
         # Set standard montage (now all channels are EEG)
-        self.raw.set_montage(mne.channels.make_standard_montage('standard_1020'), on_missing='warn')
+        try:
+            self.raw.set_montage(mne.channels.make_standard_montage('standard_1020'), on_missing='warn')
+            logger.info("Standard montage set.")
+        except Exception as e:
+            logger.warning(f"Could not set standard montage: {e}")
 
     def load_stimulus_events(self):
+        logger.info(f"Loading stimulus events from CSV: {self.stimulus_csv_path}")
         if self.raw is None:
             raise RuntimeError("EEG data not loaded.")
         if self.raw.info['meas_date'] is None:
             raise ValueError("EEG file missing measurement date. Cannot align timing.")
         
-        df = pd.read_csv(self.stimulus_csv_path)
+        try:
+            df = pd.read_csv(self.stimulus_csv_path)
+        except FileNotFoundError:
+            logger.error(f"CSV file not found: {self.stimulus_csv_path}")
+            raise
+        except pd.errors.EmptyDataError:
+            logger.error(f"CSV file is empty: {self.stimulus_csv_path}")
+            raise ValueError("Stimulus CSV file is empty.")
+        except Exception as e:
+            logger.error(f"Error reading CSV file: {e}")
+            raise
+
+        logger.info(f"Loaded CSV with {len(df)} rows and columns: {list(df.columns)}")
         
         # Filter ONLY command trials (ignore language/oddball)
-        cmd_trials = df[df['trial_type'].isin([
+        cmd_trial_types = [
             'right_command', 'right_command+p',
             'left_command', 'left_command+p'
-        ])].copy()
+        ]
+        cmd_trials = df[df['trial_type'].isin(cmd_trial_types)].copy()
         
-        if cmd_trials.empty:
-            raise ValueError("No command trials found.")
-    
+        logger.info(f"Found {len(cmd_trials)} command trials: {cmd_trial_types}")
+        if len(cmd_trials) == 0:
+             logger.warning("No command trials found in the CSV file. Check trial_type column values.")
+             raise ValueError("No command trials found.")
+
+        # --- Log details of command trials ---
+        logger.info("Details of command trials:")
+        for idx, row in cmd_trials.iterrows():
+            logger.info(f"  Row {idx}: trial_type='{row['trial_type']}', start_time={row.get('start_time', 'N/A')}, duration={row.get('duration', 'N/A')}s")
+
         events = []
         metadata_rows = []
         instr_id = 0
         
-        for _, trial in cmd_trials.iterrows():
-            # Get approximate start from stimulus log
-            approx_start_sec = trial['start_time'] - self.raw.info['meas_date'].timestamp()
+        for idx, trial in cmd_trials.iterrows():
+            logger.info(f"Processing command trial {idx}: type='{trial['trial_type']}', start_time={trial.get('start_time', 'N/A')}, duration={trial.get('duration', 'N/A')}s")
             
-            # Detect ACTUAL start via audio artifact
-            try:
-                actual_start_sample, actual_start_sec = self.detect_signal_start(
-                    self.raw, approx_start_sec
-                )
-            except (ValueError, IndexError, RuntimeError) as e:
-                print(f"Warning: Audio detection failed for trial {trial.name}: {e}")
-                print("Falling back to approximate timing")
-                actual_start_sec = approx_start_sec
-                actual_start_sample = int(actual_start_sec * self.raw.info['sfreq'])
-            
-            # Extract keep/stop onsets from sentences
-            try:
-                sentences = eval(trial['sentences']) if isinstance(trial['sentences'], str) else []
-            except:
-                sentences = []
-                print(f"Warning: Could not parse sentences for trial {trial.name}")
+            # Determine if prompt was used based on trial type
+            has_prompt = '+p' in trial['trial_type']
+            prompt_duration = 2.0 if has_prompt else 0.0 # Estimated prompt duration
 
-            keep_onsets = [s['onset_time'] for s in sentences if 'keep' in s.get('event', '')]
-            stop_onsets = [s['onset_time'] for s in sentences if 'stop' in s.get('event', '')]
-        
-            # Align keep/stop times relative to detected start
-            if keep_onsets and len(keep_onsets) == len(stop_onsets):
-                # Get relative onset times within trial (seconds from first keep)
-                first_keep_abs = keep_onsets[0]
-                keep_rel_times = [k - first_keep_abs for k in keep_onsets]
-                stop_rel_times = [s - first_keep_abs for s in stop_onsets]
-                
-                for cycle_idx, (keep_rel, stop_rel) in enumerate(zip(keep_rel_times, stop_rel_times)):
-                    # Each cycle = 1 trial (keep + stop)
-                    trial_id = cycle_idx
-                    
-                    # Keep instruction
-                    keep_sec = actual_start_sec + keep_rel
-                    if 0 <= keep_sec <= (len(self.raw) / self.raw.info['sfreq']):
-                        keep_sample = int(keep_sec * self.raw.info['sfreq'])
-                        events.append([keep_sample, 0, 1])
-                        metadata_rows.append({
-                            'instruction_id': instr_id,
-                            'trial': trial_id,
-                            'move': 1,
-                            'instruction_type': 'keep',
-                            'time_sample': keep_sample
-                        })
-                        instr_id += 1
-                        
-                    # Stop instruction  
-                    stop_sec = actual_start_sec + stop_rel
-                    if 0 <= stop_sec <= (len(self.raw) / self.raw.info['sfreq']):
-                        stop_sample = int(stop_sec * self.raw.info['sfreq'])
-                        events.append([stop_sample, 0, 2])
-                        metadata_rows.append({
-                            'instruction_id': instr_id,
-                            'trial': trial_id,
-                            'move': 0,
-                            'instruction_type': 'stop',
-                            'time_sample': stop_sample
-                        })
-                        instr_id += 1
-        
+            # Get trial start time (assuming it's a Unix timestamp)
+            trial_start_timestamp_str = trial.get('start_time')
+            if pd.isna(trial_start_timestamp_str) or trial_start_timestamp_str == '':
+                 logger.warning(f"Trial {idx} has no or empty 'start_time'. Skipping.")
+                 continue
+            try:
+                 trial_start_timestamp = float(trial_start_timestamp_str)
+            except (ValueError, TypeError) as e:
+                 logger.warning(f"Could not parse 'start_time' '{trial_start_timestamp_str}' for trial {idx}: {e}. Skipping.")
+                 continue
+
+            # Align with EEG measurement time
+            # raw.info['meas_date'] is a datetime object or a float (timestamp)
+            meas_date_timestamp = self.raw.info['meas_date'].timestamp() if hasattr(self.raw.info['meas_date'], 'timestamp') else self.raw.info['meas_date']
+            trial_start_rel_to_eeg = trial_start_timestamp - meas_date_timestamp
+            logger.debug(f"  Trial start (timestamp): {trial_start_timestamp}, rel to EEG: {trial_start_rel_to_eeg:.2f}s")
+
+            # --- Calculate Event Times based on known structure ---
+            # Each cycle is 20 seconds (10s keep+pause + 10s stop+pause)
+            # Total trial duration should be approx: prompt_dur + (8 cycles * 20s)
+            # However, we rely on the known timing structure, not the 'duration' column for precise event timing.
+            num_cycles = 8
+            cycle_duration = 20.0 # seconds
+
+            for cycle_idx in range(num_cycles):
+                # Calculate start time of the current cycle within the trial
+                # Time after prompt, then add cycle offset
+                cycle_start_in_trial = prompt_duration + (cycle_idx * cycle_duration)
+
+                # --- Keep Event ---
+                # Keep occurs at the very beginning of the cycle (relative to cycle start)
+                keep_time_in_trial = cycle_start_in_trial
+                keep_time_abs = trial_start_rel_to_eeg + keep_time_in_trial
+                keep_sample = int(keep_time_abs * self.raw.info['sfreq'])
+                eeg_duration = len(self.raw.times) / self.raw.info['sfreq']
+
+                if 0 <= keep_time_abs <= eeg_duration:
+                    events.append([keep_sample, 0, 1]) # Event ID 1 for 'keep'
+                    metadata_rows.append({
+                        'instruction_id': instr_id,
+                        'trial': cycle_idx, # Use cycle index as trial number for this analysis
+                        'move': 1, # Keep
+                        'instruction_type': 'keep',
+                        'time_sample': keep_sample
+                    })
+                    instr_id += 1
+                    logger.debug(f"    Added KEEP event for cycle {cycle_idx} at {keep_time_abs:.2f}s (sample {keep_sample})")
+                else:
+                    logger.warning(f"    KEEP event for cycle {cycle_idx} at {keep_time_abs:.2f}s (sample {keep_sample}) is out of EEG range [0, {eeg_duration:.2f}]. Skipping.")
+
+                # --- Stop Event ---
+                # Stop occurs 10 seconds after the keep (relative to cycle start)
+                stop_time_in_trial = cycle_start_in_trial + 10.0
+                stop_time_abs = trial_start_rel_to_eeg + stop_time_in_trial
+                stop_sample = int(stop_time_abs * self.raw.info['sfreq'])
+
+                if 0 <= stop_time_abs <= eeg_duration:
+                    events.append([stop_sample, 0, 2]) # Event ID 2 for 'stop'
+                    metadata_rows.append({
+                        'instruction_id': instr_id,
+                        'trial': cycle_idx, # Use cycle index as trial number for this analysis
+                        'move': 0, # Stop
+                        'instruction_type': 'stop',
+                        'time_sample': stop_sample
+                    })
+                    instr_id += 1
+                    logger.debug(f"    Added STOP event for cycle {cycle_idx} at {stop_time_abs:.2f}s (sample {stop_sample})")
+                else:
+                    logger.warning(f"    STOP event for cycle {cycle_idx} at {stop_time_abs:.2f}s (sample {stop_sample}) is out of EEG range [0, {eeg_duration:.2f}]. Skipping.")
+
+        logger.info(f"Final list of events: {len(events)} events created.")
         if not events:
+            logger.error("No valid command events found after processing all command trials.")
             raise ValueError("No valid command events found.")
             
         self.events = np.array(events, dtype=int)
         self.metadata = pd.DataFrame(metadata_rows)
+        logger.info(f"Events and metadata created. Events shape: {self.events.shape}, Metadata shape: {self.metadata.shape}")
 
     def create_epochs(self):
         """Segment EEG into 2-second epochs following each instruction."""
+        logger.info("Creating epochs...")
         if self.raw is None:
             raise RuntimeError("EEG data not loaded. Call load_and_preprocess_eeg() first.")
 
@@ -172,9 +229,11 @@ class CMDAnalyzer:
             baseline=None,
             proj=False
         )
-        
+        logger.info(f"Created {len(self.epochs)} epochs.")
+
     def compute_psd_features(self):
         """Compute PSD in 4 frequency bands and vectorize."""
+        logger.info("Computing PSD features...")
         if self.raw is None:
             raise RuntimeError("EEG data not loaded. Call load_and_preprocess_eeg() first.")
         if self.epochs is None:
@@ -216,9 +275,11 @@ class CMDAnalyzer:
             psd_data[:, :, i] = psds_all[:, :, freq_idx].mean(axis=2)
             
         self.psd_data = psd_data.reshape(n_epochs, n_chans * len(bands))
-        
+        logger.info(f"PSD features computed. Shape: {self.psd_data.shape}")
+
     def run_analysis(self, n_permutations=500):
         """Run full CMD analysis and return results."""
+        logger.info("Running CMD analysis...")
         if self.metadata is None:
             raise RuntimeError("metadata not set. Call load_stimulus_events() first.")
         if self.psd_data is None:
@@ -227,12 +288,15 @@ class CMDAnalyzer:
         # Prepare data - CONVERT TO NUMPY ARRAYS
         y = np.asarray(self.metadata['move'].values)   
         groups = np.asarray(self.metadata['trial'].values)    
+
+        logger.info(f"Using {len(y)} samples, {len(np.unique(groups))} groups for cross-validation.")
         
         # Cross-validated AUC
         clf = make_pipeline(StandardScaler(), LinearSVC(max_iter=10000))
         cv = LeaveOneGroupOut()
         scores = cross_val_score(clf, self.psd_data, y, cv=cv, groups=groups, scoring='roc_auc')
         observed_auc = scores.mean()
+        logger.info(f"Observed AUC: {observed_auc:.3f} (+/- {scores.std():.3f})")
         
         # Permutation test
         perm_scores = []
@@ -248,6 +312,8 @@ class CMDAnalyzer:
             
         p_value = (np.sum(np.array(perm_scores) >= observed_auc) + 1) / (n_permutations + 1)
         is_cmd = observed_auc > 0.5 and p_value < 0.05
+
+        logger.info(f"Analysis complete. AUC: {observed_auc:.3f}, P-value: {p_value:.3f}, Is CMD: {is_cmd}")
         
         return {
             'auc': observed_auc,
@@ -288,12 +354,22 @@ class CMDAnalyzer:
         amp = np.abs(data).mean(axis=0)
         
         # Compute baseline noise level
-        baseline_amp = amp[:int(1 * sfreq)]  # First second as baseline
+        baseline_window_len = int(1 * sfreq) # First 1 second as baseline
+        if len(amp) <= baseline_window_len:
+             # If the window is too small, use a smaller baseline or raise an error
+             # For now, let's just use the first few samples if possible
+             if len(amp) > 1:
+                 baseline_amp = amp[:max(1, len(amp)//2)]
+             else:
+                 raise ValueError("Audio detection window is too small.")
+        else:
+            baseline_amp = amp[:baseline_window_len]
+        
         baseline_mean = np.mean(baseline_amp)
         baseline_std = np.std(baseline_amp)
         
         # Find first point exceeding threshold
-        threshold = baseline_mean + threshold_std * baseline_std  # ← Now threshold_std is defined
+        threshold = baseline_mean + threshold_std * baseline_std
         above_threshold = np.where(amp > threshold)[0]
         
         if len(above_threshold) == 0:
