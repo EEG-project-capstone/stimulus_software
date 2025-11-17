@@ -3,24 +3,25 @@
 import mne
 import pandas as pd
 import numpy as np
+from typing import Union
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('eeg_stimulus')
 
 class EDFParser:
-    def __init__(self, edf_path):
+    def __init__(self, edf_path: str) -> None:
         self.edf_path = edf_path
         self.raw = None
         self.sync_sample = None # Store the detected sync point
         self.sync_time = None   # Store the time of the sync point
 
-    def load_edf(self):
+    def load_edf(self) -> None:
         """Load the EDF file."""
         logger.info(f"Loading EDF file: {self.edf_path}")
         self.raw = mne.io.read_raw_edf(self.edf_path, preload=True)
         logger.info(f"Loaded raw data with {len(self.raw.ch_names)} channels, sfreq={self.raw.info['sfreq']} Hz")
 
-    def get_info_summary(self):
+    def get_info_summary(self) -> dict:
         """Get basic info about the loaded EDF."""
         if self.raw is None:
             raise RuntimeError("EDF data not loaded. Call load_edf() first.")
@@ -32,19 +33,28 @@ class EDFParser:
             'meas_date': self.raw.info['meas_date']
         }
 
-    def get_channel_types(self):
-        """Get a summary of channel types."""
-        if self.raw is None:
-            raise RuntimeError("EDF data not loaded. Call load_edf() first.")
-        # get_channel_types() returns a list of strings for each channel
-        types_list = self.raw.get_channel_types()
-        # Count occurrences of each type
-        unique_types, counts = np.unique(types_list, return_counts=True)
-        # Return as a dictionary
-        return dict(zip(unique_types, counts))
+    # def get_channel_types(self) -> dict:
+    #     """Get a summary of channel types."""
+    #     if self.raw is None:
+    #         raise RuntimeError("EDF data not loaded. Call load_edf() first.")
+    #     # get_channel_types() returns a list of strings for each channel
+    #     types_list = self.raw.get_channel_types()
+    #     # Count occurrences of each type
+    #     unique_types, counts = np.unique(types_list, return_counts=True)
+    #     # Return as a dictionary
+    #     return dict(zip(unique_types, counts))
 
-    def get_data_segment(self, start_sec, duration_sec, ch_names=None):
-        """Get a segment of data."""
+
+    def get_data_segment(self, start_sec: float, duration_sec: float, ch_names: Union[list[str], None] = None) -> tuple[np.ndarray, np.ndarray]:        
+        """Get a segment of EEG data. 
+        Args:
+            start_sec: Start time in seconds **from EDF start**.
+            duration_sec: Duration to extract (may be truncated at EDF end).
+            ch_names: List of channel names to extract. If None, returns all channels.  
+        Returns:
+            data: Array of shape (n_channels, n_times)
+            times: Time vector **relative to EDF start** (not relative to start_sec!).
+        """
         if self.raw is None:
             raise RuntimeError("EDF data not loaded. Call load_edf() first.")
         start_sample = int(start_sec * self.raw.info['sfreq'])
@@ -61,14 +71,12 @@ class EDFParser:
             sel = slice(None) # All channels
 
         data, times = self.raw[sel, start_sample:end_sample]
-        # Adjust times to be relative to the requested start_sec
-        times = times + start_sec
+
         return data, times
 
-    def find_sync_point(self, stimulus_csv_path, threshold_std=3, search_duration=300):
+    def find_sync_point(self, stimulus_csv_path: str, threshold_std: float = 3, search_duration: float = 300) -> None:        
         """
         Finds the approximate start of the first command trial by detecting an audio artifact.
-
         Parameters:
         - stimulus_csv_path: Path to the stimulus CSV file.
         - threshold_std: Threshold for artifact detection (multiplier for std).
@@ -94,12 +102,19 @@ class EDFParser:
 
         if first_cmd_trial is None:
             logger.warning("No command trials found in the stimulus CSV.")
+            self.sync_time = None
             return
+        
+        original_index = df[df['trial_type'].isin(cmd_trial_types)].index[0]
+        csv_row_number = original_index + 2 
 
-        logger.info(f"Found first command trial: type='{first_cmd_trial['trial_type']}', index={first_cmd_trial.name}")
+        if csv_row_number is not None:
+            logger.info(
+                f"This corresponds to the estimated start of the first command trial: "
+                f"{first_cmd_trial['trial_type']} (CSV row {csv_row_number})."
+            )
 
-        # Search for the artifact in the EEG data
-        # Start searching from the beginning of the EDF
+        # Search for the artifact in the EEG data from the beginning of the EDF
         search_start_sec = 0
         search_end_sec = min(search_duration, len(self.raw.times) / self.raw.info['sfreq'])
 
@@ -134,6 +149,7 @@ class EDFParser:
 
         if len(above_threshold) == 0:
             logger.warning(f"No audio artifact detected above threshold ({threshold:.2f}) in the search window.")
+            self.sync_time = None
             return
 
         # Take the first point exceeding the threshold as the sync point
@@ -142,12 +158,7 @@ class EDFParser:
         self.sync_time = self.sync_sample / self.raw.info['sfreq']
 
         logger.info(f"Sync point detected at sample {self.sync_sample}, time {self.sync_time:.3f}s in EDF.")
-        logger.info(f"This corresponds to the estimated start of the first command trial: {first_cmd_trial['trial_type']} (CSV row {first_cmd_trial.name}).")
-
-
-# --- Example usage (if run as script) ---
-# if __name__ == "__main__":
-#     parser = EDFParser("path/to/your/file.edf")
-#     parser.load_edf()
-#     parser.find_sync_point("path/to/your/stimulus.csv")
-#     print(f"Sync time: {parser.sync_time}")
+        logger.info(
+            f"This corresponds to the estimated start of the first command trial: "
+            f"{first_cmd_trial['trial_type']} (CSV row {csv_row_number})."
+        )

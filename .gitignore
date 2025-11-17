@@ -2,3 +2,4 @@
 .DS_Store
 lib/__pycache__
 patient_data/
+stim_app.log

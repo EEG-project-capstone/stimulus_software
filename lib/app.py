@@ -5,12 +5,15 @@ import time
 import pandas as pd
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
+import logging
 from lib.config import Config
 from lib.trials import Trials
 from lib.auditory_stimulator import AuditoryStimulator
 from lib.analysis_manager import AnalysisManager
 
-# --- Constants for better maintainability ---
+logger = logging.getLogger('eeg_stimulus.app')
+
+# --- Constants ---
 NUM_LANGUAGE_TRIALS = 72
 NUM_CMD_TRIALS_NO_PROMPT = 3
 NUM_CMD_TRIALS_WITH_PROMPT = 3
@@ -35,8 +38,10 @@ TRIAL_TYPE_DISPLAY_NAMES = {
     "session_note": "Session Note"
 }
 
+
 class TkApp:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk) -> None:
+        logger.info("Initializing TkApp")
         self.root = root
         self.root.title("EEG Stimulus Package")
         self.root.geometry("1050x830")
@@ -50,7 +55,7 @@ class TkApp:
         self.playback_state = "empty"
         self.current_patient = None
 
-        # --- UI Variables (for state management in the GUI) ---
+        # UI Variables
         self.language_var = tk.BooleanVar()
         self.right_cmd_var = tk.BooleanVar()
         self.rcmd_prompt_var = tk.BooleanVar()
@@ -61,41 +66,450 @@ class TkApp:
         self.loved_one_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
 
-        # Candidate file path variables for Patient Info tab
+        # file path variables
+        self.current_results_path = None
         self.selected_stimulus_file_candidate = None
         self.selected_edf_file_candidate = None
 
+        logger.info("TkApp initialized successfully")
         self.build_main_ui()
 
-    def get_patient_id(self):
+    def get_patient_id(self) -> str:
         """Get patient ID from Stimulus tab"""
         patient_id = self.patient_id_entry.get().strip()
         if not patient_id:
+            logger.warning("Attempted to get patient ID but field is empty")
             raise ValueError("Patient ID cannot be empty")
-        # Add any format validation here if needed
+        logger.debug(f"Retrieved patient ID: {patient_id}")
         return patient_id
 
     def playback_complete(self):
+        """Thread safe call to playback complete"""
+        logger.debug("Playback complete signal received")
+        self.root.after(0, self._on_playback_complete)
+
+    def _on_playback_complete(self):
         """Handle completion of stimulus playback"""
         try:
             patient_id = self.patient_id_entry.get().strip()
         except Exception:
             patient_id = "Unknown"
+            logger.warning("Could not retrieve patient ID after playback completion")
+        
         self.playback_state = "ready"
-        self.audio_stim.is_paused = False  # Ensure sync
+        self.audio_stim.is_paused = False
         self.pause_button.config(text="Pause", image=self.pause_sym)
         self.update_button_states()
         self.status_label.config(text=f"Stimulus completed for {patient_id}", foreground="green")
+        
+        logger.info(f"Stimulus playback completed successfully for patient: {patient_id}")
         messagebox.showinfo("Success", f"Stimulus administered successfully to {patient_id}")
 
-    def playback_error(self, error_msg):
-        """Handle playback errors"""
+    def playback_error(self, error_msg: str) -> None:
+        """Thread-safe error handler for playback errors."""
+        logger.error(f"Playback error occurred: {error_msg}")
+        self.root.after(0, self._on_playback_error, error_msg)
+
+    def _on_playback_error(self, error_msg: str) -> None:
+        """Actual GUI update for playback error (runs on main thread)."""
         self.playback_state = "ready"
-        self.audio_stim.is_paused = False  # Ensure sync
+        self.audio_stim.is_paused = False
         self.pause_button.config(text="Pause", image=self.pause_sym)
         self.update_button_states()
         self.status_label.config(text="Error during playback", foreground="red")
         messagebox.showerror("Playback Error", f"Error during playback: {error_msg}")
+
+    def on_patient_id_change(self, event=None):
+        patient_id = self.patient_id_entry.get().strip()
+        if patient_id:
+            self.current_patient = patient_id
+            self.playback_state = "ready"
+            self.status_label.config(text="Ready to prepare stimulus", foreground="green")
+            logger.info(f"Patient ID set: {patient_id}")
+        else:
+            self.current_patient = None
+            self.playback_state = "empty"
+            self.status_label.config(text="Please enter a patient ID", foreground="red")
+            logger.debug("Patient ID field cleared")
+        self.update_button_states()
+
+    def toggle_loved_one_options(self):
+        state = 'normal' if self.loved_one_var.get() else 'disabled'
+        for widget in [self.male_radio, self.female_radio, self.file_button]:
+            widget.config(state=state)
+        logger.debug(f"Loved one options toggled: {state}")
+
+    def upload_voice_file(self):
+        logger.debug("Opening voice file dialog")
+        file_path = filedialog.askopenfilename(
+            title="Select Voice File",
+            filetypes=[("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.audio_stim.trials.loved_one_file = file_path
+            self.audio_stim.trials.loved_one_gender = self.gender_var.get()
+            self.file_label.config(text=os.path.basename(file_path))
+            logger.info(f"Loved one voice file uploaded: {file_path} (Gender: {self.gender_var.get()})")
+        else:
+            logger.debug("Voice file upload cancelled")
+
+    def toggle_pause(self):
+        if self.playback_state == "playing":
+            self.playback_state = "paused"
+            self.pause_button.config(image=self.play_sym)
+            self.pause_button.config(text="Resume")
+            self.status_label.config(text="Pausing stimulus...", foreground="red")
+            logger.info("User paused stimulus playback")
+        elif self.playback_state == "paused":
+            self.playback_state = "playing"
+            self.pause_button.config(image=self.pause_sym)
+            self.pause_button.config(text="Pause")
+            self.status_label.config(text="Resuming stimulus...", foreground="blue")
+            logger.info("User resumed stimulus playback")
+
+        self.audio_stim.toggle_pause()
+        self.update_button_states()
+        self.update_trial_list_status()
+
+    def stop_stimulus(self):
+        """Stop the current stimulus playback"""
+        if self.playback_state in ["playing", "paused"]:
+            logger.info("User stopped stimulus playback")
+            self.playback_state = "ready"
+            self.pause_button.config(text="Pause", image=self.pause_sym)
+            self.audio_stim.stop_stimulus()
+            self.status_label.config(text="Stimulus stopped", foreground="orange")
+            self.update_button_states()
+            self.update_trial_list_status()
+
+    def prepare_stimulus(self):
+        logger.info("Prepare stimulus button clicked")
+        
+        if self.playback_state != "ready":
+            logger.warning(f"Prepare stimulus called in invalid state: {self.playback_state}")
+            return
+            
+        if not any([self.language_var.get(), self.right_cmd_var.get(), self.left_cmd_var.get(),
+                    self.oddball_var.get(), self.loved_one_var.get()]):
+            logger.warning("No stimulus type selected")
+            messagebox.showwarning("No Stimulus Selected", "Please select at least one stimulus type.")
+            return
+            
+        if self.loved_one_var.get() and not self.audio_stim.trials.loved_one_file:
+            logger.warning("Loved one stimulus selected but no voice file uploaded")
+            messagebox.showwarning("Missing File", "Please upload a voice file for loved one stimulus.")
+            return
+        
+        try:
+            patient_id = self.get_patient_id()
+            date_str = time.strftime("%Y-%m-%d")
+            self.current_results_path = os.path.join(RESULTS_DIR, f"{patient_id}_{date_str}_stimulus_results.csv")
+            logger.info(f"Results will be saved to: {self.current_results_path}")
+        except ValueError as e:
+            logger.error(f"Invalid patient ID: {e}")
+            messagebox.showwarning("Invalid Patient ID", str(e))
+            return
+        
+        self.playback_state = "preparing"
+        self.update_button_states()
+        self.status_label.config(text="Preparing stimulus...", foreground="blue")
+        self.start_preparation()
+
+    def start_preparation(self):
+        """Start the preparation process"""
+        try:
+            # Collect UI selections
+            num_of_each_trial = {
+                "lang": NUM_LANGUAGE_TRIALS if self.language_var.get() else 0,
+                "rcmd": NUM_CMD_TRIALS_NO_PROMPT if self.right_cmd_var.get() and not self.rcmd_prompt_var.get() else 0,
+                "rcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
+                "lcmd": NUM_CMD_TRIALS_NO_PROMPT if self.left_cmd_var.get() and not self.lcmd_prompt_var.get() else 0,
+                "lcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
+                "odd": NUM_ODDBALL_TRIALS_NO_PROMPT if self.oddball_var.get() and not self.oddball_prompt_var.get() else 0,
+                "odd+p": NUM_ODDBALL_TRIALS_WITH_PROMPT if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
+                "loved": NUM_LOVED_ONE_TRIALS if self.loved_one_var.get() else 0
+            }
+
+            logger.info(f"Starting trial preparation with configuration: {num_of_each_trial}")
+
+            # Set gender for loved one in the trials object
+            if self.loved_one_var.get():
+                self.trials.loved_one_gender = self.gender_var.get()
+                logger.debug(f"Loved one gender set to: {self.gender_var.get()}")
+
+            # Pass the configuration to the Trials object
+            self.trials.generate_trials(num_of_each_trial)
+
+            # Reset playback state
+            self.playback_state = "ready"
+
+            # Update GUI
+            self.update_button_states()
+            num_trials = len(self.trials.trial_dictionary)
+            self.status_label.config(text=f"Stimulus prepared! {num_trials} trials ready.", foreground="green")
+            self.populate_trial_list()
+            
+            logger.info(f"Stimulus preparation completed successfully: {num_trials} trials generated")
+
+        except Exception as e:
+            logger.error(f"Error during stimulus preparation: {e}", exc_info=True)
+            self.playback_state = "ready"
+            self.update_button_states()
+            self.status_label.config(text="Error preparing stimulus", foreground="red")
+            messagebox.showerror("Error", f"Error preparing stimulus: {e}")
+
+    def play_stimulus(self):
+        logger.info("Play stimulus button clicked")
+        
+        if self.playback_state != "ready" or len(self.trials.trial_dictionary) == 0:
+            logger.warning(f"Play stimulus called in invalid state: {self.playback_state}, trials: {len(self.trials.trial_dictionary)}")
+            return
+            
+        try:
+            patient_id = self.patient_id_entry.get().strip()
+            if not patient_id:
+                logger.warning("Play stimulus attempted without patient ID")
+                messagebox.showwarning("No Patient ID", "Please enter a patient ID.")
+                return
+        except Exception as e:
+            logger.error(f"Error getting patient ID: {e}")
+            return
+
+        self.playback_state = "playing"
+        self.update_button_states()
+        self.status_label.config(text="Playing stimulus...", foreground="blue")
+        self.update_trial_list_status()
+        
+        logger.info(f"Starting stimulus playback for patient: {patient_id}")
+        # Start playback via auditory stimulator
+        self.audio_stim.play_trial_sequence()
+
+    def add_note(self):
+        logger.debug("Add note button clicked")
+        
+        if not self.current_results_path:
+            logger.warning("Add note attempted before preparing stimulus")
+            messagebox.showerror("Error", "Prepare stimulus before adding notes.")
+            return
+            
+        note = self.note_entry.get().strip()
+        
+        try:
+            patient_id = self.get_patient_id()
+        except ValueError:
+            messagebox.showwarning("No Patient ID", "Please enter a patient ID before adding a note.")
+            return
+            
+        if not note:
+            logger.debug("Empty note submission attempted")
+            messagebox.showwarning("Empty Note", "Please enter a note before adding.")
+            return
+
+        # Create note row
+        note_row = {
+            'patient_id': patient_id,
+            'date': time.strftime("%Y-%m-%d"),
+            'trial_type': 'session_note',
+            'sentences': '',
+            'start_time': '',
+            'end_time': '',
+            'duration': '',
+            'notes': note
+        }
+
+        try:
+            note_df = pd.DataFrame([note_row])
+            note_df.to_csv(
+                self.current_results_path,
+                mode='a',
+                header=not os.path.exists(self.current_results_path),
+                index=False
+            )
+            self.notes_text.insert(tk.END, f"[{note_row['date']}] {note}\n")
+            self.notes_text.see(tk.END)
+            self.note_entry.delete(0, tk.END)
+            logger.info(f"Session note added for patient {patient_id}: {note[:50]}...")
+        except Exception as e:
+            logger.error(f"Failed to save note: {e}", exc_info=True)
+            messagebox.showerror("Note Save Error", f"Failed to save note:\n{str(e)}")
+
+    def on_stimulus_selected(self, event=None):
+        filename = self.stimulus_combo.get()
+        if filename in ["Select a stimulus file...", "No CSV files found", ""]:
+            self.selected_stimulus_file_candidate = None
+            logger.debug("Stimulus file selection cleared")
+        else:
+            self.selected_stimulus_file_candidate = os.path.join(RESULTS_DIR, filename)
+            logger.info(f"Stimulus file selected (candidate): {filename}")
+        self.update_submit_button_state()
+
+    def on_edf_selected(self, event=None):
+        filename = self.edf_combo.get()
+        if filename in ["Select an EDF file...", "No EDF files found", ""]:
+            self.selected_edf_file_candidate = None
+            logger.debug("EDF file selection cleared")
+        else:
+            self.selected_edf_file_candidate = os.path.join(EDFS_DIR, filename)
+            logger.info(f"EDF file selected (candidate): {filename}")
+        self.update_submit_button_state()
+
+    def update_results_file_labels(self):
+        """Update labels in results tab and the official file paths with the *candidate* files."""
+        if self.selected_stimulus_file_candidate and self.selected_edf_file_candidate:
+            # Set the *official* file paths to the candidates
+            self.stimulus_file_path = self.selected_stimulus_file_candidate
+            self.edf_file_path = self.selected_edf_file_candidate
+
+            logger.info(f"Files confirmed for analysis - Stimulus: {os.path.basename(self.stimulus_file_path)}, "
+                       f"EDF: {os.path.basename(self.edf_file_path)}")
+
+            # Update the official display label in the Patient Info tab
+            stim_file = os.path.basename(self.stimulus_file_path)
+            self.official_stimulus_label.config(text=stim_file, foreground="green")
+            edf_file = os.path.basename(self.edf_file_path)
+            self.official_edf_label.config(text=edf_file, foreground="green")
+
+            # Update the Results tab display
+            self.results_stimulus_label.config(text=stim_file)
+            self.results_edf_label.config(text=edf_file)
+
+            # Clear the candidates after setting them as official
+            self.selected_stimulus_file_candidate = None
+            self.selected_edf_file_candidate = None
+
+            # Update the submit button state
+            self.update_submit_button_state()
+            
+            # Enable the sync preview button
+            self.sync_preview_btn.config(state='normal')
+
+            # Load session data
+            if self.stimulus_file_path:
+                self.load_session_data_from_csv(self.stimulus_file_path)
+
+        else:
+            logger.warning("'Use Selected Files' pressed, but no candidates were set.")
+
+    def load_session_data_from_csv(self, filepath):
+        """Load trial sequence and notes from stimulus CSV for Patient Info tab."""
+        logger.info(f"Loading session data from: {filepath}")
+        
+        # Clear previous data
+        for item in self.patient_info_trial_tree.get_children():
+            self.patient_info_trial_tree.delete(item)
+        self.patient_info_notes_text.config(state="normal")
+        self.patient_info_notes_text.delete(1.0, tk.END)
+
+        try:
+            df = pd.read_csv(filepath)
+            trial_count = 0
+            note_count = 0
+
+            for _, row in df.iterrows():
+                trial_type = row.get('trial_type', 'unknown')
+                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
+
+                if trial_type == 'session_note':
+                    status = "Note"
+                    tag = 'session_note'
+                    date = row.get('date', 'Unknown')
+                    note_text = str(row.get('notes', '')).strip()
+                    if note_text:
+                        self.patient_info_notes_text.insert(tk.END, f"[{date}] {note_text}\n")
+                        note_count += 1
+                else:
+                    status = "Completed"
+                    tag = 'completed'
+                    trial_count += 1
+
+                self.patient_info_trial_tree.insert('', 'end', values=(display_type, status), tags=(tag,))
+
+            self.patient_info_notes_text.config(state="disabled")
+            if self.patient_info_notes_text.get(1.0, tk.END).strip():
+                self.patient_info_notes_text.see(tk.END)
+
+            logger.info(f"Session data loaded: {trial_count} trials, {note_count} notes")
+
+        except Exception as e:
+            logger.error(f"Could not load session data from {filepath}: {e}", exc_info=True)
+            messagebox.showerror("Load Error", f"Could not load session data:\n{e}")
+
+    def run_selected_analysis(self):
+        """Run selected analysis type using the AnalysisManager."""
+        logger.info("Run analysis button clicked")
+        
+        if not self.stimulus_file_path:
+            error_msg = "No stimulus CSV file selected. Please select files in the 'Patient Information' tab."
+            logger.warning("Analysis attempted without stimulus file")
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, error_msg)
+            return
+
+        if not self.edf_file_path:
+            error_msg = "No EDF file selected. Please select files in the 'Patient Information' tab."
+            logger.warning("Analysis attempted without EDF file")
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, error_msg)
+            return
+
+        analysis_type = self.analysis_type_combo.get()
+        bad_channels_str = self.bad_channels_entry.get().strip()
+        eog_channels_str = self.eog_channels_entry.get().strip()
+
+        # Parse channel lists
+        bad_channels = [ch.strip() for ch in bad_channels_str.split(',') if ch.strip()]
+        eog_channels = [ch.strip() for ch in eog_channels_str.split(',') if ch.strip()]
+
+        logger.info(f"Starting {analysis_type} analysis - "
+                   f"Stimulus: {os.path.basename(self.stimulus_file_path)}, "
+                   f"EDF: {os.path.basename(self.edf_file_path)}, "
+                   f"Bad channels: {bad_channels}, EOG channels: {eog_channels}")
+
+        if analysis_type == "CMD Analysis":
+            self.analysis_manager.run_cmd_analysis(self.stimulus_file_path, self.edf_file_path, bad_channels, eog_channels)
+        elif analysis_type == "Language Tracking":
+            logger.info("Language tracking requested (not yet implemented)")
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, "Language tracking is not yet implemented.")
+        else:
+            logger.warning(f"Unknown analysis type requested: {analysis_type}")
+            self.analysis_results_text.delete(1.0, tk.END)
+            self.analysis_results_text.insert(tk.END, f"Unknown analysis type: {analysis_type}")
+
+    def populate_trial_list(self):
+        """Populate the Treeview with all trials from trial_dictionary."""
+        logger.debug(f"Populating trial list with {len(self.trials.trial_dictionary)} trials")
+        
+        # Clear existing items
+        for item in self.trial_tree.get_children():
+            self.trial_tree.delete(item)
+
+        # Insert each trial
+        for idx, trial in enumerate(self.trials.trial_dictionary):
+            trial_type = trial['type']
+            display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
+            status = trial['status'].title()
+            self.trial_tree.insert('', 'end', iid=str(idx), values=(display_type, status))
+
+    def update_trial_list_status(self):
+        """Update the status column in the trial list from trial_dictionary."""
+        for idx, trial in enumerate(self.trials.trial_dictionary):
+            if str(idx) in self.trial_tree.get_children():
+                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial['type'], trial['type'].replace('_', ' ').title())
+                status = trial['status'].title()
+
+                # Determine which tag to use
+                status_key = trial['status'].lower()
+                if 'complete' in status_key:
+                    tag = 'completed'
+                elif 'in progress' in status_key:
+                    tag = 'inprogress'
+                else:
+                    tag = 'pending'
+
+                # Update row with values AND tag
+                self.trial_tree.item(str(idx), values=(display_type, status), tags=(tag,))
+
 
     def build_main_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -332,61 +746,6 @@ class TkApp:
             self.submit_btn.config(state='disabled')
             self.sync_preview_btn.config(state='disabled')
 
-    # Update the state of the new button after files are officially selected
-    def update_results_file_labels(self):
-        """Update labels in results tab and the official file paths with the *candidate* files."""
-        # Check if candidates exist first
-        if self.selected_stimulus_file_candidate and self.selected_edf_file_candidate:
-            # Set the *official* file paths to the candidates
-            self.stimulus_file_path = self.selected_stimulus_file_candidate
-            self.edf_file_path = self.selected_edf_file_candidate
-
-            # Update the official display label in the Patient Info tab
-            stim_file = os.path.basename(self.stimulus_file_path)
-            self.official_stimulus_label.config(text=stim_file, foreground="green")
-            edf_file = os.path.basename(self.edf_file_path)
-            self.official_edf_label.config(text=edf_file, foreground="green")
-
-            # Update the Results tab display
-            if hasattr(self, 'results_stimulus_label'):
-                self.results_stimulus_label.config(text=stim_file)
-            if hasattr(self, 'results_edf_label'):
-                self.results_edf_label.config(text=edf_file)
-
-            # Clear the candidates after setting them as official
-            self.selected_stimulus_file_candidate = None
-            self.selected_edf_file_candidate = None
-
-            # Update the submit button state (should now be disabled as candidates are cleared)
-            self.update_submit_button_state()
-            
-            # Enable the sync preview button now that files are officially selected
-            self.sync_preview_btn.config(state='normal')
-
-            # Optionally, load session data for the newly official stimulus file
-            if self.stimulus_file_path:
-                 self.load_session_data_from_csv(self.stimulus_file_path)
-
-        else:
-            # Handle case where button is pressed without candidates (shouldn't happen if button is disabled correctly)
-            print("Warning: 'Use Selected Files' pressed, but no candidates were set.")
-
-    def on_stimulus_selected(self, event=None):
-        filename = self.stimulus_combo.get()
-        if filename in ["Select a stimulus file...", "No CSV files found", ""]:
-            self.selected_stimulus_file_candidate = None
-        else:
-            self.selected_stimulus_file_candidate = os.path.join(RESULTS_DIR, filename)
-        self.update_submit_button_state()
-
-    def on_edf_selected(self, event=None):
-        filename = self.edf_combo.get()
-        if filename in ["Select an EDF file...", "No EDF files found", ""]:
-            self.selected_edf_file_candidate = None
-        else:
-            self.selected_edf_file_candidate = os.path.join(EDFS_DIR, filename)
-        self.update_submit_button_state()
-
     def load_file_options(self):
         """Populate dropdowns with files from RESULTS_DIR and EDFS_DIR"""
         # Stimulus CSVs
@@ -408,41 +767,6 @@ class TkApp:
             self.edf_combo.set("Select an EDF file...")
         else:
             self.edf_combo.set("No EDF files found")
-
-    def load_session_data_from_csv(self, filepath):
-        """Load trial sequence and notes from stimulus CSV for Patient Info tab."""
-        # Clear previous data
-        for item in self.patient_info_trial_tree.get_children():
-            self.patient_info_trial_tree.delete(item)
-        self.patient_info_notes_text.config(state="normal")
-        self.patient_info_notes_text.delete(1.0, tk.END)
-
-        try:
-            df = pd.read_csv(filepath)
-
-            for _, row in df.iterrows():
-                trial_type = row.get('trial_type', 'unknown')
-                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
-
-                if trial_type == 'session_note':
-                    status = "Note"
-                    tag = 'session_note'
-                    date = row.get('date', 'Unknown')
-                    note_text = str(row.get('notes', '')).strip()
-                    if note_text:
-                        self.patient_info_notes_text.insert(tk.END, f"[{date}] {note_text}\n")
-                else:
-                    status = "Completed"
-                    tag = 'completed'
-
-                self.patient_info_trial_tree.insert('', 'end', values=(display_type, status), tags=(tag,))
-
-            self.patient_info_notes_text.config(state="disabled")
-            if self.patient_info_notes_text.get(1.0, tk.END).strip():
-                self.patient_info_notes_text.see(tk.END)
-
-        except Exception as e:
-            messagebox.showerror("Load Error", f"Could not load session data:\n{e}")
 
     def build_results_tab(self):
         """Builds the Results tab UI, focusing on analysis configuration and output."""
@@ -498,56 +822,6 @@ class TkApp:
         results_frame.grid_rowconfigure(5, weight=1)
         results_frame.grid_columnconfigure(1, weight=1)
 
-    def run_selected_analysis(self):
-        """Run selected analysis type using the AnalysisManager."""
-        if not self.stimulus_file_path:
-            error_msg = "No stimulus CSV file selected. Please select files in the 'Patient Information' tab."
-            self.analysis_results_text.delete(1.0, tk.END)
-            self.analysis_results_text.insert(tk.END, error_msg)
-            return
-
-        if not self.edf_file_path:
-            error_msg = "No EDF file selected. Please select files in the 'Patient Information' tab."
-            self.analysis_results_text.delete(1.0, tk.END)
-            self.analysis_results_text.insert(tk.END, error_msg)
-            return
-
-        analysis_type = self.analysis_type_combo.get()
-        bad_channels_str = self.bad_channels_entry.get().strip()
-        eog_channels_str = self.eog_channels_entry.get().strip()
-
-        # Parse channel lists
-        bad_channels = [ch.strip() for ch in bad_channels_str.split(',') if ch.strip()]
-        eog_channels = [ch.strip() for ch in eog_channels_str.split(',') if ch.strip()]
-
-        if analysis_type == "EDF Parser":
-            self.analysis_manager.run_edf_parser(self.edf_file_path, bad_channels, eog_channels)
-        elif analysis_type == "CMD Analysis":
-            self.analysis_manager.run_cmd_analysis(self.stimulus_file_path, self.edf_file_path, bad_channels, eog_channels)
-        elif analysis_type == "Language Tracking":
-            self.analysis_results_text.delete(1.0, tk.END)
-            self.analysis_results_text.insert(tk.END, "Language tracking is not yet implemented.")
-        else:
-            self.analysis_results_text.delete(1.0, tk.END)
-            self.analysis_results_text.insert(tk.END, f"Unknown analysis type: {analysis_type}")
-
-    def on_patient_id_change(self, event=None):
-        patient_id = self.patient_id_entry.get().strip()
-        if patient_id:
-            self.current_patient = patient_id
-            self.playback_state = "ready"
-            self.status_label.config(text="Ready to prepare stimulus", foreground="green")
-        else:
-            self.current_patient = None
-            self.playback_state = "empty"
-            self.status_label.config(text="Please enter a patient ID", foreground="red")
-        self.update_button_states()
-
-    def toggle_loved_one_options(self):
-        state = 'normal' if self.loved_one_var.get() else 'disabled'
-        for widget in [self.male_radio, self.female_radio, self.file_button]:
-            widget.config(state=state)
-
     def toggle_prompts(self):
         # Right Command Prompt
         if not self.right_cmd_var.get():
@@ -568,15 +842,6 @@ class TkApp:
         else:
             self.oddball_prompt.config(state='normal')
 
-    def upload_voice_file(self):
-        file_path = filedialog.askopenfilename(
-            title="Select Voice File",
-            filetypes=[("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
-        )
-        if file_path:
-            self.audio_stim.trials.loved_one_file = file_path
-            self.audio_stim.trials.loved_one_gender = self.gender_var.get()
-            self.file_label.config(text=os.path.basename(file_path))
 
     def update_button_states(self):
         config = {
@@ -591,179 +856,6 @@ class TkApp:
         self.play_button.config(state=states['play'])
         self.pause_button.config(state=states['pause'])
         self.stop_button.config(state=states['stop'])
-
-    def toggle_pause(self):
-        if self.playback_state == "playing":
-            self.playback_state = "paused"
-            self.pause_button.config(image=self.play_sym)
-            self.pause_button.config(text="Resume")
-            self.status_label.config(text="Pausing stimulus...", foreground="red")
-        elif self.playback_state == "paused":
-            self.playback_state = "playing"
-            self.pause_button.config(image=self.pause_sym)
-            self.pause_button.config(text="Pause")
-            self.status_label.config(text="Resuming stimulus...", foreground="blue")
-
-        self.audio_stim.toggle_pause()
-        self.update_button_states()
-        self.update_trial_list_status()
-
-    def stop_stimulus(self):
-        """Stop the current stimulus playback"""
-        if self.playback_state in ["playing", "paused"]:
-            self.playback_state = "ready"
-            self.pause_button.config(text="Pause", image=self.pause_sym)
-            self.audio_stim.stop_stimulus()
-            self.status_label.config(text="Stimulus stopped", foreground="orange")
-            self.update_button_states()
-            self.update_trial_list_status()
-
-    def prepare_stimulus(self):
-        if self.playback_state != "ready":
-            return
-        if not any([self.language_var.get(), self.right_cmd_var.get(), self.left_cmd_var.get(),
-                    self.oddball_var.get(), self.loved_one_var.get()]):
-            messagebox.showwarning("No Stimulus Selected", "Please select at least one stimulus type.")
-            return
-        if self.loved_one_var.get() and not self.audio_stim.trials.loved_one_file:
-            messagebox.showwarning("Missing File", "Please upload a voice file for loved one stimulus.")
-            return
-        self.playback_state = "preparing"
-        self.update_button_states()
-        self.status_label.config(text="Preparing stimulus...", foreground="blue")
-        self.start_preparation()
-
-    def start_preparation(self):
-        """Start the preparation process"""
-        try:
-            # Collect UI selections
-            num_of_each_trial = {
-                "lang": NUM_LANGUAGE_TRIALS if self.language_var.get() else 0,
-                "rcmd": NUM_CMD_TRIALS_NO_PROMPT if self.right_cmd_var.get() and not self.rcmd_prompt_var.get() else 0,
-                "rcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
-                "lcmd": NUM_CMD_TRIALS_NO_PROMPT if self.left_cmd_var.get() and not self.lcmd_prompt_var.get() else 0,
-                "lcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
-                "odd": NUM_ODDBALL_TRIALS_NO_PROMPT if self.oddball_var.get() and not self.oddball_prompt_var.get() else 0,
-                "odd+p": NUM_ODDBALL_TRIALS_WITH_PROMPT if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
-                "loved": NUM_LOVED_ONE_TRIALS if self.loved_one_var.get() else 0
-            }
-
-            # Set gender for loved one in the trials object
-            if self.loved_one_var.get():
-                self.trials.loved_one_gender = self.gender_var.get()
-
-            # Pass the configuration to the Trials object
-            self.trials.generate_trials(num_of_each_trial)
-
-            # Reset playback state
-            self.playback_state = "ready"
-
-            # Update GUI
-            self.update_button_states()
-            self.status_label.config(text=f"Stimulus prepared! {len(self.trials.trial_dictionary)} trials ready.", foreground="green")
-            self.populate_trial_list()
-
-        except Exception as e:
-            self.playback_state = "ready"
-            self.update_button_states()
-            self.status_label.config(text="Error preparing stimulus", foreground="red")
-            messagebox.showerror("Error", f"Error preparing stimulus: {e}")
-
-    def play_stimulus(self):
-        if self.playback_state != "ready" or len(self.trials.trial_dictionary) == 0:
-            return
-        patient_id = self.patient_id_entry.get().strip()
-        if not patient_id:
-            messagebox.showwarning("No Patient ID", "Please enter a patient ID.")
-            return
-        self.playback_state = "playing"
-        self.update_button_states()
-        self.status_label.config(text="Playing stimulus...", foreground="blue")
-        self.update_trial_list_status()
-        # Start playback via auditory stimulator
-        self.audio_stim.play_trial_sequence()
-
-    def add_note(self):
-        """Add a note by appending a row to the stimulus results CSV in real time."""
-        note = self.note_entry.get().strip()
-        try:
-            patient_id = self.get_patient_id()
-        except ValueError:
-            messagebox.showwarning("No Patient ID", "Please enter a patient ID before adding a note.")
-            return
-        if not note:
-            messagebox.showwarning("Empty Note", "Please enter a note before adding.")
-            return
-
-        # Use the same result directory and filename pattern as AuditoryStimulator
-        date_str = time.strftime("%Y-%m-%d")
-        results_path = os.path.join(RESULTS_DIR, f"{patient_id}_{date_str}_stimulus_results.csv")
-
-        # Ensure directory exists
-        os.makedirs(RESULTS_DIR, exist_ok=True)
-
-        # Create note row with same structure as trial rows
-        note_row = {
-            'patient_id': patient_id,
-            'date': date_str,
-            'trial_type': 'session_note',
-            'sentences': '',
-            'start_time': '',
-            'end_time': '',
-            'duration': '',
-            'notes': note
-        }
-
-        try:
-            # Append to CSV (header only if file doesn't exist)
-            note_df = pd.DataFrame([note_row])
-            note_df.to_csv(
-                results_path,
-                mode='a',
-                header=not os.path.exists(results_path),
-                index=False
-            )
-
-            # Display in UI
-            self.notes_text.insert(tk.END, f"[{date_str}] {note}\n")
-            self.notes_text.see(tk.END)
-            self.note_entry.delete(0, tk.END)
-
-        except Exception as e:
-            messagebox.showerror("Note Save Error", f"Failed to save note:\n{str(e)}")
-
-    def populate_trial_list(self):
-        """Populate the Treeview with all trials from trial_dictionary."""
-        # Clear existing items
-        for item in self.trial_tree.get_children():
-            self.trial_tree.delete(item)
-
-        # Insert each trial
-        for idx, trial in enumerate(self.trials.trial_dictionary):
-            trial_type = trial['type']
-            display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
-            status = trial['status'].title()  # "pending" → "Pending"
-            self.trial_tree.insert('', 'end', iid=str(idx), values=(display_type, status))
-
-    def update_trial_list_status(self):
-        """Update the status column in the trial list from trial_dictionary."""
-        for idx, trial in enumerate(self.trials.trial_dictionary):
-            if str(idx) in self.trial_tree.get_children():
-                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial['type'], trial['type'].replace('_', ' ').title())
-                status = trial['status'].title()
-                self.trial_tree.item(str(idx), values=(display_type, status))
-
-                # Determine which tag to use
-                status_key = trial['status'].lower()
-                if 'complete' in status_key:
-                    tag = 'completed'
-                elif 'in progress' in status_key:
-                    tag = 'inprogress'
-                else:
-                    tag = 'pending'
-
-                # Update row with values AND tag
-                self.trial_tree.item(str(idx), values=(display_type, status), tags=(tag,))
 
     def button_styles(self):
         self.play_sym = tk.PhotoImage(file="lib/assets/play_sym.png").subsample(15, 15)
