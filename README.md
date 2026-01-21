@@ -2,18 +2,17 @@
 <img width="1000" alt="Screenshot 2025-03-18 at 6 08 57 PM" src="https://github.com/user-attachments/assets/eeb55158-1a26-47cf-b6da-322d35dd44e1" />
 
 ## Introduction
-The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and Streamlit, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
+The EEG Stimulus Package is a comprehensive tool designed to assist researchers and clinicians in administering and managing auditory stimuli during EEG (electroencephalogram) sessions. This software, built using Python and TKinter, provides a user-friendly graphical interface that facilitates the seamless integration of stimulus protocols and patient data management. It is especially useful for experiments involving precise auditory stimulus timing, randomized trial administration, and detailed patient record-keeping.
 
-In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase. The TKinter GUI now triggers these analysis functions, enabling a seamless workflow from stimulus administration to data-driven insights, with no separate pipelines required.
+In Winter 2025, we've also integrated modular Python scripts (e.g., `rodika_modularized.py` , `claassen_analysis.py`) that allow researchers to filter, artifact-remove, epoch, and analyze EEG recordings after administering stimuli. These additions let you run operations like inter-trial phase coherence (ITPC) for speech tracking or machine-learning classification for motor command-following, all within the same codebase.
 
 ## Features
 ### Graphical User Interface (GUI):
-A web-based interface powered by Streamlit, allowing for easy interaction with the software without requiring deep technical knowledge.
+An application interface powered by TKinter, allowing for easy interaction with the software without requiring deep technical knowledge.
 
 ### Stimulus Administration:
 
 - **Randomized Trials:** Automatically randomizes and prepares trial sequences, including language-based stimuli, command prompts, and auditory beeps.  
-- **Jittered Delay:** Introduces random delays between stimuli to reduce predictability and improve experiment robustness.  
 - **Multiple Stimulus Types:** Supports language stimuli, right/left command prompts, and beep stimuli, with configurable playback options.
 
 ### Patient Data Management:

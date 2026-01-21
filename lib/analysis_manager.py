@@ -1,488 +1,104 @@
-# lib/analysis_manager.py
-
 import os
-import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import pandas as pd
+from tkinter import messagebox
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import logging
-from lib.cmd_analysis import CMDAnalyzer
+import time
 from lib.edf_parser import EDFParser
 
-# Configure logging 
 logger = logging.getLogger('eeg_stimulus')
 
 class AnalysisManager:
     """
-    Manages EEG analysis tasks, running them in background threads
-    and updating the UI through callbacks.
+    Manages only stimulus-EEG sync detection and preview.
+    All analysis (CMD, language) is handled offline in notebooks.
     """
     def __init__(self, app_instance):
-        """
-        Initialize the analysis manager.
-
-        Parameters:
-        - app_instance: The TkApp instance, used to access file paths and GUI elements.
-        """
-        self.app = app_instance  # Store the reference to the TkApp instance
-
-    def run_cmd_analysis(self, stimulus_file_path, edf_file_path, bad_channels, eog_channels, n_permutations=100):
-        """
-        Starts the CMD analysis in a separate thread to keep the GUI responsive.
-        """
-        # Clear and inform the user
-        self.app.analysis_results_text.delete(1.0, tk.END)
-        self.app.analysis_results_text.insert(tk.END, "Running CMD Analysis... Please wait (This may take a minute).")
-
-        # Start the heavy computation in a new thread
-        thread = threading.Thread(
-            target=self._run_cmd_analysis_worker,
-            args=(stimulus_file_path, edf_file_path, bad_channels, eog_channels, n_permutations)
-        )
-        thread.daemon = True  # Allows the application to exit even if the thread is still running
-        thread.start()
-
-    def _run_cmd_analysis_worker(self, stimulus_file_path, edf_file_path, bad_channels, eog_channels, n_permutations):
-        """Worker function for running CMD analysis."""
-        try:
-            if not os.path.exists(stimulus_file_path):
-                error_msg = f"Stimulus CSV file not found: {stimulus_file_path}"
-                self._update_results_text(error_msg)
-                return
-            if not os.path.exists(edf_file_path):
-                error_msg = f"EDF file not found: {edf_file_path}"
-                self._update_results_text(error_msg)
-                return
-
-            logger.debug(f"Parsed bad channels: {bad_channels}")
-            logger.debug(f"Parsed EOG channels: {eog_channels}")
-
-            # Create analyzer instance
-            analyzer = CMDAnalyzer(
-                eeg_path=edf_file_path,
-                stimulus_csv_path=stimulus_file_path,
-                bad_channels=bad_channels,  # List of strings
-                eog_channels=eog_channels   # List of strings
-            )
-
-            # Get the sync time from the app instance and set it in the analyzer
-            sync_time_from_app = getattr(self.app, 'sync_time', None)
-            if sync_time_from_app is not None:
-                analyzer.set_sync_time(sync_time_from_app)
-                logger.info(f"AnalysisManager: Passed sync time {sync_time_from_app:.3f}s to CMDAnalyzer.")
-            else:
-                logger.warning("AnalysisManager: Sync time not found in app instance. CMDAnalyzer will fail to load events.")
-                # You might want to fail gracefully here if sync time is essential
-                # For now, let the analyzer raise its own error if sync_time is not set later
-
-
-            # --- Load and preprocess EEG data ---
-            try:
-                analyzer.load_and_preprocess_eeg()
-            except Exception as e:
-                error_msg = f"Failed to load EEG {str(e)}"
-                logger.exception("CMD analysis failed")
-                self._update_results_text(error_msg)
-                return
-
-            # Check if raw data loaded successfully
-            if analyzer.raw is None:
-                error_msg = "EEG data failed to load (raw is None)"
-                logger.error(error_msg)
-                self._update_results_text(error_msg)
-                return
-
-            if analyzer.raw is not None:
-                logger.debug(f"Loaded {len(analyzer.raw.ch_names)} EEG channels")
-                logger.debug(f"EEG sampling rate: {analyzer.raw.info['sfreq']} Hz")
-                logger.debug(f"EEG duration: {len(analyzer.raw.times) / analyzer.raw.info['sfreq']:.2f} seconds")
-                valid_ch_names = set(analyzer.raw.ch_names)
-                bad_channels = [ch for ch in bad_channels if ch in valid_ch_names]
-                eog_channels = [ch for ch in eog_channels if ch in valid_ch_names]
-                # Optional: warn about invalid channels
-                invalid_bad = set(bad_channels) - valid_ch_names
-                if invalid_bad:
-                    logger.warning(f"Invalid bad channels ignored: {invalid_bad}")
-
-            if analyzer.sync_time is None:
-                error_msg = (
-                    "Stimulus-EEG alignment failed: No sync artifact detected.\n"
-                    "Please verify:\n"
-                    "1. EDF contains stimulus trigger channel, OR\n"
-                    "2. Stimulus CSV has correct timing.\n"
-                    "Use 'Detect Sync & Preview' to troubleshoot."
-                )
-                self._update_results_text(error_msg)
-                return
-     
-            # --- Load stimulus events ---
-            try:
-                analyzer.load_stimulus_events()
-            except Exception as e:
-                error_msg = f"Failed to load stimulus events: {str(e)}"
-                self._update_results_text(error_msg)
-                return
-
-            # Check if events loaded successfully
-            if analyzer.metadata is None or len(analyzer.metadata) == 0:
-                error_msg = "No stimulus events found in CSV file or no valid events created after alignment."
-                logger.error(error_msg)
-                self._update_results_text(error_msg)
-                return
-
-            if analyzer.metadata is not None and analyzer.events is not None:
-                logger.debug(f"Found {len(analyzer.events)} events")
-                logger.debug(f"Metadata shape: {analyzer.metadata.shape}")
-
-            # --- Create epochs and compute features ---
-            try:
-                analyzer.create_epochs()
-                analyzer.compute_psd_features()
-            except Exception as e:
-                error_msg = f"Analysis failed during epoching/feature computation: {str(e)}"
-                self._update_results_text(error_msg)
-                return
-
-            # --- Run analysis (The permutation heavy part) ---
-            logger.debug(f"Running analysis...")
-            try:
-                results = analyzer.run_analysis(n_permutations=n_permutations)
-            except Exception as e:
-                error_msg = f"Analysis failed during run: {str(e)}"
-                logger.debug(error_msg)
-                self._update_results_text(error_msg)
-                return
-
-            # --- Plotting Section ---
-            logger.debug(f"Generating CMD analysis plots...")
-            try:
-                # Create plots in the main thread context (using Tkinter's after)
-                # We pass the data needed by the plot function
-                plot_args = (results, analyzer.raw.ch_names if analyzer.raw else [])
-                self.app.root.after(0, self._show_cmd_plots, *plot_args)
-            except Exception as plot_e:
-                logger.exception("Error generating CMD analysis plots")
-                # Log traceback but continue to display results text
-
-            # --- Display results in the GUI ---
-            result_text = "=== CMD ANALYSIS RESULTS ===\n\n"
-            result_text += f"AUC: {results['auc']:.3f} ± {results['auc_std']:.3f}\n"
-            result_text += f"P-value: {results['p_value']:.3f}\n"
-            result_text += f"Is CMD: {'Yes' if results['is_cmd'] else 'No'}\n"
-            if analyzer.metadata is not None:
-                result_text += f"Total epochs: {analyzer.metadata.shape[0]}\n"
-            if analyzer.raw is not None:
-                result_text += f"EEG channels used: {len(analyzer.raw.ch_names)}\n"
-            result_text += f"Bad channels excluded: {bad_channels}\n"
-
-            self._update_results_text(result_text)
-            logger.debug(f"Analysis completed successfully!")
-
-        except Exception as e:
-            error_msg = f"An unexpected error occurred during analysis: {str(e)}"
-            self._update_results_text(error_msg)
-
-    def _show_cmd_plots(self, results, ch_names):
-        """Handles plot creation and display in the main UI thread."""
-        # --- Create Figure ---
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-        fig.suptitle(f'CMD Analysis Results\nAUC: {results["auc"]:.3f}, P-value: {results["p_value"]:.3f}', fontsize=14)
-
-        # 1. Distribution of CV AUCs
-        scores = results.get('scores', [])
-        if scores:
-            axes[0, 0].hist(scores, bins=10, edgecolor='black')
-            axes[0, 0].axvline(x=0.5, color='red', linestyle='--', label='Chance (0.5)')
-            axes[0, 0].set_xlabel('Cross-Validation AUC')
-            axes[0, 0].set_ylabel('Frequency')
-            axes[0, 0].set_title('Distribution of CV AUCs')
-            axes[0, 0].legend()
-            axes[0, 0].grid(True, alpha=0.3)
-        else:
-            axes[0, 0].text(0.5, 0.5, 'CV scores not available', horizontalalignment='center', verticalalignment='center', transform=axes[0, 0].transAxes)
-            axes[0, 0].set_title('Distribution of CV AUCs (N/A)')
-
-        # 2. Permutation Distribution
-        perm_scores = results.get('permutation_scores', [])
-        if perm_scores:
-            axes[0, 1].hist(perm_scores, bins=50, edgecolor='black', alpha=0.7, label='Permuted AUCs')
-            axes[0, 1].axvline(x=results['auc'], color='red', linestyle='-', linewidth=2, label=f'Observed AUC ({results["auc"]:.3f})')
-            axes[0, 1].set_xlabel('AUC')
-            axes[0, 1].set_ylabel('Frequency')
-            axes[0, 1].set_title('Permutation Distribution')
-            axes[0, 1].legend()
-            axes[0, 1].grid(True, alpha=0.3)
-        else:
-            axes[0, 1].text(0.5, 0.5, 'Permutation scores not available', horizontalalignment='center', verticalalignment='center', transform=axes[0, 1].transAxes)
-            axes[0, 1].set_title('Permutation Distribution (N/A)')
-
-        # 3. Classification Map Placeholder
-        axes[1, 0].text(0.5, 0.5, 'Classification Map\n(Requires spatial info & weights)', horizontalalignment='center', verticalalignment='center', transform=axes[1, 0].transAxes, fontsize=12)
-        axes[1, 0].set_title('Classification Map (TBD)')
-        axes[1, 0].axis('off')
-
-        # 4. Feature Importance Placeholder
-        axes[1, 1].text(0.5, 0.5, 'Feature Importance\n(e.g., PSD band power)', horizontalalignment='center', verticalalignment='center', transform=axes[1, 1].transAxes, fontsize=12)
-        axes[1, 1].set_title('Feature Importance (TBD)')
-        axes[1, 1].axis('off')
-
-        # FIX: tuple for the 'rect' argument
-        plt.tight_layout(rect=(0, 0.03, 1, 0.95))
-
-        # We must use Toplevel for plot display in Tkinter
-        plot_window = tk.Toplevel(self.app.root)
-        plot_window.title("CMD Analysis Plots")
-        plot_window.geometry("1200x800")
-
-        canvas = FigureCanvasTkAgg(fig, master=plot_window)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-        def on_closing():
-            plt.close(fig)  # Close the specific figure
-            plot_window.destroy()
-        plot_window.protocol("WM_DELETE_WINDOW", on_closing)
-
-
-    def run_edf_parser(self, edf_file_path, bad_channels, eog_channels):
-        """
-        Starts the EDF parsing and plotting in a separate thread.
-        """
-        self.app.analysis_results_text.delete(1.0, tk.END)
-        self.app.analysis_results_text.insert(tk.END, "Loading EDF data and searching for first stimulus artifact... Please wait.")
-
-        # Start the heavy computation in a new thread
-        thread = threading.Thread(
-            target=self._run_edf_parser_worker,
-            args=(edf_file_path, bad_channels, eog_channels)
-        )
-        thread.daemon = True
-        thread.start()
-
-    def _run_edf_parser_worker(self, edf_file_path, bad_channels, eog_channels):
-        """Worker function for EDF parsing and butterfly plotting."""
-        try:
-            # Check if file exists
-            if not os.path.exists(edf_file_path):
-                error_msg = f"EDF file not found: {edf_file_path}"
-                self._update_results_text(error_msg)
-                return
-
-            # Create parser instance and load
-            parser = EDFParser(edf_file_path)
-            parser.load_edf()
-
-            # --- NEW: Detect sync point ---
-            stimulus_csv_path = self.app.stimulus_file_path # Use the official path from the app
-            if stimulus_csv_path and os.path.exists(stimulus_csv_path):
-                 parser.find_sync_point(stimulus_csv_path)
-            else:
-                 logger.warning("Stimulus CSV path not available or not found. Cannot detect sync point.")
-                 parser.sync_time = 0.0 # Default to start if sync not found
-
-            # --- NEW: Store the sync time in the app instance ---
-            if parser.sync_time is not None:
-                self.app.sync_time = parser.sync_time
-                logger.info(f"AnalysisManager: Stored sync time {parser.sync_time:.3f}s in TkApp instance.")
-            else:
-                logger.warning("AnalysisManager: EDFParser did not find a sync time.")
-                # Optionally clear the app's sync time if detection failed
-                self.app.sync_time = None
-
-
-            # Get info
-            info = parser.get_info_summary()
-            # channel_types = parser.get_channel_types() # Example if needed
-
-            # Format and display in the results text box
-            info_text = "=== EDF FILE INFORMATION ===\n\n"
-            for key, value in dict(info).items():
-                info_text += f"{key.replace('_', ' ').title()}: {value}\n"
-
-            # --- Add Sync Point Info ---
-            if parser.sync_time is not None:
-                info_text += f"\nDetected Sync Time (Start of first command trial): {parser.sync_time:.3f} seconds\n"
-            else:
-                info_text += f"\n[WARNING] Could not detect stimulus onset artifact. Plotting from EDF start.\n"
-                info_text += "Please ensure EDF file is aligned with stimulus presentation or use a trigger.\n"
-            # info_text += "\nChannel Types:\n"
-            # for ch_type, count in dict(channel_types).items():
-            #     info_text += f"  {ch_type.title()}: {count}\n"
-            self._update_results_text(info_text)
-
-            # Use ALL channels
-            channels_to_plot = info['ch_names']
-
-            # --- Use Sync Time for Plotting ---
-            plot_start_time = parser.sync_time if parser.sync_time is not None else 0.0
-            duration = min(60, info['duration'] - plot_start_time) # Plot 60s from sync point, or remaining duration
-            if duration <= 0:
-                 duration = min(60, info['duration']) # Fallback if sync time is at or past end
-                 plot_start_time = max(0, info['duration'] - duration)
-                 logger.warning(f"Sync time ({parser.sync_time}) is at or past EDF end ({info['duration']}). Plotting last {duration}s.")
-
-            # Note: The EDFParser.get_data_segment call is computationally heavy
-            data, times = parser.get_data_segment(start_sec=plot_start_time, duration_sec=duration, ch_names=channels_to_plot)
-
-            # Prepare data for plotting in the main thread
-            plot_data = {
-                'data': data,
-                'times': times, # This will now be relative to plot_start_time
-                'channels': channels_to_plot,
-                'file_path': edf_file_path,
-                'sync_time': parser.sync_time, # Pass sync time for potential plotting
-                'plot_start_time': plot_start_time # Pass the actual start time of the plot segment
-            }
-            # Use Tkinter's after to schedule the plotting function on the main thread
-            self.app.root.after(0, self._show_edf_plot, plot_data)
-
-        except Exception as e:
-            error_msg = f"EDF Parse Error:\n{str(e)}"
-            self._update_results_text(error_msg)
-    
-    def _create_overlaid_eeg_plot(self, data, times, channels_to_plot, title, sync_time=None):
-        """
-        Creates a matplotlib figure with overlaid EEG channels.
-        
-        Returns:
-            fig, ax: Matplotlib figure and axis objects.
-        """
-        fig, ax = plt.subplots(figsize=(15, 8))
-        cmap = plt.cm.get_cmap('hsv', len(channels_to_plot))
-
-        # Shift time axis to be relative to sync_time
-        if sync_time is not None:
-            plot_times = [t - sync_time for t in times]
-            xlabel = 'Time relative to sync (seconds)'
-            title += f"\n(Sync at {sync_time:.3f}s)"
-        else:
-            plot_times = times
-            xlabel = 'Time (seconds)'
-
-        for i, (ch_name, ch_data) in enumerate(zip(channels_to_plot, data)):
-            color = cmap(i / len(channels_to_plot))
-            ax.plot(plot_times, ch_data, linewidth=1.0, label=ch_name, color=color)
-
-        ax.set_title(title)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel('Amplitude ($\mu V$)')
-
-        if sync_time is not None:
-            ax.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Sync Point (0s)')
-
-        ax.legend(loc='upper right', ncol=4, fontsize=8)
-        ax.set_xlim(plot_times[0], plot_times[-1])
-        ax.grid(True, alpha=0.3)
-        plt.tight_layout()
-        return fig, ax
-
-    def _show_edf_plot(self, plot_data):
-        """Handles EDF plot creation and display in the main UI thread."""
-        data = plot_data['data']
-        times = plot_data['times']
-        channels_to_plot = plot_data['channels']
-        edf_file_path = plot_data['file_path']
-        sync_time = plot_data.get('sync_time', None)
-        plot_start_time = plot_data.get('plot_start_time', 0.0)
-
-        title = f'Raw EEG Data - {times[0]:.1f}s to {times[-1]:.1f}s (from sync time {sync_time:.3f}s)'
-        fig, ax = self._create_overlaid_eeg_plot(
-            data, times, channels_to_plot, title, sync_time
-        )
-
-        self._display_figure_in_window(fig, ax, f"EEG Overlaid Plot: {os.path.basename(edf_file_path)}")
-
-    def _display_figure_in_window(self, fig, ax, title):  # Note: now takes ax
-        plot_window = tk.Toplevel(self.app.root)
-        plot_window.title(title)
-        plot_window.geometry("1200x800")
-
-        canvas = FigureCanvasTkAgg(fig, master=plot_window)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-        # Add legend toggle button
-        def toggle_legend():
-            if ax.get_legend() is None:
-                ax.legend(loc='upper right', ncol=4, fontsize=8)
-            else:
-                ax.get_legend().remove()
-            canvas.draw()
-
-        ttk.Button(plot_window, text="Toggle Legend", command=toggle_legend).pack()
-
-        def on_closing():
-            plt.close(fig)
-            plot_window.destroy()
-        plot_window.protocol("WM_DELETE_WINDOW", on_closing)
-    
-    def run_language_tracking(self):
-        """Placeholder for language tracking."""
-        self._update_results_text("Language tracking not yet implemented in AnalysisManager.")
-
-    def _update_results_text(self, text):
-        """
-        Safely updates the Tkinter text widget from a worker thread.
-        Since Tkinter is not thread-safe, this uses the main thread's after method.
-        """
-        # Schedule the update on the main thread
-        self.app.root.after(0, self.__do_update_text, text)
-
-    def __do_update_text(self, text):
-        """Actual function to update the Tkinter text widget on the main thread."""
-        self.app.analysis_results_text.delete(1.0, tk.END)
-        self.app.analysis_results_text.insert(tk.END, text)
+        self.app = app_instance
 
     def run_sync_detection_and_preview(self):
-        """Detect stimulus sync point in EDF and display a preview plot.    
+        """Detect stimulus sync point in EDF and display a preview plot.
         Called from the Patient Info tab to verify alignment between
-        stimulus events (CSV) and EEG data (EDF) before full analysis.
-        Stores sync_time in app instance for later use by CMD analysis.
+        stimulus events (CSV) and EEG data (EDF).
+        Stores sync_time in app instance and logs it to the stimulus CSV.
         """
-        # Use the official paths stored in the app instance
         edf_file_path = self.app.edf_file_path
         stimulus_csv_path = self.app.stimulus_file_path
 
         if not edf_file_path or not stimulus_csv_path:
-            error_msg = "EDF file or Stimulus CSV not selected. Please use 'Select Files' in Patient Information tab first."
+            error_msg = "EDF file or Stimulus CSV not selected. Please use 'Use Selected Files' first."
             self.app.root.after(0, lambda: messagebox.showerror("File Error", error_msg))
             return
 
-        # Create parser instance and load EDF
+        # Create parser and load EDF
         parser = EDFParser(edf_file_path)
         try:
             parser.load_edf()
         except Exception as e:
-            error_msg = f"Failed to load EDF file: {e}"
+            error_msg = f"Failed to load EDF file:\n{e}"
             self.app.root.after(0, lambda: messagebox.showerror("EDF Load Error", error_msg))
             return
 
         # Detect sync point using the stimulus CSV
-        parser.find_sync_point(stimulus_csv_path)
+        try:
+            parser.find_sync_point(stimulus_csv_path)
+        except Exception as e:
+            logger.error(f"Sync detection failed: {e}", exc_info=True)
+            error_msg = f"Sync detection failed:\n{e}"
+            self.app.root.after(0, lambda: messagebox.showerror("Sync Error", error_msg))
+            return
 
-        # --- NEW: Store the sync time in the app instance ---
+        # Store sync time in app and log to CSV
         if parser.sync_time is not None:
             self.app.sync_time = parser.sync_time
-            logger.info(f"AnalysisManager: (sync preview) Stored sync time {parser.sync_time:.3f}s in TkApp instance.")
+            # Extract patient ID from CSV filename (robust to underscores in ID)
+            csv_basename = os.path.basename(stimulus_csv_path)
+            # Expected format: {PatientID}_{YYYY-MM-DD}_stimulus_results.csv
+            parts = csv_basename.split('_')
+            if len(parts) >= 3:
+                patient_id = '_'.join(parts[:-2])  # Handles IDs like "P101_subj"
+            else:
+                patient_id = "Unknown"
+
+            sync_row = {
+                'patient_id': patient_id,
+                'date': time.strftime("%Y-%m-%d"),
+                'trial_type': 'sync_detection',
+                'sentences': '',
+                'start_time': '',
+                'end_time': '',
+                'duration': '',
+                'notes': f"SYNC_TIME_EDF_SEC={parser.sync_time:.6f}"
+            }
+            sync_df = pd.DataFrame([sync_row])
+            sync_df.to_csv(stimulus_csv_path, mode='a', header=False, index=False)
+            logger.info(f"Sync time {parser.sync_time:.3f}s saved to {stimulus_csv_path}")
         else:
-            logger.warning(f"AnalysisManager: (sync preview) EDFParser did not find a sync time.")
             self.app.sync_time = None
+            logger.warning("No sync artifact detected.")
 
-
-        # Prepare data for preview plot based on sync point
+        # Prepare 60s preview segment starting at sync_time (or 0 if not found)
         info = parser.get_info_summary()
         plot_start_time = parser.sync_time if parser.sync_time is not None else 0.0
-        duration = min(60, info['duration'] - plot_start_time) # Plot 60s from sync point, or remaining duration
+        duration = min(60, info['duration'] - plot_start_time)
         if duration <= 0:
-             duration = min(60, info['duration']) # Fallback if sync time is at or past end
-             plot_start_time = max(0, info['duration'] - duration)
-             logger.warning(f"Sync time ({parser.sync_time}) is at or past EDF end ({info['duration']}). Plotting last {duration}s.")
+            duration = min(60, info['duration'])
+            plot_start_time = max(0, info['duration'] - duration)
 
         channels_to_plot = info['ch_names']
-        data, times = parser.get_data_segment(start_sec=plot_start_time, duration_sec=duration, ch_names=channels_to_plot)
+        try:
+            data, times = parser.get_data_segment(
+                start_sec=plot_start_time,
+                duration_sec=duration,
+                ch_names=channels_to_plot
+            )
+        except Exception as e:
+            error_msg = f"Failed to extract EEG segment for preview:\n{e}"
+            self.app.root.after(0, lambda: messagebox.showerror("Preview Error", error_msg))
+            return
 
-        # Prepare plot data
         plot_data = {
             'data': data,
             'times': times,
@@ -492,33 +108,30 @@ class AnalysisManager:
             'plot_start_time': plot_start_time
         }
 
-        # Schedule plot creation on the main thread
         self.app.root.after(0, self._show_sync_preview_plot, plot_data)
 
     def _show_sync_preview_plot(self, plot_data):
-        """Handles the preview plot creation and display in the main UI thread."""
+        """Display a preview plot of EEG with sync point marked."""
         data = plot_data['data']
         times = plot_data['times']
         channels_to_plot = plot_data['channels']
         edf_file_path = plot_data['file_path']
-        sync_time = plot_data.get('sync_time', None)
-        plot_start_time = plot_data.get('plot_start_time', 0.0)
+        sync_time = plot_data.get('sync_time')
 
         fig, ax = plt.subplots(figsize=(15, 8))
-
-        # Define colors
         cmap = plt.cm.get_cmap('hsv', len(channels_to_plot))
+
         for i, (ch_name, ch_data) in enumerate(zip(channels_to_plot, data)):
             color = cmap(i / len(channels_to_plot))
             ax.plot(times, ch_data, linewidth=1.0, label=ch_name, color=color)
 
-        title_sync_str = f" (Sync at {sync_time:.3f}s)" if sync_time is not None else " (Sync Not Found)"
-        ax.set_title(f'EEG Preview: {times[0]:.1f}s to {times[-1]:.1f}s{title_sync_str}')
+        title_suffix = f" (Sync at {sync_time:.3f}s)" if sync_time is not None else " (Sync Not Found)"
+        ax.set_title(f'EEG Preview: {times[0]:.1f}s to {times[-1]:.1f}s{title_suffix}')
         ax.set_xlabel('Time (seconds)')
         ax.set_ylabel('Amplitude ($\mu V$)')
 
         if sync_time is not None:
-             ax.axvline(x=sync_time, color='red', linestyle='--', linewidth=2, label=f'Sync Point ({sync_time:.3f}s)')
+            ax.axvline(x=sync_time, color='red', linestyle='--', linewidth=2, label=f'Sync Point ({sync_time:.3f}s)')
 
         ax.legend(loc='upper right', ncol=4, fontsize=8)
         ax.set_xlim(times[0], times[-1])

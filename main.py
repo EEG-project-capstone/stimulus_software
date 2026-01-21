@@ -75,7 +75,6 @@ if __name__ == "__main__":
 
         def on_closing():
             logger.info("Application closing via window.")
-            shutdown_logging()
             root.destroy()
 
         root.protocol("WM_DELETE_WINDOW", on_closing)
