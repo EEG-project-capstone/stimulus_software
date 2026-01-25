@@ -5886,3 +5886,230 @@
 2026-01-20 17:37:54,545 - eeg_stimulus.app - DEBUG - Playback complete signal received
 2026-01-20 17:37:54,547 - eeg_stimulus.app - INFO - Stimulus playback completed successfully for patient: jo
 2026-01-20 17:38:07,723 - eeg_stimulus - INFO - Application closing via window.
+2026-01-25 14:24:24,032 - eeg_stimulus - INFO - === EEG Stimulus App Started ===
+2026-01-25 14:24:24,687 - eeg_stimulus.app - INFO - Initializing TkApp
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted edf_dir to Path object: patient_data/edfs
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted result_dir to Path object: patient_data/results
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted sentences_path to Path object: audio_data/sentences
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted right_keep_path to Path object: audio_data/static/right_keep.mp3
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted right_stop_path to Path object: audio_data/static/right_stop.mp3
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted left_keep_path to Path object: audio_data/static/left_keep.mp3
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted left_stop_path to Path object: audio_data/static/left_stop.mp3
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted beep_path to Path object: audio_data/static/sample_beep.mp3
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted loved_one_path to Path object: audio_data/static
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted male_control_path to Path object: audio_data/static/ControlStatement_male.wav
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted female_control_path to Path object: audio_data/static/ControlStatement_female.wav
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted motor_prompt_path to Path object: audio_data/prompts/motorcommandprompt.wav
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Converted oddball_prompt_path to Path object: audio_data/prompts/oddballprompt.wav
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Ensured directory exists: patient_data/results
+2026-01-25 14:24:24,689 - eeg_stimulus - DEBUG - Ensured directory exists: patient_data/edfs
+2026-01-25 14:24:24,689 - eeg_stimulus - INFO - Configuration loaded from config.yml
+2026-01-25 14:24:24,690 - eeg_stimulus.stims - INFO - Stims initialized
+2026-01-25 14:24:24,690 - eeg_stimulus.auditory_stimulator - DEBUG - Stimulus handlers initialized
+2026-01-25 14:24:24,690 - eeg_stimulus.auditory_stimulator - INFO - Stimulus state reset
+2026-01-25 14:24:24,690 - eeg_stimulus.auditory_stimulator - INFO - AuditoryStimulator initialized
+2026-01-25 14:24:24,690 - eeg_stimulus.app - INFO - TkApp initialized successfully
+2026-01-25 14:24:24,701 - eeg_stimulus.app - DEBUG - Loved one options toggled: disabled
+2026-01-25 14:24:36,094 - eeg_stimulus.app - INFO - Patient ID set: j
+2026-01-25 14:24:36,262 - eeg_stimulus.app - INFO - Patient ID set: jo
+2026-01-25 14:24:39,966 - eeg_stimulus.app - INFO - Prepare stimulus button clicked
+2026-01-25 14:24:39,967 - eeg_stimulus.app - DEBUG - Retrieved patient ID: jo
+2026-01-25 14:24:39,967 - eeg_stimulus.app - INFO - Results will be saved to: patient_data/results/jo_2026-01-25_stimulus_results.csv
+2026-01-25 14:24:39,968 - eeg_stimulus.app - INFO - Starting stimulus preparation with configuration: {'lang': 0, 'rcmd': 0, 'rcmd+p': 0, 'lcmd': 0, 'lcmd+p': 0, 'odd': 4, 'odd+p': 0, 'loved': 0}
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - INFO - Generating stimuli: {'lang': 0, 'rcmd': 0, 'rcmd+p': 0, 'lcmd': 0, 'lcmd+p': 0, 'odd': 4, 'odd+p': 0, 'loved': 0}
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - INFO - Creating 4 oddball stimuli
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - DEBUG - Added 4 oddball stimuli
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - INFO - Randomizing 1 stimulus blocks
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - INFO - Stimulus generation complete: 4 total stimuli
+2026-01-25 14:24:39,968 - eeg_stimulus.stims - INFO - Stimulus type summary: {'oddball': 4}
+2026-01-25 14:24:39,968 - eeg_stimulus.app - DEBUG - Populating stimulus list with 4 stimuli
+2026-01-25 14:24:39,970 - eeg_stimulus.app - INFO - Stimulus preparation completed successfully: 4 stimuli generated
+2026-01-25 14:24:43,469 - eeg_stimulus.app - INFO - Send sync pulse button clicked
+2026-01-25 14:24:43,470 - eeg_stimulus.app - DEBUG - Retrieved patient ID: jo
+2026-01-25 14:24:43,470 - eeg_stimulus.app - DEBUG - Set playback_state to 'playing' for sync pulse
+2026-01-25 14:24:43,471 - eeg_stimulus.auditory_stimulator - INFO - Sending sync pulse for patient: jo
+2026-01-25 14:24:43,471 - eeg_stimulus.auditory_stimulator - DEBUG - Sync pulse parameters: 1000Hz, 200ms
+2026-01-25 14:24:43,479 - eeg_stimulus.auditory_stimulator - INFO - Sync pulse generated at time: 1769379883.4793348
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - Sync pulse will be saved for patient: jo
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - Starting sync pulse audio playback
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:43,480 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: sync_pulse at 1769379883.490
+2026-01-25 14:24:45,775 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: sync_pulse, 8820 samples, 44100Hz
+2026-01-25 14:24:45,775 - eeg_stimulus.app - INFO - Sync pulse sent for patient: jo
+2026-01-25 14:24:45,977 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:45,977 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:45,978 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:45,978 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:45,978 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: sync_pulse
+2026-01-25 14:24:45,978 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:45,978 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:45,998 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:45,998 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:46,009 - eeg_stimulus.auditory_stimulator - INFO - Sync pulse playback completed - calling _save_sync_event
+2026-01-25 14:24:46,009 - eeg_stimulus.auditory_stimulator - INFO - _save_sync_event called for patient: jo, time: 1769379883.4793348
+2026-01-25 14:24:46,010 - eeg_stimulus.auditory_stimulator - DEBUG - Sync row data: {'patient_id': 'jo', 'date': '2026-01-25', 'stim_type': 'manual_sync_pulse', 'sentences': '[{"event": "sync_pulse", "onset_time": 1769379883.4793348}]', 'start_time': 1769379883.4793348, 'end_time': 1769379883.6793349, 'duration': 0.2, 'notes': 'Manual sync pulse sent at 14:24:43'}
+2026-01-25 14:24:46,010 - eeg_stimulus.auditory_stimulator - INFO - Results path for sync event: patient_data/results/jo_2026-01-25_stimulus_results.csv
+2026-01-25 14:24:46,010 - eeg_stimulus.auditory_stimulator - DEBUG - _append_to_results_csv called for path: patient_data/results/jo_2026-01-25_stimulus_results.csv
+2026-01-25 14:24:46,010 - eeg_stimulus.auditory_stimulator - DEBUG - Directory created/verified: patient_data/results
+2026-01-25 14:24:46,010 - eeg_stimulus.auditory_stimulator - DEBUG - Acquired CSV lock
+2026-01-25 14:24:46,018 - eeg_stimulus.auditory_stimulator - DEBUG - File exists: True, writing with header: False
+2026-01-25 14:24:46,025 - eeg_stimulus.auditory_stimulator - DEBUG - CSV write completed to patient_data/results/jo_2026-01-25_stimulus_results.csv
+2026-01-25 14:24:46,025 - eeg_stimulus.auditory_stimulator - INFO - Sync pulse event saved successfully to patient_data/results/jo_2026-01-25_stimulus_results.csv
+2026-01-25 14:24:46,025 - eeg_stimulus.auditory_stimulator - INFO - _save_sync_event completed successfully
+2026-01-25 14:24:46,777 - eeg_stimulus.app - DEBUG - Reset playback_state to 'ready' after sync pulse
+2026-01-25 14:24:47,532 - eeg_stimulus.app - INFO - Play stimulus button clicked
+2026-01-25 14:24:47,533 - eeg_stimulus.app - INFO - Starting stimulus playback for patient: jo
+2026-01-25 14:24:47,533 - eeg_stimulus.auditory_stimulator - INFO - Starting stimulus sequence with 4 stimuli
+2026-01-25 14:24:47,533 - eeg_stimulus.app - DEBUG - Retrieved patient ID: jo
+2026-01-25 14:24:47,533 - eeg_stimulus.auditory_stimulator - INFO - Starting stimulus 1/4: type=oddball, patient=jo
+2026-01-25 14:24:47,533 - eeg_stimulus.auditory_stimulator - DEBUG - Starting playback for stimulus type: oddball
+2026-01-25 14:24:47,533 - eeg_stimulus.stim_handlers - INFO - Starting oddball stimulus (prompt=False)
+2026-01-25 14:24:47,533 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 1/5
+2026-01-25 14:24:47,534 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:47,534 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:47,534 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:47,534 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379887.544
+2026-01-25 14:24:47,540 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:47,750 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:47,751 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:47,854 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:47,855 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:48,766 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 2/5
+2026-01-25 14:24:48,768 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:48,768 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:48,769 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:48,769 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379888.779
+2026-01-25 14:24:48,776 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:48,987 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:49,899 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 3/5
+2026-01-25 14:24:49,901 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:49,901 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:49,901 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:49,902 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379889.912
+2026-01-25 14:24:49,911 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:50,116 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:50,117 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:50,154 - eeg_stimulus.app - INFO - User paused stimulus playback
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - INFO - Pausing stimulus playback - BEGIN PAUSE SEQUENCE
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - Current state: playback_state=paused, is_paused=False
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - Current handler: OddballStimHandler
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - Active stream exists: False
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - Calling _safe_stop_stream()...
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() completed
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - Calling _cancel_scheduled_callbacks()...
+2026-01-25 14:24:50,155 - eeg_stimulus.auditory_stimulator - DEBUG - _cancel_scheduled_callbacks() - acquiring callback lock...
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - DEBUG - _cancel_scheduled_callbacks() - found 1 scheduled callbacks
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - DEBUG - _cancel_scheduled_callbacks() - cancelling callback 1/1 (id: after#7)
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - DEBUG - _cancel_scheduled_callbacks() - cancelled callback 1
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - INFO - Cancelled 1 scheduled callbacks
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - DEBUG - _cancel_scheduled_callbacks() completed
+2026-01-25 14:24:50,156 - eeg_stimulus.auditory_stimulator - DEBUG - Set current stim status to 'pending': oddball
+2026-01-25 14:24:50,157 - eeg_stimulus.auditory_stimulator - INFO - Pausing stimulus playback - PAUSE SEQUENCE COMPLETE
+2026-01-25 14:24:53,602 - eeg_stimulus.app - INFO - User resumed stimulus playback
+2026-01-25 14:24:53,603 - eeg_stimulus.auditory_stimulator - INFO - Resuming stimulus playback
+2026-01-25 14:24:53,604 - eeg_stimulus.auditory_stimulator - DEBUG - Resetting stimulus state for stimulus 0
+2026-01-25 14:24:53,604 - eeg_stimulus.auditory_stimulator - DEBUG - Reset current handler: OddballStimHandler
+2026-01-25 14:24:53,604 - eeg_stimulus.app - DEBUG - Retrieved patient ID: jo
+2026-01-25 14:24:53,604 - eeg_stimulus.auditory_stimulator - INFO - Starting stimulus 1/4: type=oddball, patient=jo
+2026-01-25 14:24:53,604 - eeg_stimulus.auditory_stimulator - DEBUG - Starting playback for stimulus type: oddball
+2026-01-25 14:24:53,604 - eeg_stimulus.stim_handlers - INFO - Starting oddball stimulus (prompt=False)
+2026-01-25 14:24:53,604 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 1/5
+2026-01-25 14:24:53,605 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:53,605 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:53,605 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:53,605 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379893.616
+2026-01-25 14:24:53,613 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:53,820 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:53,821 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:53,821 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:54,732 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 2/5
+2026-01-25 14:24:54,734 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:54,734 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:54,734 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:54,734 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379894.745
+2026-01-25 14:24:54,743 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:54,950 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:55,095 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:55,095 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:56,007 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 3/5
+2026-01-25 14:24:56,009 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:56,009 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:56,009 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:56,010 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379896.020
+2026-01-25 14:24:56,018 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=playing, is_paused=False
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - clearing stream buffers...
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - stream buffers cleared
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - Audio finished: standard_tone
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback_will_run=True (state=playing, paused=False, has_callback=True)
+2026-01-25 14:24:56,223 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - scheduling callback in 10ms...
+2026-01-25 14:24:56,277 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - callback scheduled successfully
+2026-01-25 14:24:56,277 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback COMPLETE
+2026-01-25 14:24:57,189 - eeg_stimulus.stim_handlers - DEBUG - Oddball initial tone 4/5
+2026-01-25 14:24:57,189 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:57,189 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: False
+2026-01-25 14:24:57,189 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - no active stream to stop
+2026-01-25 14:24:57,189 - eeg_stimulus.auditory_stimulator - DEBUG - Audio event: standard_tone at 1769379897.200
+2026-01-25 14:24:57,195 - eeg_stimulus.auditory_stimulator - DEBUG - Audio stream started: standard_tone, 8820 samples, 44100Hz
+2026-01-25 14:24:57,298 - eeg_stimulus.app - INFO - User stopped stimulus playback
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - INFO - Stopping all stimulus playback - BEGIN STOP SEQUENCE
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Current state: playback_state=ready, is_paused=False
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Current handler: OddballStimHandler
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Active stream exists: True
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Clearing current handler reference...
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Current handler cleared
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Stopping all handlers...
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Stopping handler: language, active=False
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Handler language stopped
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Stopping handler: command, active=False
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Handler command stopped
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Stopping handler: oddball, active=True
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Handler oddball stopped
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Stopping handler: voice, active=False
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Handler voice stopped
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - All handlers stopped
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - Calling _safe_stop_stream()...
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - acquiring stream lock...
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - lock acquired, stream exists: True
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - stream active: True
+2026-01-25 14:24:57,299 - eeg_stimulus.auditory_stimulator - DEBUG - _safe_stop_stream() - calling stream.abort()...
+2026-01-25 14:24:57,301 - eeg_stimulus.auditory_stimulator - DEBUG - Audio on_finish() callback FIRED
+2026-01-25 14:24:57,301 - eeg_stimulus.auditory_stimulator - DEBUG - on_finish() - playback_state=ready, is_paused=False

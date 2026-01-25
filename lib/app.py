@@ -5,27 +5,29 @@ import time
 import pandas as pd
 import tkinter as tk
 from tkinter import messagebox, ttk, filedialog
+from pathlib import Path
 import logging
+
 from lib.config import Config
-from lib.trials import Trials
+from lib.stims import Stims
 from lib.auditory_stimulator import AuditoryStimulator
 from lib.analysis_manager import AnalysisManager
 
 logger = logging.getLogger('eeg_stimulus.app')
 
 # --- Constants ---
-NUM_LANGUAGE_TRIALS = 72
-NUM_CMD_TRIALS_NO_PROMPT = 3
-NUM_CMD_TRIALS_WITH_PROMPT = 3
-NUM_ODDBALL_TRIALS_NO_PROMPT = 4
-NUM_ODDBALL_TRIALS_WITH_PROMPT = 4
-NUM_LOVED_ONE_TRIALS = 50
+NUM_LANGUAGE_STIMS = 72
+NUM_CMD_STIMS_NO_PROMPT = 3
+NUM_CMD_STIMS_WITH_PROMPT = 3
+NUM_ODDBALL_STIMS_NO_PROMPT = 4
+NUM_ODDBALL_STIMS_WITH_PROMPT = 4
+NUM_LOVED_ONE_STIMS = 50
 
-PATIENT_DATA_DIR = "patient_data"
-RESULTS_DIR = os.path.join(PATIENT_DATA_DIR, "results")
-EDFS_DIR = os.path.join(PATIENT_DATA_DIR, "edfs")
+PATIENT_DATA_DIR = Path("patient_data")
+RESULTS_DIR = PATIENT_DATA_DIR / "results"
+EDFS_DIR = PATIENT_DATA_DIR / "edfs"
 
-TRIAL_TYPE_DISPLAY_NAMES = {
+STIM_TYPE_DISPLAY_NAMES = {
     "language": "Language",
     "right_command": "Right Command",
     "right_command+p": "Right Command + Prompt",
@@ -48,7 +50,7 @@ class TkApp:
 
         # Create class instances
         self.config = Config()
-        self.trials = Trials(self)
+        self.stims = Stims(self)
         self.audio_stim = AuditoryStimulator(self)
         self.analysis_manager = AnalysisManager(self)
 
@@ -66,7 +68,7 @@ class TkApp:
         self.loved_one_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
 
-        # file path variables
+        # File path variables
         self.current_results_path = None
         self.selected_stimulus_file_candidate = None
         self.selected_edf_file_candidate = None
@@ -121,6 +123,46 @@ class TkApp:
         self.status_label.config(text="Error during playback", foreground="red")
         messagebox.showerror("Playback Error", f"Error during playback: {error_msg}")
 
+    def send_sync_pulse(self):
+        """Send a sync pulse to the EEG recording."""
+        logger.info("Send sync pulse button clicked")
+        
+        try:
+            patient_id = self.get_patient_id()
+        except ValueError:
+            messagebox.showwarning("No Patient ID", "Please enter a patient ID before sending sync pulse.")
+            return
+        
+        # Check if already playing
+        if self.playback_state == "playing":
+            messagebox.showwarning("Playback Active", "Cannot send sync pulse while stimulus is playing.")
+            return
+        
+        # Ensure results path exists (create if needed)
+        if not self.current_results_path:
+            self.current_results_path = self.config.get_results_path(patient_id)
+            logger.info(f"Created results path for sync pulse: {self.current_results_path}")
+        
+        # Set state to playing (so audio callback will fire)
+        self.playback_state = "playing"
+        self.update_button_states()
+        self.status_label.config(text="Sending sync pulse...", foreground="blue")
+        logger.debug("Set playback_state to 'playing' for sync pulse")
+        
+        # Send the pulse via audio stimulator
+        self.audio_stim.send_sync_pulse(patient_id)
+        
+        # Reset state after pulse completes (with delay for audio to finish)
+        def reset_after_pulse():
+            self.playback_state = "ready"
+            self.update_button_states()
+            self.status_label.config(text="Sync pulse sent", foreground="green")
+            logger.debug("Reset playback_state to 'ready' after sync pulse")
+        
+        self.root.after(1000, reset_after_pulse)
+        
+        logger.info(f"Sync pulse sent for patient: {patient_id}")
+
     def on_patient_id_change(self, event=None):
         patient_id = self.patient_id_entry.get().strip()
         if patient_id:
@@ -148,8 +190,8 @@ class TkApp:
             filetypes=[("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
         )
         if file_path:
-            self.audio_stim.trials.loved_one_file = file_path
-            self.audio_stim.trials.loved_one_gender = self.gender_var.get()
+            self.stims.loved_one_file = file_path
+            self.stims.loved_one_gender = self.gender_var.get()
             self.file_label.config(text=os.path.basename(file_path))
             logger.info(f"Loved one voice file uploaded: {file_path} (Gender: {self.gender_var.get()})")
         else:
@@ -171,7 +213,7 @@ class TkApp:
 
         self.audio_stim.toggle_pause()
         self.update_button_states()
-        self.update_trial_list_status()
+        self.update_stim_list_status()
 
     def stop_stimulus(self):
         """Stop the current stimulus playback"""
@@ -182,7 +224,7 @@ class TkApp:
             self.audio_stim.stop_stimulus()
             self.status_label.config(text="Stimulus stopped", foreground="orange")
             self.update_button_states()
-            self.update_trial_list_status()
+            self.update_stim_list_status()
 
     def prepare_stimulus(self):
         logger.info("Prepare stimulus button clicked")
@@ -197,15 +239,14 @@ class TkApp:
             messagebox.showwarning("No Stimulus Selected", "Please select at least one stimulus type.")
             return
             
-        if self.loved_one_var.get() and not self.audio_stim.trials.loved_one_file:
+        if self.loved_one_var.get() and not self.stims.loved_one_file:
             logger.warning("Loved one stimulus selected but no voice file uploaded")
             messagebox.showwarning("Missing File", "Please upload a voice file for loved one stimulus.")
             return
         
         try:
             patient_id = self.get_patient_id()
-            date_str = time.strftime("%Y-%m-%d")
-            self.current_results_path = os.path.join(RESULTS_DIR, f"{patient_id}_{date_str}_stimulus_results.csv")
+            self.current_results_path = self.config.get_results_path(patient_id)
             logger.info(f"Results will be saved to: {self.current_results_path}")
         except ValueError as e:
             logger.error(f"Invalid patient ID: {e}")
@@ -221,37 +262,37 @@ class TkApp:
         """Start the preparation process"""
         try:
             # Collect UI selections
-            num_of_each_trial = {
-                "lang": NUM_LANGUAGE_TRIALS if self.language_var.get() else 0,
-                "rcmd": NUM_CMD_TRIALS_NO_PROMPT if self.right_cmd_var.get() and not self.rcmd_prompt_var.get() else 0,
-                "rcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
-                "lcmd": NUM_CMD_TRIALS_NO_PROMPT if self.left_cmd_var.get() and not self.lcmd_prompt_var.get() else 0,
-                "lcmd+p": NUM_CMD_TRIALS_WITH_PROMPT if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
-                "odd": NUM_ODDBALL_TRIALS_NO_PROMPT if self.oddball_var.get() and not self.oddball_prompt_var.get() else 0,
-                "odd+p": NUM_ODDBALL_TRIALS_WITH_PROMPT if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
-                "loved": NUM_LOVED_ONE_TRIALS if self.loved_one_var.get() else 0
+            num_of_each_stim = {
+                "lang": NUM_LANGUAGE_STIMS if self.language_var.get() else 0,
+                "rcmd": NUM_CMD_STIMS_NO_PROMPT if self.right_cmd_var.get() and not self.rcmd_prompt_var.get() else 0,
+                "rcmd+p": NUM_CMD_STIMS_WITH_PROMPT if self.right_cmd_var.get() and self.rcmd_prompt_var.get() else 0,
+                "lcmd": NUM_CMD_STIMS_NO_PROMPT if self.left_cmd_var.get() and not self.lcmd_prompt_var.get() else 0,
+                "lcmd+p": NUM_CMD_STIMS_WITH_PROMPT if self.left_cmd_var.get() and self.lcmd_prompt_var.get() else 0,
+                "odd": NUM_ODDBALL_STIMS_NO_PROMPT if self.oddball_var.get() and not self.oddball_prompt_var.get() else 0,
+                "odd+p": NUM_ODDBALL_STIMS_WITH_PROMPT if self.oddball_var.get() and self.oddball_prompt_var.get() else 0,
+                "loved": NUM_LOVED_ONE_STIMS if self.loved_one_var.get() else 0
             }
 
-            logger.info(f"Starting trial preparation with configuration: {num_of_each_trial}")
+            logger.info(f"Starting stimulus preparation with configuration: {num_of_each_stim}")
 
-            # Set gender for loved one in the trials object
+            # Set gender for loved one in the stims object
             if self.loved_one_var.get():
-                self.trials.loved_one_gender = self.gender_var.get()
+                self.stims.loved_one_gender = self.gender_var.get()
                 logger.debug(f"Loved one gender set to: {self.gender_var.get()}")
 
-            # Pass the configuration to the Trials object
-            self.trials.generate_trials(num_of_each_trial)
+            # Pass the configuration to the Stims object
+            self.stims.generate_stims(num_of_each_stim)
 
             # Reset playback state
             self.playback_state = "ready"
 
             # Update GUI
             self.update_button_states()
-            num_trials = len(self.trials.trial_dictionary)
-            self.status_label.config(text=f"Stimulus prepared! {num_trials} trials ready.", foreground="green")
-            self.populate_trial_list()
+            num_stims = len(self.stims.stim_dictionary)
+            self.status_label.config(text=f"Stimulus prepared! {num_stims} stimuli ready.", foreground="green")
+            self.populate_stim_list()
             
-            logger.info(f"Stimulus preparation completed successfully: {num_trials} trials generated")
+            logger.info(f"Stimulus preparation completed successfully: {num_stims} stimuli generated")
 
         except Exception as e:
             logger.error(f"Error during stimulus preparation: {e}", exc_info=True)
@@ -263,8 +304,8 @@ class TkApp:
     def play_stimulus(self):
         logger.info("Play stimulus button clicked")
         
-        if self.playback_state != "ready" or len(self.trials.trial_dictionary) == 0:
-            logger.warning(f"Play stimulus called in invalid state: {self.playback_state}, trials: {len(self.trials.trial_dictionary)}")
+        if self.playback_state != "ready" or len(self.stims.stim_dictionary) == 0:
+            logger.warning(f"Play stimulus called in invalid state: {self.playback_state}, stims: {len(self.stims.stim_dictionary)}")
             return
             
         try:
@@ -280,11 +321,11 @@ class TkApp:
         self.playback_state = "playing"
         self.update_button_states()
         self.status_label.config(text="Playing stimulus...", foreground="blue")
-        self.update_trial_list_status()
+        self.update_stim_list_status()
         
         logger.info(f"Starting stimulus playback for patient: {patient_id}")
         # Start playback via auditory stimulator
-        self.audio_stim.play_trial_sequence()
+        self.audio_stim.play_stim_sequence()
 
     def add_note(self):
         logger.debug("Add note button clicked")
@@ -311,7 +352,7 @@ class TkApp:
         note_row = {
             'patient_id': patient_id,
             'date': time.strftime("%Y-%m-%d"),
-            'trial_type': 'session_note',
+            'stim_type': 'session_note',
             'sentences': '',
             'start_time': '',
             'end_time': '',
@@ -324,7 +365,7 @@ class TkApp:
             note_df.to_csv(
                 self.current_results_path,
                 mode='a',
-                header=not os.path.exists(self.current_results_path),
+                header=not self.current_results_path.exists(),
                 index=False
             )
             self.notes_text.insert(tk.END, f"[{note_row['date']}] {note}\n")
@@ -341,7 +382,7 @@ class TkApp:
             self.selected_stimulus_file_candidate = None
             logger.debug("Stimulus file selection cleared")
         else:
-            self.selected_stimulus_file_candidate = os.path.join(RESULTS_DIR, filename)
+            self.selected_stimulus_file_candidate = RESULTS_DIR / filename
             logger.info(f"Stimulus file selected (candidate): {filename}")
         self.update_submit_button_state()
 
@@ -351,7 +392,7 @@ class TkApp:
             self.selected_edf_file_candidate = None
             logger.debug("EDF file selection cleared")
         else:
-            self.selected_edf_file_candidate = os.path.join(EDFS_DIR, filename)
+            self.selected_edf_file_candidate = EDFS_DIR / filename
             logger.info(f"EDF file selected (candidate): {filename}")
         self.update_submit_button_state()
 
@@ -362,14 +403,12 @@ class TkApp:
             self.stimulus_file_path = self.selected_stimulus_file_candidate
             self.edf_file_path = self.selected_edf_file_candidate
 
-            logger.info(f"Files confirmed for analysis - Stimulus: {os.path.basename(self.stimulus_file_path)}, "
-                       f"EDF: {os.path.basename(self.edf_file_path)}")
+            logger.info(f"Files confirmed for analysis - Stimulus: {self.stimulus_file_path.name}, "
+                       f"EDF: {self.edf_file_path.name}")
 
             # Update the official display label in the Patient Info tab
-            stim_file = os.path.basename(self.stimulus_file_path)
-            self.official_stimulus_label.config(text=stim_file, foreground="green")
-            edf_file = os.path.basename(self.edf_file_path)
-            self.official_edf_label.config(text=edf_file, foreground="green")
+            self.official_stimulus_label.config(text=self.stimulus_file_path.name, foreground="green")
+            self.official_edf_label.config(text=self.edf_file_path.name, foreground="green")
 
             # Clear the candidates after setting them as official
             self.selected_stimulus_file_candidate = None
@@ -388,32 +427,32 @@ class TkApp:
         else:
             logger.warning("'Use Selected Files' pressed, but no candidates were set.")
 
-    def load_session_data_from_csv(self, filepath):
-        """Load trial sequence and session log from stimulus CSV for Patient Info tab."""
+    def load_session_data_from_csv(self, filepath: Path):
+        """Load stimulus sequence and session log from stimulus CSV for Patient Info tab."""
         logger.info(f"Loading session data from: {filepath}")
         # Clear previous data
-        for item in self.patient_info_trial_tree.get_children():
-            self.patient_info_trial_tree.delete(item)
+        for item in self.patient_info_stim_tree.get_children():
+            self.patient_info_stim_tree.delete(item)
         self.patient_info_notes_text.config(state="normal")
         self.patient_info_notes_text.delete(1.0, tk.END)
         
         try:
             df = pd.read_csv(filepath)
-            trial_count = 0
+            stim_count = 0
             log_count = 0
 
             for _, row in df.iterrows():
-                trial_type = row.get('trial_type', 'unknown')
-                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
+                stim_type = row.get('stim_type', 'unknown')
+                display_type = STIM_TYPE_DISPLAY_NAMES.get(stim_type, stim_type.replace('_', ' ').title())
 
-                # Treat anything NOT a stimulus trial as a log entry
-                if trial_type in {
+                # Treat anything NOT a stimulus as a log entry
+                if stim_type in {
                     'language', 'right_command', 'right_command+p', 'left_command', 'left_command+p',
                     'oddball', 'oddball+p', 'loved_one_voice', 'control'
                 }:
-                    # It's a real trial → show in trial tree
-                    self.patient_info_trial_tree.insert('', 'end', values=(display_type, "Completed"), tags=('completed',))
-                    trial_count += 1
+                    # It's a real stimulus → show in stim tree
+                    self.patient_info_stim_tree.insert('', 'end', values=(display_type, "Completed"), tags=('completed',))
+                    stim_count += 1
                 else:
                     # It's a log-type entry (note, sync, etc.)
                     date = row.get('date', 'Unknown')
@@ -426,35 +465,35 @@ class TkApp:
             if self.patient_info_notes_text.get(1.0, tk.END).strip():
                 self.patient_info_notes_text.see(tk.END)
 
-            logger.info(f"Session data loaded: {trial_count} trials, {log_count} log entries")
+            logger.info(f"Session data loaded: {stim_count} stimuli, {log_count} log entries")
         except Exception as e:
             logger.error(f"Could not load session data from {filepath}: {e}", exc_info=True)
             messagebox.showerror("Load Error", f"Could not load session data:\n{e}")
 
-    def populate_trial_list(self):
-        """Populate the Treeview with all trials from trial_dictionary."""
-        logger.debug(f"Populating trial list with {len(self.trials.trial_dictionary)} trials")
+    def populate_stim_list(self):
+        """Populate the Treeview with all stimuli from stim_dictionary."""
+        logger.debug(f"Populating stimulus list with {len(self.stims.stim_dictionary)} stimuli")
         
         # Clear existing items
-        for item in self.trial_tree.get_children():
-            self.trial_tree.delete(item)
+        for item in self.stim_tree.get_children():
+            self.stim_tree.delete(item)
 
-        # Insert each trial
-        for idx, trial in enumerate(self.trials.trial_dictionary):
-            trial_type = trial['type']
-            display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial_type, trial_type.replace('_', ' ').title())
-            status = trial['status'].title()
-            self.trial_tree.insert('', 'end', iid=str(idx), values=(display_type, status))
+        # Insert each stimulus
+        for idx, stim in enumerate(self.stims.stim_dictionary):
+            stim_type = stim['type']
+            display_type = STIM_TYPE_DISPLAY_NAMES.get(stim_type, stim_type.replace('_', ' ').title())
+            status = stim['status'].title()
+            self.stim_tree.insert('', 'end', iid=str(idx), values=(display_type, status))
 
-    def update_trial_list_status(self):
-        """Update the status column in the trial list from trial_dictionary."""
-        for idx, trial in enumerate(self.trials.trial_dictionary):
-            if str(idx) in self.trial_tree.get_children():
-                display_type = TRIAL_TYPE_DISPLAY_NAMES.get(trial['type'], trial['type'].replace('_', ' ').title())
-                status = trial['status'].title()
+    def update_stim_list_status(self):
+        """Update the status column in the stimulus list from stim_dictionary."""
+        for idx, stim in enumerate(self.stims.stim_dictionary):
+            if str(idx) in self.stim_tree.get_children():
+                display_type = STIM_TYPE_DISPLAY_NAMES.get(stim['type'], stim['type'].replace('_', ' ').title())
+                status = stim['status'].title()
 
                 # Determine which tag to use
-                status_key = trial['status'].lower()
+                status_key = stim['status'].lower()
                 if 'complete' in status_key:
                     tag = 'completed'
                 elif 'in progress' in status_key:
@@ -463,8 +502,7 @@ class TkApp:
                     tag = 'pending'
 
                 # Update row with values AND tag
-                self.trial_tree.item(str(idx), values=(display_type, status), tags=(tag,))
-
+                self.stim_tree.item(str(idx), values=(display_type, status), tags=(tag,))
 
     def build_main_ui(self):
         self.notebook = ttk.Notebook(self.root)
@@ -477,7 +515,7 @@ class TkApp:
         self.build_patient_info_tab()
 
     def build_stimulus_tab(self):
-        """Build the stimulus tab with only the trial list having a scrollbar."""
+        """Build the stimulus tab with only the stimulus list having a scrollbar."""
         main_frame = ttk.Frame(self.tab1)
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
@@ -542,6 +580,11 @@ class TkApp:
         control_frame.pack(fill='x', pady=10)
         self.prepare_button = ttk.Button(control_frame, text="Prepare Stimulus", command=self.prepare_stimulus)
         self.prepare_button.pack(side='left', padx=5, ipady=14)
+        
+        # Sync Pulse Button (NEW)
+        self.sync_pulse_button = ttk.Button(control_frame, text="Send Sync Pulse", command=self.send_sync_pulse, state='disabled')
+        self.sync_pulse_button.pack(side='left', padx=5, ipady=14)
+        
         self.play_button = ttk.Button(control_frame, text="Play Stimulus", command=self.play_stimulus)
         self.play_button.pack(side='left', padx=5, ipady=14)
         self.pause_button = ttk.Button(control_frame, text="Pause", image=self.pause_sym, compound=tk.LEFT, command=self.toggle_pause)
@@ -549,32 +592,32 @@ class TkApp:
         self.stop_button = ttk.Button(control_frame, text="", image=self.stop_sym, compound=tk.CENTER, command=self.stop_stimulus)
         self.stop_button.pack(side='right', padx=10, ipady=4)
 
-        # Side-by-side: Trial List + Notes
+        # Side-by-side: Stimulus List + Notes
         side_by_side_frame = ttk.Frame(main_frame)
         side_by_side_frame.pack(fill='both', expand=True, pady=5)
         side_by_side_frame.grid_columnconfigure(0, weight=1)
         side_by_side_frame.grid_columnconfigure(1, weight=1)
         side_by_side_frame.grid_rowconfigure(0, weight=1)
 
-        # Trial List Frame (left)
-        trial_list_frame = ttk.LabelFrame(side_by_side_frame, text="Trial Sequence")
-        trial_list_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-        trial_list_frame.grid_columnconfigure(0, weight=1)
-        trial_list_frame.grid_rowconfigure(0, weight=1)
+        # Stimulus List Frame (left)
+        stim_list_frame = ttk.LabelFrame(side_by_side_frame, text="Stimulus Sequence")
+        stim_list_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+        stim_list_frame.grid_columnconfigure(0, weight=1)
+        stim_list_frame.grid_rowconfigure(0, weight=1)
 
-        self.trial_tree = ttk.Treeview(trial_list_frame, columns=('Type', 'Status'), show='headings', height=12)
-        self.trial_tree.heading('Type', text='Trial Type')
-        self.trial_tree.heading('Status', text='Status')
-        self.trial_tree.column('Type', width=150, minwidth=100)
-        self.trial_tree.column('Status', width=100, minwidth=80)
-        self.trial_tree.tag_configure('pending', foreground='gray')
-        self.trial_tree.tag_configure('inprogress', foreground='blue')
-        self.trial_tree.tag_configure('completed', foreground='green')
+        self.stim_tree = ttk.Treeview(stim_list_frame, columns=('Type', 'Status'), show='headings', height=12)
+        self.stim_tree.heading('Type', text='Stimulus Type')
+        self.stim_tree.heading('Status', text='Status')
+        self.stim_tree.column('Type', width=150, minwidth=100)
+        self.stim_tree.column('Status', width=100, minwidth=80)
+        self.stim_tree.tag_configure('pending', foreground='gray')
+        self.stim_tree.tag_configure('inprogress', foreground='blue')
+        self.stim_tree.tag_configure('completed', foreground='green')
 
-        tree_scroll = ttk.Scrollbar(trial_list_frame, orient="vertical", command=self.trial_tree.yview)
+        tree_scroll = ttk.Scrollbar(stim_list_frame, orient="vertical", command=self.stim_tree.yview)
         tree_scroll.pack(side='right', fill='y')
-        self.trial_tree.configure(yscrollcommand=tree_scroll.set)
-        self.trial_tree.pack(side='left', fill='both', expand=True, padx=(5, 0), pady=5)
+        self.stim_tree.configure(yscrollcommand=tree_scroll.set)
+        self.stim_tree.pack(side='left', fill='both', expand=True, padx=(5, 0), pady=5)
 
         # Notes Frame (right)
         notes_frame = ttk.LabelFrame(side_by_side_frame, text="Session Log", padding="10")
@@ -609,7 +652,7 @@ class TkApp:
         self.edf_combo.pack(side='top', fill='x', pady=2)
         self.edf_combo.bind("<<ComboboxSelected>>", self.on_edf_selected)
 
-        # --- NEW: Frame for Buttons ---
+        # --- Frame for Buttons ---
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill='x', padx=5, pady=15)
 
@@ -623,7 +666,7 @@ class TkApp:
                                           command=self.detect_and_preview_sync, state="disabled")
         self.sync_preview_btn.pack(side='left')
 
-        # --- Add a frame to display the *officially* selected files ---
+        # --- Frame to display the *officially* selected files ---
         file_display_frame = ttk.LabelFrame(main_frame, text="Currently Confirmed Files for Analysis", padding="10")
         file_display_frame.pack(fill='x', padx=5, pady=5)
 
@@ -641,25 +684,25 @@ class TkApp:
         self.official_edf_label = ttk.Label(edf_off_frame, text="None", foreground="red")
         self.official_edf_label.pack(side='left', padx=(0, 10))
 
-        # === Trial List + Notes Viewer (This part remains unchanged) ===
+        # === Stimulus List + Notes Viewer ===
         viewer_frame = ttk.Frame(main_frame)
         viewer_frame.pack(fill='both', expand=True, pady=10)
         viewer_frame.grid_columnconfigure(0, weight=1)
         viewer_frame.grid_rowconfigure(0, weight=1)
 
-        # Trial List
-        trial_frame = ttk.LabelFrame(viewer_frame, text="Trial Sequence")
-        trial_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-        trial_frame.grid_columnconfigure(0, weight=1)
-        trial_frame.grid_rowconfigure(0, weight=1)
+        # Stimulus List
+        stim_frame = ttk.LabelFrame(viewer_frame, text="Stimulus Sequence")
+        stim_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
+        stim_frame.grid_columnconfigure(0, weight=1)
+        stim_frame.grid_rowconfigure(0, weight=1)
 
-        self.patient_info_trial_tree = ttk.Treeview(trial_frame, columns=('Type', 'Status'), show='headings', height=10)
-        self.patient_info_trial_tree.heading('Type', text='Trial Type')
-        self.patient_info_trial_tree.heading('Status', text='Status')
-        self.patient_info_trial_tree.column('Type', width=150)
-        self.patient_info_trial_tree.column('Status', width=100)
-        self.patient_info_trial_tree.tag_configure('completed', foreground='green')
-        self.patient_info_trial_tree.pack(fill='both', expand=True, padx=5, pady=5)
+        self.patient_info_stim_tree = ttk.Treeview(stim_frame, columns=('Type', 'Status'), show='headings', height=10)
+        self.patient_info_stim_tree.heading('Type', text='Stimulus Type')
+        self.patient_info_stim_tree.heading('Status', text='Status')
+        self.patient_info_stim_tree.column('Type', width=150)
+        self.patient_info_stim_tree.column('Status', width=100)
+        self.patient_info_stim_tree.tag_configure('completed', foreground='green')
+        self.patient_info_stim_tree.pack(fill='both', expand=True, padx=5, pady=5)
 
         # Notes Panel
         notes_frame = ttk.LabelFrame(viewer_frame, text="Session Log")
@@ -671,28 +714,24 @@ class TkApp:
         self.patient_info_notes_text.pack(fill='both', expand=True, padx=5, pady=5)
 
         # Initialize official file paths as None
-        self.stimulus_file_path = None # This is the *official* path used by analysis
-        self.edf_file_path = None     # This is the *official* path used by analysis
+        self.stimulus_file_path = None
+        self.edf_file_path = None
 
         # Load file lists into dropdowns
         self.load_file_options()
 
     def detect_and_preview_sync(self):
         """Command for the new button to run sync detection and show preview."""
-        # Check if files are officially selected (paths are set)
         if not self.stimulus_file_path or not self.edf_file_path:
             messagebox.showwarning("No Files Selected", "Please select and confirm files using 'Use Selected Files' first.")
             return
 
-        # Call the AnalysisManager's new method
         self.analysis_manager.run_sync_detection_and_preview()
 
-    # Update the state of the new button along with the submit button
     def update_submit_button_state(self, event=None):
         """Enable 'Use Selected Files' and 'Detect Sync & Preview' buttons only when both candidate files are selected."""
         if self.selected_stimulus_file_candidate and self.selected_edf_file_candidate:
             self.submit_btn.config(state='normal')
-            # Do NOT enable the preview button here, it should only be enabled after files are officially selected
         else:
             self.submit_btn.config(state='disabled')
             self.sync_preview_btn.config(state='disabled')
@@ -701,8 +740,8 @@ class TkApp:
         """Populate dropdowns with files from RESULTS_DIR and EDFS_DIR"""
         # Stimulus CSVs
         stim_files = []
-        if os.path.exists(RESULTS_DIR):
-            stim_files = sorted([f for f in os.listdir(RESULTS_DIR) if f.lower().endswith('.csv')])
+        if RESULTS_DIR.exists():
+            stim_files = sorted([f.name for f in RESULTS_DIR.glob('*.csv')])
         self.stimulus_combo['values'] = stim_files
         if stim_files:
             self.stimulus_combo.set("Select a stimulus file...")
@@ -711,8 +750,8 @@ class TkApp:
 
         # EDF files
         edf_files = []
-        if os.path.exists(EDFS_DIR):
-            edf_files = sorted([f for f in os.listdir(EDFS_DIR) if f.lower().endswith('.edf')])
+        if EDFS_DIR.exists():
+            edf_files = sorted([f.name for f in EDFS_DIR.glob('*.edf')])
         self.edf_combo['values'] = edf_files
         if edf_files:
             self.edf_combo.set("Select an EDF file...")
@@ -739,20 +778,20 @@ class TkApp:
         else:
             self.oddball_prompt.config(state='normal')
 
-
     def update_button_states(self):
         config = {
-            "empty":     {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled'},
-            "ready":     {'prepare': 'normal',   'play': 'normal',   'pause': 'disabled', 'stop': 'disabled'},
-            "preparing": {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled'},
-            "paused":    {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal'},
-            "playing":   {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal'},
+            "empty":     {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled', 'sync': 'disabled'},
+            "ready":     {'prepare': 'normal',   'play': 'normal',   'pause': 'disabled', 'stop': 'disabled', 'sync': 'normal'},
+            "preparing": {'prepare': 'disabled', 'play': 'disabled', 'pause': 'disabled', 'stop': 'disabled', 'sync': 'disabled'},
+            "paused":    {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal',   'sync': 'disabled'},
+            "playing":   {'prepare': 'disabled', 'play': 'disabled', 'pause': 'normal',   'stop': 'normal',   'sync': 'disabled'},
         }
         states = config.get(self.playback_state, config["empty"])
         self.prepare_button.config(state=states['prepare'])
         self.play_button.config(state=states['play'])
         self.pause_button.config(state=states['pause'])
         self.stop_button.config(state=states['stop'])
+        self.sync_pulse_button.config(state=states['sync'])
 
     def button_styles(self):
         self.play_sym = tk.PhotoImage(file="lib/assets/play_sym.png").subsample(15, 15)

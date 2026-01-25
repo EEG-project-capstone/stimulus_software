@@ -1,6 +1,5 @@
 # lib/auditory_stimulator.py
 
-import os
 import time
 import random
 import threading
@@ -8,16 +7,27 @@ import pandas as pd
 import numpy as np
 import sounddevice as sd
 import logging
+import json
+from pathlib import Path
+from typing import Optional
+
+from lib.stim_handlers import (
+    LanguageStimHandler,
+    CommandStimHandler,
+    OddballStimHandler,
+    VoiceStimHandler
+)
 
 logger = logging.getLogger('eeg_stimulus.auditory_stimulator')
 
 
 class AuditoryStimulator:
-     
+    """Manages audio playback for stimulus sessions with modular handlers."""
+    
     def __init__(self, gui_callback):
         """Initialize the auditory stimulator with configuration"""
         self.gui_callback = gui_callback
-        self.trials = gui_callback.trials
+        self.stims = gui_callback.stims
         self.config = gui_callback.config
 
         self.scheduled_callbacks = []
@@ -32,361 +42,115 @@ class AuditoryStimulator:
         # File write lock for CSV safety
         self._csv_lock = threading.Lock()
         
-        self.reset_trial_state()
+        # Track current handler for additional safety
+        self._current_handler = None
+        
+        # Initialize stimulus handlers
+        self._init_handlers()
+        
+        self.reset_stim_state()
         logger.info("AuditoryStimulator initialized")
+    
+    def _init_handlers(self):
+        """Initialize modular stimulus handlers."""
+        self.handlers = {
+            'language': LanguageStimHandler(self),
+            'command': CommandStimHandler(self),
+            'oddball': OddballStimHandler(self),
+            'voice': VoiceStimHandler(self)
+        }
+        logger.debug("Stimulus handlers initialized")
 
-    def reset_trial_state(self):
-        self.trials.current_trial_index = 0
+    def reset_stim_state(self):
+        """Reset stimulus state variables."""
+        self.stims.current_stim_index = 0
         self.is_paused = False
-        self.current_trial_start_time = 0
-        self.current_trial_sentences = []
+        self.current_stim_start_time = 0
+        self.current_stim_sentences = []
         
-        # Command trial state
-        self.cmd_trial_side = None
-        self.cmd_trial_cycle = 0
-        self.cmd_trial_phase = None
+        # Reset all handlers
+        for handler in self.handlers.values():
+            handler.reset()
         
-        # Oddball trial state
-        self.oddball_tone_count = 0
-        self.oddball_phase = None
+        # Reset all stimulus statuses to pending
+        for stim in self.stims.stim_dictionary:
+            stim['status'] = 'pending'
+        
+        logger.info("Stimulus state reset")
 
-        # Reset all trial statuses to pending
-        for trial in self.trials.trial_dictionary:
-            trial['status'] = 'pending'
-        
-        logger.info("Trial state reset")
-
-    def play_trial_sequence(self):
-        """Start playing the trial sequence"""
-        self.trials.current_trial_index = 0
+    def play_stim_sequence(self):
+        """Start playing the stimulus sequence"""
+        self.stims.current_stim_index = 0
         self.is_paused = False
-        self.prompt = False
-        logger.info(f"Starting trial sequence with {len(self.trials.trial_dictionary)} trials")
+        logger.info(f"Starting stimulus sequence with {len(self.stims.stim_dictionary)} stimuli")
         self.continue_playback()
 
     def continue_playback(self):
-        """Continue playback from current trial index"""
+        """Continue playback from current stimulus index"""
         if self.gui_callback.playback_state != "playing" or self.is_paused:
             return
-        if self.trials.current_trial_index >= len(self.trials.trial_dictionary):
+        if self.stims.current_stim_index >= len(self.stims.stim_dictionary):
             # Playback complete
-            logger.info("Trial sequence completed")
+            logger.info("Stimulus sequence completed")
             self.gui_callback.playback_complete()
             return
 
-        # Play current trial
-        self.play_current_trial()
+        # Play current stimulus
+        self.play_current_stim()
 
-    def play_current_trial(self):
-        """Play the current trial and schedule the next one"""
+    def play_current_stim(self):
+        """Play the current stimulus and schedule the next one"""
         try:
             patient_id = self.gui_callback.get_patient_id()
-            trial = self.trials.trial_dictionary[self.trials.current_trial_index]
-            trial['status'] = 'in progress'
+            stim = self.stims.stim_dictionary[self.stims.current_stim_index]
+            stim['status'] = 'in progress'
             
-            # LOG: Trial start
-            logger.info(f"Starting trial {self.trials.current_trial_index + 1}/{len(self.trials.trial_dictionary)}: "
-                       f"type={trial.get('type')}, patient={patient_id}")
+            logger.info(f"Starting stimulus {self.stims.current_stim_index + 1}/{len(self.stims.stim_dictionary)}: "
+                       f"type={stim.get('type')}, patient={patient_id}")
             
-            # Initialize trial result storage
-            self.current_trial_start_time = time.time()
-            self.current_trial_sentences = []
+            # Initialize stimulus result storage
+            self.current_stim_start_time = time.time()
+            self.current_stim_sentences = []
             
-            # Log trial start event
-            self._log_event('trial_start', {
-                'trial_index': self.trials.current_trial_index,
-                'trial_type': trial.get('type'),
+            # Log stimulus start event
+            self._log_event('stim_start', {
+                'stim_index': self.stims.current_stim_index,
+                'stim_type': stim.get('type'),
                 'patient_id': patient_id
             })
             
-            # Start playing the trial (non-blocking)
-            self.start_trial_playback(trial)
-            self.gui_callback.update_trial_list_status()
+            # Start playing the stimulus using appropriate handler
+            self.start_stim_playback(stim)
+            self.gui_callback.update_stim_list_status()
             
         except Exception as e:
-            logger.error(f"Error in play_current_trial: {e}", exc_info=True)
+            logger.error(f"Error in play_current_stim: {e}", exc_info=True)
             self.gui_callback.playback_error(str(e))
 
-    def start_trial_playback(self, trial):
-        """Start playback for a specific trial type"""
-        trial_type = trial.get('type', '')
-        logger.debug(f"Starting playback for trial type: {trial_type}")
-
-        if trial_type == "language":
-            self.start_lang_trial(trial)
-        elif trial_type == "right_command":
-            self.start_cmd_trial("right")
-        elif trial_type == "right_command+p":
-            self.start_cmd_trial("right", prompt=True)
-        elif trial_type == "left_command":
-            self.start_cmd_trial("left")
-        elif trial_type == "left_command+p":
-            self.start_cmd_trial("left", prompt=True)
-        elif trial_type == "oddball":
-            self.start_oddball_trial()
-        elif trial_type == "oddball+p":
-            self.start_oddball_trial(prompt=True)
-        elif trial_type == "control":
-            self.start_voice_trial("control")
-        elif trial_type == "loved_one_voice":
-            self.start_voice_trial("loved_one")
+    def start_stim_playback(self, stim: dict):
+        """Start playback for a specific stimulus type using handlers."""
+        stim_type = stim.get('type', '')
+        logger.debug(f"Starting playback for stimulus type: {stim_type}")
+        
+        # Route to appropriate handler and track it
+        if stim_type == "language":
+            self._current_handler = self.handlers['language']
+            self.handlers['language'].start(stim)
+        elif "command" in stim_type:
+            self._current_handler = self.handlers['command']
+            self.handlers['command'].start(stim)
+        elif "oddball" in stim_type:
+            self._current_handler = self.handlers['oddball']
+            self.handlers['oddball'].start(stim)
+        elif stim_type in ["control", "loved_one_voice"]:
+            self._current_handler = self.handlers['voice']
+            self.handlers['voice'].start(stim)
         else:
-            logger.warning(f"Unknown trial type: {trial_type}, skipping")
-            self.finish_current_trial()
+            logger.warning(f"Unknown stimulus type: {stim_type}, skipping")
+            self._current_handler = None
+            self.finish_current_stim()
 
-    def start_lang_trial(self, trial):
-        """Start a language trial"""
-        n = trial.get('audio_index', 0)
-        logger.debug(f"Starting language trial with audio index {n}")
-        
-        if 0 <= n < len(self.trials.lang_audio):
-            audio_segment = self.trials.lang_audio[n]
-            samples = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
-            
-            if audio_segment.channels == 2:
-                samples = samples.reshape(-1, 2)
-            else:
-                samples = samples.reshape(-1, 1)
-            
-            # Log language trial metadata
-            self._log_event('language_trial_meta', {
-                'audio_index': n,
-                'sentence_ids': self.trials.lang_trials_ids[n] if n < len(self.trials.lang_trials_ids) else None,
-                'duration_sec': len(samples) / audio_segment.frame_rate
-            })
-            
-            self.play_audio(
-                samples=samples,
-                sample_rate=audio_segment.frame_rate,
-                callback=self.finish_current_trial,
-                log_label="language_audio"
-            )
-        else:
-            logger.error(f"Invalid language audio index: {n}")
-            self.finish_current_trial()
-
-    def start_cmd_trial(self, side, prompt=False):
-        """Start a command trial (right or left)"""
-        self.cmd_trial_side = side
-        self.cmd_trial_cycle = 0
-        self.cmd_trial_phase = "keep"
-        
-        logger.info(f"Starting {side} command trial (prompt={prompt})")
-        self._log_event('command_trial_start', {'side': side, 'prompt': prompt})
-        
-        if prompt:
-            prompt_seg = self.trials.motor_prompt_audio
-            samples = np.array(prompt_seg.get_array_of_samples(), dtype=np.int16)
-            
-            if prompt_seg.channels == 2:
-                samples = samples.reshape(-1, 2)
-            else:
-                samples = samples.reshape(-1, 1)
-
-            self.play_audio(
-                samples=samples,
-                sample_rate=prompt_seg.frame_rate,
-                callback=lambda: self._schedule(2000, self.continue_cmd_trial),
-                log_label="motor_prompt"
-            )
-        else:
-            self.continue_cmd_trial()
-
-    def continue_cmd_trial(self):
-        """Continue the command trial cycle"""
-        if self.gui_callback.playback_state != "playing" or self.is_paused:
-            self._schedule(100, self.continue_cmd_trial)
-            return
-            
-        if self.cmd_trial_cycle >= 8:
-            logger.debug(f"Command trial completed: {self.cmd_trial_side}, 8 cycles")
-            self._log_event('command_trial_end', {
-                'side': self.cmd_trial_side,
-                'total_cycles': 8
-            })
-            self.finish_current_trial()
-            return
-            
-        if self.cmd_trial_phase == "keep":
-            # Log cycle start
-            logger.debug(f"Command trial cycle {self.cmd_trial_cycle + 1}/8: KEEP phase")
-            self._log_event('command_cycle', {
-                'cycle': self.cmd_trial_cycle + 1,
-                'phase': 'keep',
-                'side': self.cmd_trial_side
-            })
-            
-            if self.cmd_trial_side == "right":
-                audio = self.trials.right_keep_audio
-            else: 
-                audio = self.trials.left_keep_audio
-                
-            samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
-            self.play_audio(
-                samples=samples,
-                sample_rate=audio.frame_rate,
-                callback=lambda: self.set_cmd_phase("pause_after_keep"),
-                log_label=f"{self.cmd_trial_side}_keep"
-            )
-            
-        elif self.cmd_trial_phase == "pause_after_keep":
-            self._log_event('command_pause', {'after': 'keep', 'duration_ms': 10000})
-            self._schedule(10000, lambda: self.set_cmd_phase("stop"))
-            
-        elif self.cmd_trial_phase == "stop":
-            logger.debug(f"Command trial cycle {self.cmd_trial_cycle + 1}/8: STOP phase")
-            self._log_event('command_cycle', {
-                'cycle': self.cmd_trial_cycle + 1,
-                'phase': 'stop',
-                'side': self.cmd_trial_side
-            })
-            
-            if self.cmd_trial_side == "right":
-                audio = self.trials.right_stop_audio
-            else:
-                audio = self.trials.left_stop_audio
-                
-            samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
-            self.play_audio(
-                samples=samples,
-                sample_rate=audio.frame_rate,
-                callback=lambda: self.set_cmd_phase("pause_after_stop"),
-                log_label=f"{self.cmd_trial_side}_stop"
-            )
-            
-        elif self.cmd_trial_phase == "pause_after_stop":
-            self._log_event('command_pause', {'after': 'stop', 'duration_ms': 10000})
-            self._schedule(10000, lambda: self.next_cmd_cycle())
-
-    def set_cmd_phase(self, phase):
-        """Set the command trial phase"""
-        self.cmd_trial_phase = phase
-        self.continue_cmd_trial()
-
-    def next_cmd_cycle(self):
-        """Move to next command cycle"""
-        self.cmd_trial_cycle += 1
-        self.cmd_trial_phase = "keep"
-        self.continue_cmd_trial()
-
-    def start_oddball_trial(self, prompt=False):
-        """Start an oddball trial"""
-        self.oddball_tone_count = 0
-        self.oddball_phase = "initial_standard"
-        self.current_trial_sentences = []
-        
-        logger.info(f"Starting oddball trial (prompt={prompt})")
-        self._log_event('oddball_trial_start', {'prompt': prompt})
-        
-        if prompt:
-            prompt_seg = self.trials.oddball_prompt_audio
-            samples = np.array(prompt_seg.get_array_of_samples(), dtype=np.int16)
-            
-            if prompt_seg.channels == 2:
-                samples = samples.reshape(-1, 2)
-            else:
-                samples = samples.reshape(-1, 1)
-                
-            self.play_audio(
-                samples=samples,
-                sample_rate=prompt_seg.frame_rate,
-                callback=lambda: self._schedule(2000, self.continue_oddball_trial),
-                log_label="oddball_prompt"
-            )
-        else:
-            self.continue_oddball_trial()
-
-    def continue_oddball_trial(self):
-        """Continue the oddball trial - FIXED VERSION"""
-        if self.gui_callback.playback_state != "playing" or self.is_paused:
-            self._schedule(100, self.continue_oddball_trial)
-            return
-            
-        ################# first 5 beeps ##############
-        if self.oddball_phase == "initial_standard":
-            if self.oddball_tone_count < 5:
-                # INCREMENT FIRST to prevent double beeps
-                self.oddball_tone_count += 1
-                logger.debug(f"Oddball initial tone {self.oddball_tone_count}/5")
-                
-                tone_samples = self._generate_tone(1000, 100)
-                self.play_audio(
-                    samples=tone_samples,
-                    sample_rate=44100,
-                    callback=lambda: self._schedule(900, self.continue_oddball_trial),
-                    log_label="standard_tone"
-                )
-            else:
-                logger.debug("Oddball switching to main sequence")
-                self._log_event('oddball_phase_change', {
-                    'from': 'initial_standard',
-                    'to': 'main_sequence'
-                })
-                self.oddball_phase = "main_sequence"
-                self.oddball_tone_count = 0
-                self.continue_oddball_trial()
-                
-        ################## next 20 beeps ###############
-        elif self.oddball_phase == "main_sequence":
-            if self.oddball_tone_count < 20:
-                # INCREMENT FIRST to prevent double beeps
-                self.oddball_tone_count += 1
-                
-                # 20% chance for rare tone
-                is_rare = random.random() < 0.2
-                frequency = 2000 if is_rare else 1000
-                label = "rare_tone" if is_rare else "standard_tone"
-                
-                logger.debug(f"Oddball main tone {self.oddball_tone_count}/20: {label}")
-                
-                tone_samples = self._generate_tone(frequency, 100)
-                self.play_audio(
-                    samples=tone_samples,
-                    sample_rate=44100,
-                    callback=lambda: self._schedule(900, self.continue_oddball_trial),
-                    log_label=label
-                )
-            else:
-                logger.debug("Oddball trial sequence completed")
-                self._log_event('oddball_trial_end', {
-                    'total_tones': 25  # 5 initial + 20 main
-                })
-                self.finish_current_trial()
-
-    def start_voice_trial(self, voice_type):
-        """Start a voice trial (control or loved_one)"""
-        logger.info(f"Starting {voice_type} voice trial")
-        self._log_event('voice_trial_start', {'voice_type': voice_type})
-        
-        audio_data = self.trials.control_voice_audio if voice_type == "control" else self.trials.loved_one_voice_audio
-        
-        if audio_data is None:
-            logger.error(f"{voice_type} audio data is None, skipping trial")
-            self.finish_current_trial()
-            return
-        
-        # Ensure int16 format
-        if audio_data.dtype != np.int16:
-            logger.warning(f"{voice_type} audio has dtype {audio_data.dtype}, converting...")
-            if np.issubdtype(audio_data.dtype, np.floating):
-                audio_data = (audio_data * 32767).astype(np.int16)
-            else:
-                audio_data = audio_data.astype(np.int16)
-        
-        self._log_event('voice_trial_meta', {
-            'voice_type': voice_type,
-            'duration_sec': len(audio_data) / self.trials.sample_rate,
-            'shape': audio_data.shape
-        })
-        
-        self.play_audio(
-            samples=audio_data,
-            sample_rate=self.trials.sample_rate,
-            callback=self.finish_current_trial,
-            log_label=f"{voice_type}_voice"
-        )
-
-    def _generate_tone(self, frequency, duration_ms, sample_rate=44100):
+    def _generate_tone(self, frequency: int, duration_ms: int, sample_rate: int = 44100) -> np.ndarray:
         """Generate a pure tone with validation"""
         if frequency <= 0 or duration_ms <= 0:
             raise ValueError(f"Invalid tone parameters: freq={frequency}, duration={duration_ms}")
@@ -402,9 +166,144 @@ class AuditoryStimulator:
         tone = np.sin(2 * np.pi * frequency * t)
         full = np.zeros(num_samples, dtype=np.float64)
         full[:tone_samples] = tone
+        
+        # Clip to prevent overflow
+        full = np.clip(full, -1.0, 1.0)
         return (full * 32767).astype(np.int16)
+    
+    def _generate_square_wave(self, frequency: int, duration_ms: int, sample_rate: int = 44100) -> np.ndarray:
+        """Generate a square wave sync pulse - highly detectable in EEG.
+        
+        Args:
+            frequency: Frequency in Hz (typically 1000-2000 Hz for sync)
+            duration_ms: Duration in milliseconds
+            sample_rate: Sample rate in Hz
+            
+        Returns:
+            Square wave as int16 numpy array
+        """
+        if frequency <= 0 or duration_ms <= 0:
+            raise ValueError(f"Invalid square wave parameters: freq={frequency}, duration={duration_ms}")
+        
+        duration_sec = duration_ms / 1000.0
+        num_samples = int(sample_rate * duration_sec)
+        
+        # Generate time array
+        t = np.linspace(0, duration_sec, num_samples, False)
+        
+        # Square wave using sign of sine wave
+        square = np.sign(np.sin(2 * np.pi * frequency * t))
+        
+        # Convert to int16
+        return (square * 32767 * 0.8).astype(np.int16)  # 80% amplitude to avoid clipping
+    
+    def send_sync_pulse(self, patient_id: str):
+        """Send a sync pulse to mark the EEG recording.
+        
+        This generates a distinctive square wave that creates a sharp artifact
+        in the EEG recording, allowing precise synchronization of stimulus
+        events with EEG data.
+        
+        Args:
+            patient_id: Patient identifier for logging
+        """
+        logger.info(f"Sending sync pulse for patient: {patient_id}")
+        
+        # Get sync pulse parameters from config (with defaults)
+        sync_freq = getattr(self.config, 'sync_pulse_frequency', 1000)  # Default 1000 Hz
+        sync_duration = getattr(self.config, 'sync_pulse_duration_ms', 200)  # Default 200 ms
+        
+        logger.debug(f"Sync pulse parameters: {sync_freq}Hz, {sync_duration}ms")
+        
+        # Generate a square wave at configured frequency and duration
+        # This creates a very distinctive artifact in EEG
+        sync_pulse = self._generate_square_wave(
+            frequency=sync_freq,
+            duration_ms=sync_duration,
+            sample_rate=44100
+        )
+        
+        # Reshape for mono playback
+        if sync_pulse.ndim == 1:
+            sync_pulse = sync_pulse.reshape(-1, 1)
+        
+        # Log the sync pulse event
+        sync_time = time.time()
+        logger.info(f"Sync pulse generated at time: {sync_time}")
+        logger.debug(f"Sync pulse will be saved for patient: {patient_id}")
+        
+        # Play the sync pulse
+        def on_pulse_complete():
+            logger.info("Sync pulse playback completed - calling _save_sync_event")
+            try:
+                # Save sync event to CSV
+                self._save_sync_event(patient_id, sync_time)
+                logger.info("_save_sync_event completed successfully")
+            except Exception as e:
+                logger.error(f"Error in _save_sync_event: {e}", exc_info=True)
+        
+        logger.debug("Starting sync pulse audio playback")
+        self.play_audio(
+            samples=sync_pulse,
+            sample_rate=44100,
+            callback=on_pulse_complete,
+            log_label="sync_pulse"
+        )
+    
+    def _save_sync_event(self, patient_id: str, sync_time: float):
+        """Save sync pulse event to CSV."""
+        logger.info(f"_save_sync_event called for patient: {patient_id}, time: {sync_time}")
+        
+        sync_row = {
+            'patient_id': patient_id,
+            'date': self.config.current_date,
+            'stim_type': 'manual_sync_pulse',
+            'sentences': json.dumps([{'event': 'sync_pulse', 'onset_time': sync_time}]),
+            'start_time': sync_time,
+            'end_time': sync_time + 0.2,  # 200ms duration
+            'duration': 0.2,
+            'notes': f'Manual sync pulse sent at {time.strftime("%H:%M:%S", time.localtime(sync_time))}'
+        }
+        
+        logger.debug(f"Sync row data: {sync_row}")
+        
+        try:
+            # Use config to get results path (consistent with save_single_stim_result)
+            results_path = self.config.get_results_path(patient_id)
+            logger.info(f"Results path for sync event: {results_path}")
+            
+            # Use shared CSV append helper
+            self._append_to_results_csv(sync_row, results_path)
+            logger.info(f"Sync pulse event saved successfully to {results_path}")
+        except Exception as e:
+            logger.error(f"Failed to save sync pulse event: {e}", exc_info=True)
+            raise  # Re-raise so we see it in outer try-except
+    
+    def _append_to_results_csv(self, row_dict: dict, results_path: Path):
+        """Append a single row to the results CSV file with thread-safe writing.
+        
+        Args:
+            row_dict: Dictionary containing row data
+            results_path: Path to the CSV file
+        """
+        logger.debug(f"_append_to_results_csv called for path: {results_path}")
+        
+        # Ensure results directory exists
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Directory created/verified: {results_path.parent}")
+        
+        # Thread-safe CSV writing
+        with self._csv_lock:
+            logger.debug("Acquired CSV lock")
+            df = pd.DataFrame([row_dict])
+            file_exists = results_path.exists()
+            logger.debug(f"File exists: {file_exists}, writing with header: {not file_exists}")
+            
+            df.to_csv(results_path, mode='a', header=not file_exists, index=False)
+            logger.debug(f"CSV write completed to {results_path}")
 
-    def play_audio(self, samples, sample_rate, callback=None, log_label=None):
+    def play_audio(self, samples: np.ndarray, sample_rate: int, 
+                   callback=None, log_label: Optional[str] = None):
         """Play audio reliably using sounddevice OutputStream with thread safety"""
         # Stop any previous stream
         self._safe_stop_stream()
@@ -418,7 +317,7 @@ class AuditoryStimulator:
         # LOG: Audio event with precise timestamp
         if log_label is not None:
             onset_time = time.time() + 0.01  # Approximate stream start latency
-            self.current_trial_sentences.append({
+            self.current_stim_sentences.append({
                 'event': log_label,
                 'onset_time': onset_time
             })
@@ -451,18 +350,38 @@ class AuditoryStimulator:
                 outdata[chunk_size:] = 0
 
         def on_finish():
+            logger.debug("Audio on_finish() callback FIRED")
+            logger.debug(f"on_finish() - playback_state={self.gui_callback.playback_state}, is_paused={self.is_paused}")
+            
             with self._stream_lock:
+                logger.debug("on_finish() - clearing stream buffers...")
                 self._current_audio_buffer = None
                 self._buffer_position = 0
                 self._active_stream = None
+                logger.debug("on_finish() - stream buffers cleared")
             
             if log_label:
                 logger.debug(f"Audio finished: {log_label}")
             
-            if (self.gui_callback.playback_state == "playing" 
-                and not self.is_paused 
-                and callback is not None):
-                self._schedule(10, callback)
+            # Execute callback if conditions met
+            callback_will_run = (self.gui_callback.playback_state == "playing" 
+                               and not self.is_paused 
+                               and callback is not None)
+            
+            logger.debug(f"on_finish() - callback_will_run={callback_will_run} (state={self.gui_callback.playback_state}, paused={self.is_paused}, has_callback={callback is not None})")
+            
+            if callback_will_run:
+                # Use try-except to catch any issues with the callback
+                try:
+                    logger.debug(f"on_finish() - scheduling callback in 10ms...")
+                    self._schedule(10, callback)
+                    logger.debug(f"on_finish() - callback scheduled successfully")
+                except Exception as e:
+                    logger.error(f"Error in audio finish callback: {e}", exc_info=True)
+            else:
+                logger.debug("on_finish() - callback NOT scheduled (conditions not met)")
+            
+            logger.debug("Audio on_finish() callback COMPLETE")
 
         try:
             stream = sd.OutputStream(
@@ -492,58 +411,57 @@ class AuditoryStimulator:
             self.gui_callback.playback_error(error_msg)
             on_finish()
 
-    def finish_current_trial(self):
-        """Finish the current trial and move to next"""
+    def finish_current_stim(self):
+        """Finish the current stimulus and move to next"""
         if self.gui_callback.playback_state != "playing":
             return
             
         patient_id = self.gui_callback.get_patient_id()
-        trial = self.trials.trial_dictionary[self.trials.current_trial_index]
+        stim = self.stims.stim_dictionary[self.stims.current_stim_index]
         end_time = time.time()
         
-        # LOG: Trial completion
-        duration = end_time - self.current_trial_start_time if self.current_trial_start_time else 0
-        logger.info(f"Trial {self.trials.current_trial_index + 1} completed: "
-                   f"type={trial['type']}, duration={duration:.2f}s, "
-                   f"events={len(self.current_trial_sentences)}")
+        duration = end_time - self.current_stim_start_time if self.current_stim_start_time else 0
+        logger.info(f"Stimulus {self.stims.current_stim_index + 1} completed: "
+                   f"type={stim['type']}, duration={duration:.2f}s, "
+                   f"events={len(self.current_stim_sentences)}")
         
-        # Log trial end event
-        self._log_event('trial_end', {
-            'trial_index': self.trials.current_trial_index,
+        # Log stimulus end event
+        self._log_event('stim_end', {
+            'stim_index': self.stims.current_stim_index,
             'duration': duration,
-            'event_count': len(self.current_trial_sentences)
+            'event_count': len(self.current_stim_sentences)
         })
         
-        trial_result = {
+        stim_result = {
             'patient_id': patient_id,
             'date': self.config.current_date,
-            'trial_type': trial['type'],
-            'sentences': self.current_trial_sentences,
-            'start_time': self.current_trial_start_time,
+            'stim_type': stim['type'],
+            'sentences': self.current_stim_sentences,
+            'start_time': self.current_stim_start_time,
             'end_time': end_time,
             'duration': duration
         }
         
-        self.save_single_trial_result(trial_result)
-        trial['status'] = 'completed'
-        self.gui_callback.update_trial_list_status()
-        self.trials.current_trial_index += 1
+        self.save_single_stim_result(stim_result)
+        stim['status'] = 'completed'
+        self.gui_callback.update_stim_list_status()
+        self.stims.current_stim_index += 1
         
-        # Inter-trial delay
+        # Inter-stimulus delay (1.2-2.2 seconds randomized)
         delay = random.randint(1200, 2200)
-        logger.debug(f"Inter-trial delay: {delay}ms")
+        logger.debug(f"Inter-stimulus delay: {delay}ms")
         self._schedule(delay, self.continue_playback)
 
-    def _log_event(self, event_type, metadata=None):
+    def _log_event(self, event_type: str, metadata: Optional[dict] = None):
         """Helper to log structured events with timestamps"""
         event_data = {
             'event': event_type,
             'onset_time': time.time()
         }
-        if metadata:
+        if metadata is not None:
             event_data.update(metadata)
         
-        self.current_trial_sentences.append(event_data)
+        self.current_stim_sentences.append(event_data)
 
     def toggle_pause(self):
         """Toggle pause state"""
@@ -553,119 +471,180 @@ class AuditoryStimulator:
             self.gui_callback.playback_state = "playing"
             self.gui_callback.update_button_states()
             self.gui_callback.status_label.config(text="Resuming stimulus...", foreground="blue")
-            self.reset_current_trial_state()
-            self.play_current_trial()
+            self.reset_current_stim_state()
+            self.play_current_stim()
         else:
-            logger.info("Pausing stimulus playback")
+            logger.info("Pausing stimulus playback - BEGIN PAUSE SEQUENCE")
+            logger.debug(f"Current state: playback_state={self.gui_callback.playback_state}, is_paused={self.is_paused}")
+            logger.debug(f"Current handler: {self._current_handler.__class__.__name__ if self._current_handler else 'None'}")
+            logger.debug(f"Active stream exists: {self._active_stream is not None}")
+            
+            # Stop stream first
+            logger.debug("Calling _safe_stop_stream()...")
             self._safe_stop_stream()
+            logger.debug("_safe_stop_stream() completed")
+            
+            # Cancel callbacks
+            logger.debug("Calling _cancel_scheduled_callbacks()...")
             self._cancel_scheduled_callbacks()
+            logger.debug("_cancel_scheduled_callbacks() completed")
+            
+            # Set pause state
             self.is_paused = True
-            current_trial = self.trials.trial_dictionary[self.trials.current_trial_index]
-            current_trial['status'] = 'pending'
-            self.gui_callback.update_trial_list_status()
+            current_stim = self.stims.stim_dictionary[self.stims.current_stim_index]
+            current_stim['status'] = 'pending'
+            logger.debug(f"Set current stim status to 'pending': {current_stim['type']}")
+            
+            self.gui_callback.update_stim_list_status()
             self.gui_callback.playback_state = "paused"
             self.gui_callback.update_button_states()
-            self.gui_callback.status_label.config(text="Stimulus paused – trial will restart", foreground="orange")
+            self.gui_callback.status_label.config(text="Stimulus paused – will restart", foreground="orange")
+            
+            logger.info("Pausing stimulus playback - PAUSE SEQUENCE COMPLETE")
 
-    def reset_current_trial_state(self):
-        """Reset state variables for current trial"""
-        if not self.trials.trial_dictionary:
+    def reset_current_stim_state(self):
+        """Reset state variables for current stimulus"""
+        if not self.stims.stim_dictionary:
             return
 
-        trial = self.trials.trial_dictionary[self.trials.current_trial_index]
-        logger.debug(f"Resetting trial state for trial {self.trials.current_trial_index}")
+        stim = self.stims.stim_dictionary[self.stims.current_stim_index]
+        logger.debug(f"Resetting stimulus state for stimulus {self.stims.current_stim_index}")
         
-        self.current_trial_start_time = 0
-        self.current_trial_sentences = []
-        self.prompt = False
+        self.current_stim_start_time = 0
+        self.current_stim_sentences = []
         
-        # Reset command-specific state
-        self.cmd_trial_side = None
-        self.cmd_trial_cycle = 0
-        self.cmd_trial_phase = None
+        # Only reset the current handler (not all handlers)
+        if self._current_handler:
+            self._current_handler.reset()
+            logger.debug(f"Reset current handler: {self._current_handler.__class__.__name__}")
         
-        # Reset oddball-specific state
-        self.oddball_tone_count = 0
-        self.oddball_phase = None
-        
-        trial['status'] = 'pending'
+        stim['status'] = 'pending'
 
     def _safe_stop_stream(self):
         """Safely stop and close the active audio stream"""
+        logger.debug("_safe_stop_stream() - acquiring stream lock...")
         with self._stream_lock:
+            logger.debug(f"_safe_stop_stream() - lock acquired, stream exists: {self._active_stream is not None}")
             if self._active_stream:
                 try:
+                    logger.debug(f"_safe_stop_stream() - stream active: {self._active_stream.active}")
+                    # Force stop immediately without waiting for buffer to drain
                     if self._active_stream.active:
-                        self._active_stream.stop()
+                        logger.debug("_safe_stop_stream() - calling stream.abort()...")
+                        self._active_stream.abort()  # Use abort() instead of stop() for immediate halt
+                        logger.debug("_safe_stop_stream() - stream.abort() completed")
+                    
+                    logger.debug("_safe_stop_stream() - calling stream.close()...")
                     self._active_stream.close()
-                    logger.debug("Audio stream stopped")
+                    logger.debug("_safe_stop_stream() - stream.close() completed")
+                    logger.info("Audio stream stopped and closed")
                 except Exception as e:
-                    logger.warning(f"Error stopping stream: {e}")
+                    logger.error(f"Error stopping stream: {e}", exc_info=True)
                 finally:
                     self._active_stream = None
                     self._current_audio_buffer = None
                     self._buffer_position = 0
+                    logger.debug("_safe_stop_stream() - stream references cleared")
+            else:
+                logger.debug("_safe_stop_stream() - no active stream to stop")
 
     def stop_stimulus(self):
         """Stop all stimulus playback"""
-        logger.info("Stopping all stimulus playback")
+        logger.info("Stopping all stimulus playback - BEGIN STOP SEQUENCE")
+        logger.debug(f"Current state: playback_state={self.gui_callback.playback_state}, is_paused={self.is_paused}")
+        logger.debug(f"Current handler: {self._current_handler.__class__.__name__ if self._current_handler else 'None'}")
+        logger.debug(f"Active stream exists: {self._active_stream is not None}")
+        
+        # Clear current handler reference first
+        logger.debug("Clearing current handler reference...")
+        self._current_handler = None
+        logger.debug("Current handler cleared")
+        
+        # Stop all handlers
+        logger.debug("Stopping all handlers...")
+        for name, handler in self.handlers.items():
+            logger.debug(f"Stopping handler: {name}, active={handler.is_active}")
+            handler.stop()
+            logger.debug(f"Handler {name} stopped")
+        logger.debug("All handlers stopped")
+        
+        # Stop stream
+        logger.debug("Calling _safe_stop_stream()...")
         self._safe_stop_stream()
+        logger.debug("_safe_stop_stream() completed")
+        
+        # Cancel callbacks
+        logger.debug("Calling _cancel_scheduled_callbacks()...")
         self._cancel_scheduled_callbacks()
-        self.reset_trial_state()
+        logger.debug("_cancel_scheduled_callbacks() completed")
+        
+        # Reset state
+        logger.debug("Calling reset_stim_state()...")
+        self.reset_stim_state()
+        logger.debug("reset_stim_state() completed")
+        
+        logger.info("Stopping all stimulus playback - STOP SEQUENCE COMPLETE")
 
-    def save_single_trial_result(self, trial_result):
-        """Save a single trial result with thread-safe file writing"""
-        results_dir = self.config.file.get('result_dir', 'patient_data/results')
+    def save_single_stim_result(self, stim_result: dict):
+        """Save a single stimulus result with thread-safe file writing"""
         patient_id = self.gui_callback.get_patient_id()
-        os.makedirs(results_dir, exist_ok=True)
-        results_path = os.path.join(results_dir, f"{patient_id}_{self.config.current_date}_stimulus_results.csv")
+        results_path = self.config.get_results_path(patient_id)
         
         # Ensure consistent schema
-        trial_result = {
+        stim_result = {
             'patient_id': patient_id,
             'date': self.config.current_date,
-            'trial_type': trial_result.get('trial_type', ''),
-            'sentences': trial_result.get('sentences', ''),
-            'start_time': trial_result.get('start_time', ''),
-            'end_time': trial_result.get('end_time', ''),
-            'duration': trial_result.get('duration', ''),
+            'stim_type': stim_result.get('stim_type', ''),
+            'sentences': json.dumps(stim_result.get('sentences', [])),  # Serialize events as JSON
+            'start_time': stim_result.get('start_time', ''),
+            'end_time': stim_result.get('end_time', ''),
+            'duration': stim_result.get('duration', ''),
             'notes': '' 
         }
         
-        # Thread-safe CSV writing
-        with self._csv_lock:
-            try:
-                df = pd.DataFrame([trial_result])
-                file_exists = os.path.exists(results_path)
-                df.to_csv(results_path, mode='a', header=not file_exists, index=False)
-                logger.info(f"Trial result saved to {results_path}")
-            except Exception as e:
-                logger.error(f"Failed to save trial result: {e}", exc_info=True)
+        # Use shared CSV append helper
+        try:
+            self._append_to_results_csv(stim_result, results_path)
+            logger.info(f"Stimulus result saved to {results_path}")
+        except Exception as e:
+            logger.error(f"Failed to save stimulus result: {e}", exc_info=True)
 
-    def _schedule(self, delay_ms, callback):
+    def _schedule(self, delay_ms: int, callback):
         """Thread-safe callback scheduling"""
+        # Create the wrapper first, capturing callback_id properly
+        cb_id = None  # Pre-declare for closure
+        
         def wrapped_callback():
             with self.callback_lock:
-                if callback_id in self.scheduled_callbacks:
-                    self.scheduled_callbacks.remove(callback_id)
+                if cb_id in self.scheduled_callbacks:
+                    self.scheduled_callbacks.remove(cb_id)
             callback()
         
-        callback_id = self.gui_callback.root.after(delay_ms, wrapped_callback)
+        # Now assign the actual ID
+        cb_id = self.gui_callback.root.after(delay_ms, wrapped_callback)
         
         with self.callback_lock:
-            self.scheduled_callbacks.append(callback_id)
+            self.scheduled_callbacks.append(cb_id)
         
-        return callback_id
+        return cb_id
     
     def _cancel_scheduled_callbacks(self):
         """Thread-safe callback cancellation"""
+        logger.debug("_cancel_scheduled_callbacks() - acquiring callback lock...")
         with self.callback_lock:
             cancelled_count = len(self.scheduled_callbacks)
-            for callback_id in self.scheduled_callbacks:
+            logger.debug(f"_cancel_scheduled_callbacks() - found {cancelled_count} scheduled callbacks")
+            
+            for i, callback_id in enumerate(self.scheduled_callbacks):
                 try:
+                    logger.debug(f"_cancel_scheduled_callbacks() - cancelling callback {i+1}/{cancelled_count} (id: {callback_id})")
                     self.gui_callback.root.after_cancel(callback_id)
+                    logger.debug(f"_cancel_scheduled_callbacks() - cancelled callback {i+1}")
                 except Exception as e:
                     logger.warning(f"Error canceling callback {callback_id}: {e}")
+            
             self.scheduled_callbacks.clear()
             if cancelled_count > 0:
-                logger.debug(f"Cancelled {cancelled_count} scheduled callbacks")
+                logger.info(f"Cancelled {cancelled_count} scheduled callbacks")
+            else:
+                logger.debug("No scheduled callbacks to cancel")
