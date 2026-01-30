@@ -67,20 +67,23 @@ class AudioStreamManager:
         def stream_callback(outdata, frames, time_info, status):
             if status:
                 logger.warning(f"Audio stream status: {status}")
-            
+
             with self._lock:
                 if self._buffer is None or self._buffer_position >= len(self._buffer):
                     outdata.fill(0)
+                    logger.debug("Audio buffer is empty or playback is complete.")
                     raise sd.CallbackStop
-                
+
                 available = len(self._buffer) - self._buffer_position
                 chunk_size = min(frames, available)
                 chunk = self._buffer[self._buffer_position:self._buffer_position + chunk_size]
                 self._buffer_position += chunk_size
-            
+
+            logger.debug(f"Filling audio buffer: {chunk_size} frames.")
             outdata[:chunk_size] = chunk
             if chunk_size < frames:
                 outdata[chunk_size:] = 0
+                logger.debug("Audio buffer underrun: filling remaining frames with silence.")
         
         # Create finished callback
         def finished_callback():
@@ -108,14 +111,17 @@ class AudioStreamManager:
         
         # Create and start stream
         try:
+            logger.debug(f"AudioParams.STREAM_LATENCY value: {AudioParams.STREAM_LATENCY}")
             stream = sd.OutputStream(
                 samplerate=sample_rate,
                 channels=samples.shape[1],
                 dtype=AudioParams.BUFFER_DTYPE,
                 callback=stream_callback,
                 finished_callback=finished_callback,
-                latency=AudioParams.STREAM_LATENCY
+                latency=max(float(AudioParams.STREAM_LATENCY), 0.1)  # Ensure STREAM_LATENCY is a float
             )
+            
+            logger.debug(f"Audio stream configured with latency={stream.latency} and buffer size={len(samples)}")
             
             with self._lock:
                 self._stream = stream

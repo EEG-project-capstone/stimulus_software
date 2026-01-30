@@ -162,23 +162,19 @@ class AuditoryStimulator:
     
     def _generate_tone(self, frequency: int, duration_ms: int,
                       sample_rate: int = 44100) -> np.ndarray:
-        """Generate a pure tone.
-
-        Args:
-            frequency: Frequency in Hz
-            duration_ms: Duration in milliseconds
-            sample_rate: Sample rate in Hz
-
-        Returns:
-            Tone samples as int16 array
-        """
+        """Generate a pure tone with adjusted parameters for consistency."""
+        logger.debug(f"Generating tone: frequency={frequency} Hz, duration={duration_ms} ms, sample_rate={sample_rate} Hz")
+        logger.debug(f"Tone duration (ms): {duration_ms}")
+        # Temporarily increase tone duration for testing
+        duration_ms = max(duration_ms, 500)  # Ensure at least 500ms
         if frequency <= 0 or duration_ms <= 0:
             raise ValueError(f"Invalid tone parameters: freq={frequency}, duration={duration_ms}")
 
         duration_sec = duration_ms / 1000.0
         num_samples = int(sample_rate * duration_sec)
         t = np.linspace(0, duration_sec, num_samples, False)
-        tone = np.sin(2 * np.pi * frequency * t)
+        tone = 0.5 * np.sin(2 * np.pi * frequency * t)  # Adjusted amplitude to 0.5
+        logger.debug(f"Generated tone: {len(tone)} samples, max amplitude={np.max(tone)}")
         return (np.clip(tone, -1.0, 1.0) * 32767).astype(np.int16)
     
     def _generate_square_wave(self, frequency: int, duration_ms: int, 

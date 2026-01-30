@@ -152,7 +152,7 @@ class SyncPulseParams:
 class AudioParams:
     """Audio processing parameters."""
     SAMPLE_RATE = 44100
-    STREAM_LATENCY = 'low'
+    STREAM_LATENCY = 0.1  # Updated to a float value for compatibility
     MAX_AMPLITUDE = 32767  # int16 max
     BUFFER_DTYPE = 'int16'
 

@@ -8,7 +8,7 @@
 # pip install -r requirements.txt
 
 # Create logs directory if it doesn't exist
-mkdir -p logs
+# mkdir -p logs
 
 # Run the application and capture terminal output
 # Appends to a single log file while also showing in terminal

@@ -6,9 +6,9 @@ Replaces lib/config.py with enhanced error checking and setup.
 """
 
 from pathlib import Path
-import yaml
 import time
 import logging
+import yaml
 from typing import Optional, Dict, Any, List
 from lib.exceptions import ConfigFileError, ConfigValidationError
 from lib.constants import CPC_SCALE, GOSE_SCALE
