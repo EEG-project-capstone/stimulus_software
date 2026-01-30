@@ -1,5 +1,16 @@
-
+# macOS
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 lib/__pycache__
+
+# Logs
+logs/
+*.log
+
+# Patient data
 patient_data/
-stim_app.log

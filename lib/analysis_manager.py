@@ -1,4 +1,3 @@
-import os
 import tkinter as tk
 import pandas as pd
 from tkinter import messagebox
@@ -6,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import logging
 import time
+from pathlib import Path
 from lib.edf_parser import EDFParser
 
 logger = logging.getLogger('eeg_stimulus')
@@ -24,8 +24,8 @@ class AnalysisManager:
         stimulus events (CSV) and EEG data (EDF).
         Stores sync_time in app instance and logs it to the stimulus CSV.
         """
-        edf_file_path = self.app.edf_file_path
-        stimulus_csv_path = self.app.stimulus_file_path
+        edf_file_path = self.app.analysis_files.edf_path
+        stimulus_csv_path = self.app.analysis_files.stimulus_path
 
         if not edf_file_path or not stimulus_csv_path:
             error_msg = "EDF file or Stimulus CSV not selected. Please use 'Use Selected Files' first."
@@ -54,7 +54,7 @@ class AnalysisManager:
         if parser.sync_time is not None:
             self.app.sync_time = parser.sync_time
             # Extract patient ID from CSV filename (robust to underscores in ID)
-            csv_basename = os.path.basename(stimulus_csv_path)
+            csv_basename = Path(stimulus_csv_path).name
             # Expected format: {PatientID}_{YYYY-MM-DD}_stimulus_results.csv
             parts = csv_basename.split('_')
             if len(parts) >= 3:
@@ -65,12 +65,11 @@ class AnalysisManager:
             sync_row = {
                 'patient_id': patient_id,
                 'date': time.strftime("%Y-%m-%d"),
-                'trial_type': 'sync_detection',
-                'sentences': '',
+                'stim_type': 'sync_detection',
+                'notes': f"SYNC_TIME_EDF_SEC={parser.sync_time:.6f}",
                 'start_time': '',
                 'end_time': '',
-                'duration': '',
-                'notes': f"SYNC_TIME_EDF_SEC={parser.sync_time:.6f}"
+                'duration': ''
             }
             sync_df = pd.DataFrame([sync_row])
             sync_df.to_csv(stimulus_csv_path, mode='a', header=False, index=False)
@@ -128,7 +127,7 @@ class AnalysisManager:
         title_suffix = f" (Sync at {sync_time:.3f}s)" if sync_time is not None else " (Sync Not Found)"
         ax.set_title(f'EEG Preview: {times[0]:.1f}s to {times[-1]:.1f}s{title_suffix}')
         ax.set_xlabel('Time (seconds)')
-        ax.set_ylabel('Amplitude ($\mu V$)')
+        ax.set_ylabel(r'Amplitude ($\mu V$)')
 
         if sync_time is not None:
             ax.axvline(x=sync_time, color='red', linestyle='--', linewidth=2, label=f'Sync Point ({sync_time:.3f}s)')
@@ -139,7 +138,7 @@ class AnalysisManager:
         plt.tight_layout()
 
         plot_window = tk.Toplevel(self.app.root)
-        plot_window.title(f"Sync Preview: {os.path.basename(edf_file_path)}")
+        plot_window.title(f"Sync Preview: {Path(edf_file_path).name}")
         plot_window.geometry("1200x800")
 
         canvas = FigureCanvasTkAgg(fig, master=plot_window)

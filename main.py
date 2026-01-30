@@ -25,9 +25,13 @@ def setup_logging():
 
     log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    # Try to use script dir; fall back to temp if not writable
+    # Create logs directory if it doesn't exist
     script_dir = os.path.dirname(__file__)
-    log_file = os.path.join(script_dir, 'eeg_stimulus_app.log')
+    logs_dir = os.path.join(script_dir, 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+
+    # Try to use logs dir; fall back to temp if not writable
+    log_file = os.path.join(logs_dir, 'eeg_stimulus_app.log')
     try:
         with open(log_file, 'a'):
             pass
@@ -46,7 +50,7 @@ def setup_logging():
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(log_formatter)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.WARNING)  # Only show warnings/errors in terminal
 
     app_logger.addHandler(file_handler)
     app_logger.addHandler(console_handler)

@@ -1,7 +1,6 @@
 # lib/stims.py
 
 import numpy as np
-import os
 import random
 import logging
 from pydub import AudioSegment
@@ -159,8 +158,8 @@ class Stims:
             
             loved_block = []
             for i in range(num_of_each_stims["loved"]):
-                loved_block.append({"type": "control", "voice_type": "control", "status": "pending"})
-                loved_block.append({"type": "loved_one_voice", "voice_type": "loved_one", "status": "pending"})
+                loved_block.append({"type": "control", "status": "pending"})
+                loved_block.append({"type": "loved_one_voice", "status": "pending"})
             blocks.append(loved_block)
             logger.debug(f"Added {len(loved_block)} voice stimuli (control + loved one pairs)")
 

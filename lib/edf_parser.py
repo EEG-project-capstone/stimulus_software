@@ -97,21 +97,21 @@ class EDFParser:
             return
 
         # Find the first command trial (in the order the rows appear in the CSV)
-        cmd_trial_types = ['right_command', 'right_command+p', 'left_command', 'left_command+p']
-        first_cmd_trial = df[df['trial_type'].isin(cmd_trial_types)].iloc[0] if not df[df['trial_type'].isin(cmd_trial_types)].empty else None
+        cmd_stim_types = ['right_command', 'right_command+p', 'left_command', 'left_command+p']
+        first_cmd_trial = df[df['stim_type'].isin(cmd_stim_types)].iloc[0] if not df[df['stim_type'].isin(cmd_stim_types)].empty else None
 
         if first_cmd_trial is None:
             logger.warning("No command trials found in the stimulus CSV.")
             self.sync_time = None
             return
         
-        original_index = df[df['trial_type'].isin(cmd_trial_types)].index[0]
+        original_index = df[df['stim_type'].isin(cmd_stim_types)].index.tolist()[0]
         csv_row_number = original_index + 2 
 
         if csv_row_number is not None:
             logger.info(
                 f"This corresponds to the estimated start of the first command trial: "
-                f"{first_cmd_trial['trial_type']} (CSV row {csv_row_number})."
+                f"{first_cmd_trial['stim_type']} (CSV row {csv_row_number})."
             )
 
         # Search for the artifact in the EEG data from the beginning of the EDF
@@ -160,5 +160,5 @@ class EDFParser:
         logger.info(f"Sync point detected at sample {self.sync_sample}, time {self.sync_time:.3f}s in EDF.")
         logger.info(
             f"This corresponds to the estimated start of the first command trial: "
-            f"{first_cmd_trial['trial_type']} (CSV row {csv_row_number})."
+            f"{first_cmd_trial['stim_type']} (CSV row {csv_row_number})."
         )
