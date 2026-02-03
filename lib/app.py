@@ -298,11 +298,21 @@ class TkApp:
         if not self.state_manager.is_active():
             return
 
-        logger.debug("Stopping stimulus")
-        self.state_manager.transition_to(PlaybackState.READY)
-        self.pause_button.config(text="Pause")
-        self.audio_stim.stop_stimulus()
-        self.update_stim_list_status()
+        logger.info("Stop stimulus button pressed")
+        try:
+            logger.debug("Transitioning state to READY")
+            self.state_manager.transition_to(PlaybackState.READY)
+            self.pause_button.config(text="Pause")
+
+            logger.debug("Calling audio_stim.stop_stimulus()")
+            self.audio_stim.stop_stimulus()
+
+            logger.debug("Updating stim list status")
+            self.update_stim_list_status()
+
+            logger.info("Stop stimulus completed successfully")
+        except Exception as e:
+            logger.error(f"Error in stop_stimulus: {e}", exc_info=True)
     
     def prepare_stimulus(self):
         """Prepare stimulus sequence based on user selections."""
@@ -1248,3 +1258,20 @@ class TkApp:
         
         self.patient_info_notes_text = tk.Text(frame, height=10, state="disabled")
         self.patient_info_notes_text.pack(fill='both', expand=True, padx=5, pady=5)
+
+    def cleanup(self):
+        """Clean up resources before closing the application."""
+        logger.info("Cleaning up application resources")
+        try:
+            # Stop any active audio playback
+            if hasattr(self, 'audio_stim') and self.audio_stim:
+                logger.debug("Stopping audio stimulator")
+                self.audio_stim.stop_stimulus()
+
+            # Cancel any scheduled callbacks
+            if hasattr(self, 'audio_stim') and self.audio_stim:
+                self.audio_stim._cancel_scheduled_callbacks()
+
+            logger.info("Cleanup completed successfully")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}", exc_info=True)

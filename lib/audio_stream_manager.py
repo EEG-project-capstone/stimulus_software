@@ -51,8 +51,7 @@ class AudioStreamManager:
         with self._lock:
             if self._stream is not None and self._stream.active:
                 was_active = True
-                logger.warning(f"!!! STREAM OVERLAP: New play() called while previous stream still active!")
-                logger.warning(f"    Previous buffer position: {self._buffer_position}/{len(self._buffer) if self._buffer is not None else 'None'}")
+                logger.warning("New play() called while previous stream active, stopping previous")
 
         # Stop any existing stream
         logger.debug(f"play() calling stop() (was_active={was_active})")
@@ -71,7 +70,6 @@ class AudioStreamManager:
             with self._lock:
                 if self._buffer is None or self._buffer_position >= len(self._buffer):
                     outdata.fill(0)
-                    logger.debug("Audio buffer is empty or playback is complete.")
                     raise sd.CallbackStop
 
                 available = len(self._buffer) - self._buffer_position
@@ -79,24 +77,21 @@ class AudioStreamManager:
                 chunk = self._buffer[self._buffer_position:self._buffer_position + chunk_size]
                 self._buffer_position += chunk_size
 
-            logger.debug(f"Filling audio buffer: {chunk_size} frames.")
             outdata[:chunk_size] = chunk
             if chunk_size < frames:
                 outdata[chunk_size:] = 0
-                logger.debug("Audio buffer underrun: filling remaining frames with silence.")
         
         # Create finished callback
         def finished_callback():
             finish_time = time.time()
             logger.debug(f"Audio playback finished at {finish_time:.3f}")
 
-            # Track if this is being called after stream was already cleared
+            # Track if this is being called after stream was already cleared (expected during abort)
             was_already_none = False
             with self._lock:
                 if self._stream is None:
                     was_already_none = True
-                    logger.warning(f"!!! DOUBLE FINISH: finished_callback called but stream already None!")
-                    logger.warning(f"    This may indicate abort() triggered finished_callback")
+                    logger.warning("finished_callback called after stream cleared (likely from abort)")
 
                 self._buffer = None
                 self._buffer_position = 0

@@ -77,13 +77,18 @@ if __name__ == "__main__":
         root = tk.Tk()
         root.report_callback_exception = handle_tk_exception
 
+        app = TkApp(root)
+
         def on_closing():
             logger.info("Application closing via window.")
+            try:
+                app.cleanup()
+            except Exception as e:
+                logger.error(f"Error during app cleanup: {e}", exc_info=True)
             root.destroy()
 
         root.protocol("WM_DELETE_WINDOW", on_closing)
 
-        app = TkApp(root)
         root.mainloop()
 
     except KeyboardInterrupt:

@@ -1,51 +1,225 @@
 # lib/edf_parser.py
 
-import mne
-import pandas as pd
-import numpy as np
-from typing import Union
 import logging
+from pathlib import Path
+from typing import Optional
+
+import mne
+import numpy as np
+import pandas as pd
+
+from lib.exceptions import EDFFileError
 
 logger = logging.getLogger('eeg_stimulus')
 
+
 class EDFParser:
     def __init__(self, edf_path: str) -> None:
-        self.edf_path = edf_path
+        self.edf_path = Path(edf_path)
         self.raw = None
-        self.sync_sample = None # Store the detected sync point
-        self.sync_time = None   # Store the time of the sync point
+        self.sync_sample = None  # Store the detected sync point
+        self.sync_time = None    # Store the time of the sync point
+        self._header_info = None  # Cache for raw header info
 
-    def load_edf(self) -> None:
-        """Load the EDF file."""
-        logger.info(f"Loading EDF file: {self.edf_path}")
-        self.raw = mne.io.read_raw_edf(self.edf_path, preload=True)
-        logger.info(f"Loaded raw data with {len(self.raw.ch_names)} channels, sfreq={self.raw.info['sfreq']} Hz")
+    def validate_file(self) -> dict:
+        """Validate the EDF file exists and has valid format.
 
-    def get_info_summary(self) -> dict:
-        """Get basic info about the loaded EDF."""
-        if self.raw is None:
-            raise RuntimeError("EDF data not loaded. Call load_edf() first.")
-        return {
-            'ch_names': self.raw.ch_names,
-            'sfreq': self.raw.info['sfreq'],
-            'n_times': len(self.raw.times),
-            'duration': len(self.raw.times) / self.raw.info['sfreq'],
-            'meas_date': self.raw.info['meas_date']
+        Returns:
+            dict with validation results: {'valid': bool, 'error': str or None, 'header': dict or None}
+        """
+        result = {'valid': False, 'error': None, 'header': None}
+
+        # Check file exists
+        if not self.edf_path.exists():
+            result['error'] = f"EDF file not found: {self.edf_path}"
+            logger.error(result['error'])
+            return result
+
+        # Check file extension
+        if self.edf_path.suffix.lower() not in ['.edf', '.bdf']:
+            result['error'] = f"Invalid file extension: {self.edf_path.suffix}. Expected .edf or .bdf"
+            logger.warning(result['error'])
+            # Continue anyway - might still be valid
+
+        # Check file is readable and has minimum size for EDF header (256 bytes)
+        try:
+            file_size = self.edf_path.stat().st_size
+            if file_size < 256:
+                result['error'] = f"File too small to be valid EDF: {file_size} bytes"
+                logger.error(result['error'])
+                return result
+        except OSError as e:
+            result['error'] = f"Cannot read file: {e}"
+            logger.error(result['error'])
+            return result
+
+        # Parse EDF header manually to validate format
+        try:
+            header = self._read_edf_header()
+            result['header'] = header
+            result['valid'] = True
+            logger.info(f"EDF validation successful: {header.get('n_channels', '?')} channels, "
+                       f"version: {header.get('version', 'unknown')}")
+        except Exception as e:
+            result['error'] = f"Invalid EDF format: {e}"
+            logger.error(result['error'])
+            return result
+
+        return result
+
+    def _read_edf_header(self) -> dict:
+        """Read and parse the EDF header without loading full data.
+
+        Returns:
+            dict with header information
+        """
+        with open(self.edf_path, 'rb') as f:
+            # Fixed header (256 bytes)
+            version = f.read(8).decode('ascii').strip()
+            patient_id = f.read(80).decode('ascii', errors='replace').strip()
+            recording_id = f.read(80).decode('ascii', errors='replace').strip()
+            start_date = f.read(8).decode('ascii').strip()
+            start_time = f.read(8).decode('ascii').strip()
+            header_bytes = int(f.read(8).decode('ascii').strip())
+            reserved = f.read(44).decode('ascii', errors='replace').strip()
+            n_records = int(f.read(8).decode('ascii').strip())
+            record_duration = float(f.read(8).decode('ascii').strip())
+            n_channels = int(f.read(4).decode('ascii').strip())
+
+            # Read channel labels (16 bytes each)
+            channel_labels = []
+            for _ in range(n_channels):
+                label = f.read(16).decode('ascii', errors='replace').strip()
+                channel_labels.append(label)
+
+        # Calculate duration
+        total_duration = n_records * record_duration
+
+        self._header_info = {
+            'version': version,
+            'patient_id': patient_id,
+            'recording_id': recording_id,
+            'start_date': start_date,
+            'start_time': start_time,
+            'header_bytes': header_bytes,
+            'reserved': reserved,
+            'n_records': n_records,
+            'record_duration': record_duration,
+            'n_channels': n_channels,
+            'channel_labels': channel_labels,
+            'total_duration_sec': total_duration,
         }
 
-    # def get_channel_types(self) -> dict:
-    #     """Get a summary of channel types."""
-    #     if self.raw is None:
-    #         raise RuntimeError("EDF data not loaded. Call load_edf() first.")
-    #     # get_channel_types() returns a list of strings for each channel
-    #     types_list = self.raw.get_channel_types()
-    #     # Count occurrences of each type
-    #     unique_types, counts = np.unique(types_list, return_counts=True)
-    #     # Return as a dictionary
-    #     return dict(zip(unique_types, counts))
+        return self._header_info
 
+    def load_edf(self) -> None:
+        """Load the EDF file with validation."""
+        logger.info(f"Loading EDF file: {self.edf_path}")
 
-    def get_data_segment(self, start_sec: float, duration_sec: float, ch_names: Union[list[str], None] = None) -> tuple[np.ndarray, np.ndarray]:        
+        # Validate first
+        validation = self.validate_file()
+        if not validation['valid']:
+            raise EDFFileError(validation['error'])
+
+        try:
+            # Suppress MNE's verbose output
+            with mne.utils.use_log_level('WARNING'):
+                self.raw = mne.io.read_raw_edf(str(self.edf_path), preload=True)
+            logger.info(f"Loaded raw data with {len(self.raw.ch_names)} channels, "
+                       f"sfreq={self.raw.info['sfreq']} Hz")
+        except Exception as e:
+            raise EDFFileError(f"Failed to load EDF with MNE: {e}") from e
+
+    def get_info_summary(self) -> dict:
+        """Get comprehensive info about the loaded EDF.
+
+        Returns:
+            dict with EDF information including channels, duration, subject info, etc.
+        """
+        if self.raw is None:
+            raise RuntimeError("EDF data not loaded. Call load_edf() first.")
+
+        info = self.raw.info
+        duration_sec = len(self.raw.times) / info['sfreq']
+
+        summary = {
+            # Basic info
+            'ch_names': self.raw.ch_names,
+            'n_channels': len(self.raw.ch_names),
+            'sfreq': info['sfreq'],
+            'n_times': len(self.raw.times),
+            'duration': duration_sec,
+            'duration_formatted': self._format_duration(duration_sec),
+            'meas_date': info.get('meas_date'),
+
+            # Subject info (if available)
+            'subject_info': self._extract_subject_info(),
+
+            # Recording info from header
+            'header_info': self._header_info if self._header_info else {},
+
+            # Channel types summary
+            'channel_types': self._get_channel_type_summary(),
+
+            # Data statistics (quick summary)
+            'highpass': info.get('highpass', None),
+            'lowpass': info.get('lowpass', None),
+        }
+
+        return summary
+
+    def _format_duration(self, seconds: float) -> str:
+        """Format duration in human-readable format."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs:.1f}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs:.1f}s"
+        else:
+            return f"{secs:.1f}s"
+
+    def _extract_subject_info(self) -> dict:
+        """Extract subject information from MNE info structure."""
+        if self.raw is None:
+            logger.warning("_extract_subject_info called but EDF data not loaded")
+            return {}
+        info = self.raw.info
+        subject = {}
+
+        # Try to get subject info from MNE's info structure
+        if info.get('subject_info'):
+            subj_info = info['subject_info']
+            subject['id'] = subj_info.get('id', subj_info.get('his_id', None))
+            subject['sex'] = subj_info.get('sex', None)
+            subject['birthday'] = subj_info.get('birthday', None)
+            subject['hand'] = subj_info.get('hand', None)
+
+        # Also try to extract from header if available
+        if self._header_info:
+            if not subject.get('id') and self._header_info.get('patient_id'):
+                subject['id'] = self._header_info['patient_id']
+            subject['recording_id'] = self._header_info.get('recording_id', None)
+            subject['start_date'] = self._header_info.get('start_date', None)
+            subject['start_time'] = self._header_info.get('start_time', None)
+
+        return subject
+
+    def _get_channel_type_summary(self) -> dict:
+        """Get summary of channel types."""
+        if self.raw is None:
+            logger.warning("_get_channel_type_summary called but EDF data not loaded")
+            return {}
+        try:
+            types_list = self.raw.get_channel_types()
+            unique_types, counts = np.unique(types_list, return_counts=True)
+            return dict(zip(unique_types, counts.tolist()))
+        except Exception as e:
+            logger.warning(f"Failed to get channel types: {e}")
+            return {}
+
+    def get_data_segment(self, start_sec: float, duration_sec: float, ch_names: Optional[list[str]] = None) -> tuple[np.ndarray, np.ndarray]:        
         """Get a segment of EEG data. 
         Args:
             start_sec: Start time in seconds **from EDF start**.

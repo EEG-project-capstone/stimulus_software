@@ -125,12 +125,17 @@ class OddballStimParams:
     """Parameters for oddball stimuli."""
     INITIAL_TONES = 5
     MAIN_TONES = 20
-    TONE_DURATION_MS = 100
-    INTER_TONE_INTERVAL_MS = 900
+    TONE_DURATION_MS = 20  # Full-amplitude duration (envelope adds to this)
     STANDARD_FREQ = 1000  # Hz
     RARE_FREQ = 2000      # Hz
     RARE_PROBABILITY = 0.2
     PROMPT_DELAY_MS = 2000
+    # Padding to absorb stream initialization latency on slower audio backends (e.g., ChromeOS)
+    TONE_PADDING_MS = 200  # Must be >= AudioParams.STREAM_LATENCY
+    TONE_AMPLITUDE = 1.0  # 0.0 to 1.0
+    TONE_ENVELOPE_MS = 5  # Fade in/out duration to eliminate clicks
+    # Interval after tone playback to achieve 1000ms onset-to-onset
+    INTER_TONE_INTERVAL_MS = 1000 - (2 * TONE_PADDING_MS) - TONE_DURATION_MS - (2 * TONE_ENVELOPE_MS)
 
 
 # === SYNC PULSE PARAMETERS ===

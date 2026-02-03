@@ -21,7 +21,7 @@ from lib.stim_handlers import (
     OddballStimHandler,
     VoiceStimHandler
 )
-from lib.constants import SyncPulseParams, TimingParams
+from lib.constants import SyncPulseParams, TimingParams, OddballStimParams
 from lib.exceptions import AudioError
 from lib.logging_utils import log_operation
 
@@ -162,20 +162,57 @@ class AuditoryStimulator:
     
     def _generate_tone(self, frequency: int, duration_ms: int,
                       sample_rate: int = 44100) -> np.ndarray:
-        """Generate a pure tone with adjusted parameters for consistency."""
-        logger.debug(f"Generating tone: frequency={frequency} Hz, duration={duration_ms} ms, sample_rate={sample_rate} Hz")
-        logger.debug(f"Tone duration (ms): {duration_ms}")
-        # Temporarily increase tone duration for testing
-        duration_ms = max(duration_ms, 500)  # Ensure at least 500ms
+        """Generate a pure tone with leading/trailing padding and envelope.
+
+        The tone structure is: leading_padding + fade_in + full_amplitude + fade_out + trailing_padding
+        This ensures reliable playback on all platforms (including ChromeOS).
+
+        Args:
+            frequency: Frequency in Hz
+            duration_ms: Duration of full-amplitude portion in milliseconds
+            sample_rate: Sample rate in Hz
+
+        Returns:
+            Tone samples as int16 array
+        """
         if frequency <= 0 or duration_ms <= 0:
             raise ValueError(f"Invalid tone parameters: freq={frequency}, duration={duration_ms}")
 
+        # Generate silence padding to absorb stream initialization latency
+        padding_samples = int(sample_rate * OddballStimParams.TONE_PADDING_MS / 1000.0)
+        padding = np.zeros(padding_samples, dtype=np.float64)
+
+        # Generate envelope and full-amplitude tone separately
+        # Total tone = fade_in + full_amplitude + fade_out
+        envelope_sec = OddballStimParams.TONE_ENVELOPE_MS / 1000.0
+        envelope_samples = int(sample_rate * envelope_sec)
         duration_sec = duration_ms / 1000.0
-        num_samples = int(sample_rate * duration_sec)
-        t = np.linspace(0, duration_sec, num_samples, False)
-        tone = 0.5 * np.sin(2 * np.pi * frequency * t)  # Adjusted amplitude to 0.5
-        logger.debug(f"Generated tone: {len(tone)} samples, max amplitude={np.max(tone)}")
-        return (np.clip(tone, -1.0, 1.0) * 32767).astype(np.int16)
+        full_amp_samples = int(sample_rate * duration_sec)
+
+        # Total tone duration including envelopes
+        total_samples = envelope_samples + full_amp_samples + envelope_samples
+        total_sec = total_samples / sample_rate
+
+        t = np.linspace(0, total_sec, total_samples, False)
+        tone = OddballStimParams.TONE_AMPLITUDE * np.sin(2 * np.pi * frequency * t)
+
+        # Apply fade in/out envelope
+        if envelope_samples > 0:
+            fade_in = np.linspace(0, 1, envelope_samples)
+            fade_out = np.linspace(1, 0, envelope_samples)
+            tone[:envelope_samples] *= fade_in
+            tone[-envelope_samples:] *= fade_out
+
+        # Trailing silence ensures tone plays out before stream closes
+        trailing_padding = np.zeros(padding_samples, dtype=np.float64)
+
+        # Concatenate: leading padding + tone + trailing padding
+        combined = np.concatenate([padding, tone, trailing_padding])
+
+        logger.debug(f"Generated tone: freq={frequency}Hz, duration={duration_ms}ms, "
+                    f"padding={OddballStimParams.TONE_PADDING_MS}ms, total_samples={len(combined)}")
+
+        return (np.clip(combined, -1.0, 1.0) * 32767).astype(np.int16)
     
     def _generate_square_wave(self, frequency: int, duration_ms: int, 
                              sample_rate: int = 44100) -> np.ndarray:
@@ -257,19 +294,22 @@ class AuditoryStimulator:
         except Exception as e:
             logger.error(f"Error saving sync pulse: {e}", exc_info=True)
     
-    def play_audio(self, samples: np.ndarray, sample_rate: int, 
-                   callback=None, log_label: Optional[str] = None):
+    def play_audio(self, samples: np.ndarray, sample_rate: int,
+                   callback=None, log_label: Optional[str] = None,
+                   onset_offset_ms: float = 0):
         """Play audio using the stream manager.
-        
+
         Args:
             samples: Audio samples
             sample_rate: Sample rate in Hz
             callback: Optional callback when playback finishes
             log_label: Optional label for logging
+            onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
         """
         # Log audio event with timestamp
         if log_label is not None:
-            onset_time = time.time() + 0.01  # Approximate stream start latency
+            # Onset time = now + stream latency + any offset (e.g., padding before actual sound)
+            onset_time = time.time() + 0.01 + (onset_offset_ms / 1000.0)
             self.current_stim_sentences.append({
                 'event': log_label,
                 'onset_time': onset_time
@@ -347,17 +387,19 @@ class AuditoryStimulator:
         logger.info(f"Saving {len(tone_events)} oddball beeps to CSV")
 
         # Save each beep as a separate row
+        # Actual audible tone = TONE_DURATION_MS + (2 * TONE_ENVELOPE_MS)
+        tone_duration_sec = (OddballStimParams.TONE_DURATION_MS +
+                            2 * OddballStimParams.TONE_ENVELOPE_MS) / 1000.0
+
         for event in tone_events:
             onset_time = event.get('onset_time', 0)
             tone_type = event.get('event', 'unknown')
-            # Tone duration is 100ms = 0.1s
-            tone_duration = 0.1
 
             beep_data = {
                 'notes': tone_type,  # Just the tone type (standard_tone or rare_tone)
                 'start_time': onset_time,
-                'end_time': onset_time + tone_duration,
-                'duration': tone_duration
+                'end_time': onset_time + tone_duration_sec,
+                'duration': tone_duration_sec
             }
 
             self.results_manager.append_result(

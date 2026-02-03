@@ -7,6 +7,7 @@ Fixed for Python 3.9 compatibility - no lambda in callbacks.
 """
 
 import random
+import time
 import numpy as np
 import logging
 from lib.base_stim_handler import BaseStimHandler
@@ -322,17 +323,26 @@ class OddballStimHandler(BaseStimHandler):
         if not self.is_active:
             return
 
+        # Record tone onset time for accurate inter-tone timing
+        self.state['last_tone_onset'] = time.time()
+
         tone_samples = self.audio_stim._generate_tone(frequency, OddballStimParams.TONE_DURATION_MS)
         self.play_audio_safe(
             samples=tone_samples,
             sample_rate=44100,
             on_finish=self._after_tone,
-            log_label=label
+            log_label=label,
+            # Offset onset time by leading padding so CSV records actual tone start
+            onset_offset_ms=OddballStimParams.TONE_PADDING_MS
         )
 
     def _after_tone(self):
-        """Called after tone finishes."""
-        self.safe_schedule(OddballStimParams.INTER_TONE_INTERVAL_MS, self.continue_stim)
+        """Called after tone finishes. Schedule next tone for 1000ms from onset."""
+        # Calculate remaining time to achieve 1000ms onset-to-onset
+        last_onset = self.state.get('last_tone_onset', time.time())
+        elapsed_ms = (time.time() - last_onset) * 1000
+        remaining_ms = max(0, 1000 - elapsed_ms)
+        self.safe_schedule(int(remaining_ms), self.continue_stim)
     
     def _finish_stim(self):
         """Finish the oddball stimulus."""

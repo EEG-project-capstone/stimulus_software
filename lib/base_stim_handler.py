@@ -69,7 +69,7 @@ class BaseStimHandler(ABC):
 
         # Check global playback state via state manager
         if self.audio_stim.gui_callback.state_manager.is_paused():
-            self.safe_schedule(100, self.continue_stim)
+            # Don't schedule anything when paused - resume will restart
             return False
 
         return True
@@ -133,7 +133,8 @@ class BaseStimHandler(ABC):
                        samples,
                        sample_rate: int,
                        on_finish: Optional[Callable[[], None]] = None,
-                       log_label: Optional[str] = None):
+                       log_label: Optional[str] = None,
+                       onset_offset_ms: float = 0):
         """Play audio with safe finish callback.
 
         Args:
@@ -141,6 +142,7 @@ class BaseStimHandler(ABC):
             sample_rate: Sample rate in Hz
             on_finish: Callback after playback
             log_label: Label for logging
+            onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
         """
         def wrapped_finish():
             if on_finish and self.is_active:
@@ -150,7 +152,8 @@ class BaseStimHandler(ABC):
             samples=samples,
             sample_rate=sample_rate,
             callback=wrapped_finish,
-            log_label=log_label
+            log_label=log_label,
+            onset_offset_ms=onset_offset_ms
         )
     
     def reshape_audio_samples(self, audio_segment) -> 'np.ndarray':
