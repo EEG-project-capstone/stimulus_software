@@ -19,13 +19,14 @@ logger = logging.getLogger('eeg_stimulus.audio_stream')
 
 class AudioStreamManager:
     """Manages audio stream lifecycle with proper cleanup."""
-    
+
     def __init__(self):
         """Initialize audio stream manager."""
         self._stream: Optional[sd.OutputStream] = None
         self._lock = threading.Lock()
         self._buffer: Optional[np.ndarray] = None
         self._buffer_position = 0
+        self._stopping = False  # Flag to skip callbacks during intentional stop
         logger.info("AudioStreamManager initialized")
     
     def play(self,
@@ -49,6 +50,8 @@ class AudioStreamManager:
         # Check if stream is currently active before stopping
         was_active = False
         with self._lock:
+            # Reset stopping flag for new playback
+            self._stopping = False
             if self._stream is not None and self._stream.active:
                 was_active = True
                 logger.warning("New play() called while previous stream active, stopping previous")
@@ -86,13 +89,17 @@ class AudioStreamManager:
             finish_time = time.time()
             logger.debug(f"Audio playback finished at {finish_time:.3f}")
 
-            # Track if this is being called after stream was already cleared (expected during abort)
-            was_already_none = False
+            # Check if we're in an intentional stop - skip callback if so
             with self._lock:
-                if self._stream is None:
-                    was_already_none = True
-                    logger.warning("finished_callback called after stream cleared (likely from abort)")
+                if self._stopping:
+                    logger.debug("Skipping on_finish callback during intentional stop")
+                    self._buffer = None
+                    self._buffer_position = 0
+                    self._stream = None
+                    return
 
+                # Track if this is being called after stream was already cleared
+                was_already_none = self._stream is None
                 self._buffer = None
                 self._buffer_position = 0
                 self._stream = None
@@ -139,6 +146,8 @@ class AudioStreamManager:
         # Get stream reference while holding lock
         with self._lock:
             stream_to_close = self._stream
+            # Set stopping flag to prevent callbacks from executing
+            self._stopping = True
             # Clear state immediately so no new operations use this stream
             self._stream = None
             self._buffer = None
@@ -154,6 +163,10 @@ class AudioStreamManager:
                 logger.debug("Audio stream closed")
             except Exception as e:
                 logger.error(f"Error stopping audio stream: {e}", exc_info=True)
+
+        # Clear stopping flag after stream is fully closed
+        with self._lock:
+            self._stopping = False
     
     def is_playing(self) -> bool:
         """Check if audio is currently playing.

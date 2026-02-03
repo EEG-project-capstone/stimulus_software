@@ -213,8 +213,98 @@ class AuditoryStimulator:
                     f"padding={OddballStimParams.TONE_PADDING_MS}ms, total_samples={len(combined)}")
 
         return (np.clip(combined, -1.0, 1.0) * 32767).astype(np.int16)
-    
-    def _generate_square_wave(self, frequency: int, duration_ms: int, 
+
+    def _generate_oddball_sequence(self, sample_rate: int = 44100) -> tuple:
+        """Generate the complete oddball tone sequence as a single buffer.
+
+        This provides sample-accurate 1000ms onset-to-onset timing by pre-generating
+        all tones in a single continuous audio buffer.
+
+        Args:
+            sample_rate: Sample rate in Hz (default 44100)
+
+        Returns:
+            Tuple of (audio_samples, tone_events) where:
+            - audio_samples: int16 numpy array shaped (n_samples, 1) for mono playback
+            - tone_events: list of dicts with 'type', 'frequency', 'onset_sample' for CSV logging
+        """
+        # Calculate tone parameters
+        envelope_samples = int(sample_rate * OddballStimParams.TONE_ENVELOPE_MS / 1000.0)
+        full_amp_samples = int(sample_rate * OddballStimParams.TONE_DURATION_MS / 1000.0)
+        tone_samples = envelope_samples + full_amp_samples + envelope_samples  # ~1323 samples for 30ms
+
+        # Samples between tone onsets (exactly 1 second = 44100 samples at 44100Hz)
+        onset_interval_samples = sample_rate
+
+        # Padding samples (leading/trailing silence)
+        padding_samples = int(sample_rate * OddballStimParams.TONE_PADDING_MS / 1000.0)
+
+        # Determine tone sequence
+        total_tones = OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES
+        tone_sequence = []
+
+        # Initial tones are all standard
+        for _ in range(OddballStimParams.INITIAL_TONES):
+            tone_sequence.append(('standard', OddballStimParams.STANDARD_FREQ))
+
+        # Main sequence has random rare tones
+        for _ in range(OddballStimParams.MAIN_TONES):
+            is_rare = random.random() < OddballStimParams.RARE_PROBABILITY
+            if is_rare:
+                tone_sequence.append(('rare', OddballStimParams.RARE_FREQ))
+            else:
+                tone_sequence.append(('standard', OddballStimParams.STANDARD_FREQ))
+
+        # Calculate total buffer size:
+        # leading_padding + (N-1) * onset_interval + last_tone + trailing_padding
+        total_samples = (padding_samples +
+                        (total_tones - 1) * onset_interval_samples +
+                        tone_samples +
+                        padding_samples)
+
+        # Create buffer
+        buffer = np.zeros(total_samples, dtype=np.float64)
+
+        # Track events for CSV logging
+        tone_events = []
+
+        # Generate each tone
+        for i, (tone_type, frequency) in enumerate(tone_sequence):
+            # Calculate onset position in buffer (after leading padding)
+            onset_sample = padding_samples + i * onset_interval_samples
+
+            # Generate tone waveform
+            t = np.linspace(0, tone_samples / sample_rate, tone_samples, False)
+            tone = OddballStimParams.TONE_AMPLITUDE * np.sin(2 * np.pi * frequency * t)
+
+            # Apply fade in/out envelope
+            if envelope_samples > 0:
+                fade_in = np.linspace(0, 1, envelope_samples)
+                fade_out = np.linspace(1, 0, envelope_samples)
+                tone[:envelope_samples] *= fade_in
+                tone[-envelope_samples:] *= fade_out
+
+            # Place tone in buffer
+            buffer[onset_sample:onset_sample + tone_samples] = tone
+
+            # Record event for CSV logging
+            tone_events.append({
+                'type': tone_type,
+                'frequency': frequency,
+                'onset_sample': onset_sample
+            })
+
+        # Convert to int16 and reshape for mono playback
+        audio_samples = (np.clip(buffer, -1.0, 1.0) * 32767).astype(np.int16)
+        audio_samples = audio_samples.reshape(-1, 1)
+
+        logger.info(f"Generated oddball sequence: {total_tones} tones, "
+                   f"{len(audio_samples)} samples ({len(audio_samples)/sample_rate:.2f}s), "
+                   f"sample-accurate 1000ms intervals")
+
+        return audio_samples, tone_events
+
+    def _generate_square_wave(self, frequency: int, duration_ms: int,
                              sample_rate: int = 44100) -> np.ndarray:
         """Generate a square wave sync pulse.
         
@@ -496,12 +586,15 @@ class AuditoryStimulator:
         if self.gui_callback.state_manager.is_paused():
             # We just transitioned TO paused - stop audio and cancel callbacks
             logger.debug("Pausing playback")
-            self.stream_manager.stop()
-            self._cancel_scheduled_callbacks()
 
-            # Reset all handler state - stimulus will restart from beginning on resume
+            # IMPORTANT: Reset handlers FIRST to set is_active=False
+            # This prevents callbacks from executing when stream is stopped
             for handler in self.handlers.values():
                 handler.reset()
+
+            # Now stop audio stream (any triggered callbacks will early-exit)
+            self.stream_manager.stop()
+            self._cancel_scheduled_callbacks()
 
             # Clear current stimulus event data (beeps, etc.)
             self.current_stim_sentences = []

@@ -233,33 +233,34 @@ class CommandStimHandler(BaseStimHandler):
 
 
 class OddballStimHandler(BaseStimHandler):
-    """Handler for oddball stimuli."""
-    
+    """Handler for oddball stimuli using pre-generated buffer for precise timing.
+
+    This handler generates all tones as a single continuous audio buffer,
+    providing sample-accurate 1000ms onset-to-onset timing (±0.02ms at 44100Hz).
+    """
+
     def start(self, stim: dict):
         """Start an oddball stimulus.
-        
+
         Args:
             stim: Stimulus dictionary
         """
         self.is_active = True
         stim_type = stim.get('type', '')
-        
+
         # Initialize state
         self.state = {
             'has_prompt': '+p' in stim_type,
-            'tone_count': 0,
-            'phase': 'initial_standard',
-            'last_tone_time': None  # Track for double-beep detection
         }
-        
+
         logger.info(f"Starting oddball stimulus (prompt={self.state['has_prompt']})")
         self.log_event('oddball_stim_start', {'prompt': self.state['has_prompt']})
-        
+
         if self.state['has_prompt']:
             self._play_prompt()
         else:
-            self.continue_stim()
-    
+            self._start_sequence()
+
     def _play_prompt(self):
         """Play the oddball prompt."""
         if not self.is_active:
@@ -274,86 +275,63 @@ class OddballStimHandler(BaseStimHandler):
             on_finish=self._after_prompt,
             log_label="oddball_prompt"
         )
-    
+
     def _after_prompt(self):
         """Called after prompt finishes."""
-        self.safe_schedule(OddballStimParams.PROMPT_DELAY_MS, self.continue_stim)
-    
-    def continue_stim(self):
-        """Continue the oddball stimulus."""
-        if not self.should_continue():
-            return
+        self.safe_schedule(OddballStimParams.PROMPT_DELAY_MS, self._start_sequence)
 
-        phase = self.state['phase']
-        if phase == 'initial_standard':
-            self._handle_initial_phase()
-        elif phase == 'main_sequence':
-            self._handle_main_phase()
-
-    def _handle_initial_phase(self):
-        """Handle the initial standard tones phase."""
+    def _start_sequence(self):
+        """Generate and play the complete oddball sequence as a single buffer."""
         if not self.is_active:
             return
 
-        if self.state['tone_count'] < OddballStimParams.INITIAL_TONES:
-            self.state['tone_count'] += 1
-            self._play_tone(OddballStimParams.STANDARD_FREQ, 'standard_tone')
-        else:
-            self.log_event('oddball_phase_change', {'from': 'initial_standard', 'to': 'main_sequence'})
-            self.state['phase'] = 'main_sequence'
-            self.state['tone_count'] = 0
-            self.continue_stim()
+        sample_rate = 44100
 
-    def _handle_main_phase(self):
-        """Handle the main sequence phase with rare tones."""
-        if not self.is_active:
-            return
+        # Generate the complete sequence with all tones
+        audio_samples, tone_events = self.audio_stim._generate_oddball_sequence(sample_rate)
 
-        if self.state['tone_count'] < OddballStimParams.MAIN_TONES:
-            self.state['tone_count'] += 1
-            is_rare = random.random() < OddballStimParams.RARE_PROBABILITY
-            frequency = OddballStimParams.RARE_FREQ if is_rare else OddballStimParams.STANDARD_FREQ
-            label = "rare_tone" if is_rare else "standard_tone"
-            self._play_tone(frequency, label)
-        else:
-            self._finish_stim()
+        # Store playback start time for calculating actual onset times
+        playback_start_time = time.time()
+        stream_latency_sec = 0.01  # Approximate stream initialization latency
 
-    def _play_tone(self, frequency: int, label: str):
-        """Play a single tone."""
-        if not self.is_active:
-            return
+        # Log each tone event with calculated onset time for CSV
+        for event in tone_events:
+            onset_sample = event['onset_sample']
+            onset_sec_from_buffer_start = onset_sample / sample_rate
 
-        # Record tone onset time for accurate inter-tone timing
-        self.state['last_tone_onset'] = time.time()
+            # Actual onset time = playback start + stream latency + position in buffer
+            onset_time = playback_start_time + stream_latency_sec + onset_sec_from_buffer_start
 
-        tone_samples = self.audio_stim._generate_tone(frequency, OddballStimParams.TONE_DURATION_MS)
+            label = 'rare_tone' if event['type'] == 'rare' else 'standard_tone'
+            self.audio_stim.current_stim_sentences.append({
+                'event': label,
+                'onset_time': onset_time
+            })
+
+        logger.info(f"Playing oddball sequence: {len(tone_events)} tones, "
+                   f"duration={len(audio_samples)/sample_rate:.2f}s")
+
+        # Play the entire sequence as a single stream
         self.play_audio_safe(
-            samples=tone_samples,
-            sample_rate=44100,
-            on_finish=self._after_tone,
-            log_label=label,
-            # Offset onset time by leading padding so CSV records actual tone start
-            onset_offset_ms=OddballStimParams.TONE_PADDING_MS
+            samples=audio_samples,
+            sample_rate=sample_rate,
+            on_finish=self._finish_stim,
+            log_label=None  # Individual tones already logged above
         )
 
-    def _after_tone(self):
-        """Called after tone finishes. Schedule next tone for 1000ms from onset."""
-        # Calculate remaining time to achieve 1000ms onset-to-onset
-        last_onset = self.state.get('last_tone_onset', time.time())
-        elapsed_ms = (time.time() - last_onset) * 1000
-        remaining_ms = max(0, 1000 - elapsed_ms)
-        self.safe_schedule(int(remaining_ms), self.continue_stim)
-    
+    def continue_stim(self):
+        """Not used in pre-generated buffer approach."""
+        pass
+
     def _finish_stim(self):
         """Finish the oddball stimulus."""
         if not self.is_active:
             return
-        
-        logger.debug("Oddball stimulus sequence completed")
-        self.log_event('oddball_stim_end', {
-            'total_tones': OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES
-        })
-        
+
+        total_tones = OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES
+        logger.debug(f"Oddball stimulus sequence completed ({total_tones} tones)")
+        self.log_event('oddball_stim_end', {'total_tones': total_tones})
+
         self.audio_stim.finish_current_stim()
 
 
