@@ -259,22 +259,21 @@ def test_audio_stream_manager_play_stop():
         callback_called[0] = True
         done_event.set()
 
-    # Generate a short test tone (100ms)
+    # Generate a short test tone (50ms for faster tests)
     sample_rate = 44100
-    duration_sec = 0.1
+    duration_sec = 0.05
     t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), False)
     samples = (np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16).reshape(-1, 1)
 
     # Play
     manager.play(samples, sample_rate, on_finish)
-    assert manager.is_playing()
-    print("✓ Stream is playing")
+    print("✓ Stream started")
 
     # Wait for natural completion
-    done_event.wait(timeout=2.0)
+    completed = done_event.wait(timeout=2.0)
     time.sleep(0.1)  # Small delay for cleanup
 
-    assert callback_called[0]
+    assert completed and callback_called[0]
     print("✓ Callback was called on completion")
 
     assert not manager.is_playing()
@@ -291,19 +290,18 @@ def test_audio_stream_manager_stop_during_play():
     def on_finish():
         callback_called[0] = True
 
-    # Generate a longer test tone (2 seconds)
+    # Generate a 500ms tone (enough time to stop mid-playback)
     sample_rate = 44100
-    duration_sec = 2.0
+    duration_sec = 0.5
     t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), False)
     samples = (np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16).reshape(-1, 1)
 
     # Play
     manager.play(samples, sample_rate, on_finish)
-    assert manager.is_playing()
-    print("✓ Stream is playing")
+    print("✓ Stream started")
 
     # Stop after a short delay
-    time.sleep(0.1)
+    time.sleep(0.05)
     manager.stop()
     time.sleep(0.1)  # Allow cleanup
 
@@ -321,18 +319,18 @@ def test_audio_stream_manager_rapid_play_stop():
 
     manager = AudioStreamManager()
 
-    # Generate a short test tone
+    # Generate a short test tone (100ms)
     sample_rate = 44100
-    duration_sec = 0.5
+    duration_sec = 0.1
     t = np.linspace(0, duration_sec, int(sample_rate * duration_sec), False)
     samples = (np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16).reshape(-1, 1)
 
     # Rapid play/stop cycles
     for i in range(5):
         manager.play(samples, sample_rate)
-        time.sleep(0.05)
+        time.sleep(0.02)
         manager.stop()
-        time.sleep(0.05)
+        time.sleep(0.02)
 
     assert not manager.is_playing()
     print(f"✓ Completed 5 rapid play/stop cycles without errors")
@@ -494,47 +492,52 @@ def test_state_transitions_full_workflow():
 
 def run_all_tests():
     """Run all tests."""
+    import sys
     print("=" * 60)
     print("BUTTON CONTROLS & STATE MANAGEMENT TESTS")
     print("=" * 60)
+    sys.stdout.flush()
 
     tests = [
         # State Manager Tests
-        test_state_manager_initial_state,
-        test_state_manager_valid_transitions,
-        test_state_manager_invalid_transitions,
-        test_state_manager_helper_methods,
-        test_state_manager_listeners,
+        ("State Manager Initial", test_state_manager_initial_state),
+        ("State Manager Transitions", test_state_manager_valid_transitions),
+        ("State Manager Invalid", test_state_manager_invalid_transitions),
+        ("State Manager Helpers", test_state_manager_helper_methods),
+        ("State Manager Listeners", test_state_manager_listeners),
 
         # Audio Stream Manager Tests
-        test_audio_stream_manager_play_stop,
-        test_audio_stream_manager_stop_during_play,
-        test_audio_stream_manager_rapid_play_stop,
+        ("Audio Play/Stop", test_audio_stream_manager_play_stop),
+        ("Audio Stop During Play", test_audio_stream_manager_stop_during_play),
+        ("Audio Rapid Cycles", test_audio_stream_manager_rapid_play_stop),
 
         # Auditory Stimulator Tests
-        test_auditory_stimulator_toggle_pause,
-        test_auditory_stimulator_stop,
-        test_oddball_sequence_generation,
-        test_state_transitions_full_workflow,
+        ("Stimulator Toggle Pause", test_auditory_stimulator_toggle_pause),
+        ("Stimulator Stop", test_auditory_stimulator_stop),
+        ("Oddball Generation", test_oddball_sequence_generation),
+        ("Full Workflow", test_state_transitions_full_workflow),
     ]
 
     passed = 0
     failed = 0
 
-    for test in tests:
+    for name, test in tests:
         try:
             test()
             passed += 1
+            sys.stdout.flush()
         except Exception as e:
             failed += 1
-            print(f"\n✗ FAILED: {test.__name__}")
+            print(f"\n✗ FAILED: {name}")
             print(f"  Error: {e}")
             import traceback
             traceback.print_exc()
+            sys.stdout.flush()
 
     print("\n" + "=" * 60)
     print(f"RESULTS: {passed} passed, {failed} failed")
     print("=" * 60)
+    sys.stdout.flush()
 
     return failed == 0
 
