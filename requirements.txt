@@ -4,4 +4,3 @@ pydub
 sounddevice
 numpy
 mne
-yaml
