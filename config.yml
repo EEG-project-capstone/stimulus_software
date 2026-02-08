@@ -1,7 +1,5 @@
 # config.yml
 
-os: 'os'  # 'windows', 'linux', or 'os'
-
 # === OUTPUT PATHS ===
 edf_dir: 'patient_data/edfs/'
 result_dir: 'patient_data/results/'

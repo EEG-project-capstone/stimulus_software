@@ -1,21 +1,13 @@
 #!/bin/bash
 
-# Setup instructions (run once):
-# conda create -n eeg python=3.12
-# conda activate eeg
-# conda install tk
-# conda install pip
-# pip install -r requirements.txt
+# Run the Stimulus Software application
 
-# Get script directory
-# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# cd "$SCRIPT_DIR"
+set -e
+
+ENV_NAME="eeg"
 
 # Create logs directory if it doesn't exist
-# mkdir -p logs
+mkdir -p logs
 
-# Activate conda environment
-# conda activate eeg
-
-# Run the application and capture terminal output
-python main.py 2>&1 | tee -a logs/terminal_output.log
+# Run the application inside the conda environment, capturing output
+conda run -n "$ENV_NAME" python main.py 2>&1 | tee -a logs/terminal_output.log
