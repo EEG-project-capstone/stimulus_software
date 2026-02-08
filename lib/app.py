@@ -29,6 +29,7 @@ from lib.constants import (
 from lib.exceptions import ConfigError
 from lib.logging_utils import log_operation
 from lib.edf_parser import EDFParser
+from lib.edf_viewer import EDFViewerWindow
 
 logger = logging.getLogger('eeg_stimulus.app')
 
@@ -543,11 +544,13 @@ class TkApp:
             self.submit_btn.config(state='disabled')
             self.sync_preview_btn.config(state='disabled')
 
-        # Enable Parse EDF button if EDF is selected (doesn't need CSV)
+        # Enable Parse EDF / View EDF buttons if EDF is selected (doesn't need CSV)
         if self.analysis_files.edf_path is not None:
             self.parse_edf_btn.config(state='normal')
+            self.view_edf_btn.config(state='normal')
         else:
             self.parse_edf_btn.config(state='disabled')
+            self.view_edf_btn.config(state='disabled')
     
     def confirm_file_selection(self):
         """Confirm selected files for analysis."""
@@ -838,6 +841,25 @@ class TkApp:
         except Exception as e:
             logger.error(f"Failed to parse EDF file: {e}", exc_info=True)
             messagebox.showerror("EDF Parse Error", f"Failed to parse EDF file:\n{e}")
+
+    def view_edf(self):
+        """Open interactive EDF viewer window."""
+        if self.analysis_files.edf_path is None:
+            messagebox.showwarning("No EDF Selected",
+                                   "Please select an EDF file first.")
+            return
+
+        edf_path = self.analysis_files.edf_path
+        logger.info(f"Opening EDF viewer for: {edf_path}")
+
+        try:
+            parser = EDFParser(str(edf_path))
+            parser.load_edf()
+            EDFViewerWindow(self.root, parser)
+        except Exception as e:
+            logger.error(f"Failed to open EDF viewer: {e}", exc_info=True)
+            messagebox.showerror("EDF Viewer Error",
+                                 f"Failed to open EDF viewer:\n{e}")
 
     # ========================================================================
     # UI BUILDING METHODS
@@ -1188,6 +1210,14 @@ class TkApp:
             state="disabled"
         )
         self.sync_preview_btn.pack(side='left')
+
+        self.view_edf_btn = ttk.Button(
+            frame,
+            text="View EDF",
+            command=self.view_edf,
+            state="disabled"
+        )
+        self.view_edf_btn.pack(side='left', padx=(5, 0))
     
     def _build_confirmed_files(self, parent):
         """Build confirmed files display."""
