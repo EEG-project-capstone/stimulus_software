@@ -1,6 +1,0 @@
-pandas
-pyyaml
-pydub
-sounddevice
-numpy
-mne

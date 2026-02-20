@@ -25,7 +25,7 @@ fi
 # Install dependencies
 echo "Installing dependencies..."
 conda install -y -n "$ENV_NAME" tk pip
-conda run -n "$ENV_NAME" pip install -r requirements.txt
+conda run -n "$ENV_NAME" pip install .
 
 echo ""
 echo "Setup complete. Run ./run.sh to start the application."
