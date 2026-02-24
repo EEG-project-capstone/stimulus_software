@@ -4,112 +4,14 @@ Consolidates all magic numbers and configuration values.
 """
 
 from enum import Enum, auto
-from pathlib import Path
 from dataclasses import dataclass
-
-# === PLAYBACK STATE MANAGEMENT ===
-
-class PlaybackState(Enum):
-    """Enumeration of possible playback states."""
-    EMPTY = auto()      # No patient ID entered
-    READY = auto()      # Ready to prepare or play
-    PREPARING = auto()  # Generating stimuli
-    PLAYING = auto()    # Actively playing stimuli
-    PAUSED = auto()     # Playback paused
-    STOPPED = auto()    # Playback stopped
-    SENDING_SYNC = auto()  # Sending sync pulse
+from pathlib import Path
 
 
-# Valid state transitions
-VALID_STATE_TRANSITIONS = {
-    PlaybackState.EMPTY: {PlaybackState.READY},
-    PlaybackState.READY: {PlaybackState.PREPARING, PlaybackState.PLAYING, PlaybackState.EMPTY, PlaybackState.SENDING_SYNC},
-    PlaybackState.PREPARING: {PlaybackState.READY, PlaybackState.STOPPED},
-    PlaybackState.PLAYING: {PlaybackState.PAUSED, PlaybackState.STOPPED, PlaybackState.READY},
-    PlaybackState.PAUSED: {PlaybackState.PLAYING, PlaybackState.STOPPED, PlaybackState.READY},
-    PlaybackState.STOPPED: {PlaybackState.READY, PlaybackState.EMPTY},
-    PlaybackState.SENDING_SYNC: {PlaybackState.READY}
-}
-
-
-@dataclass
-class StateDisplay:
-    """Display properties for each playback state."""
-    message: str
-    color: str
-
-
-STATE_DISPLAYS = {
-    PlaybackState.EMPTY: StateDisplay("Please enter a patient ID", "red"),
-    PlaybackState.READY: StateDisplay("Ready to prepare stimulus", "green"),
-    PlaybackState.PREPARING: StateDisplay("Preparing stimulus...", "blue"),
-    PlaybackState.PLAYING: StateDisplay("Playing stimulus...", "blue"),
-    PlaybackState.PAUSED: StateDisplay("Stimulus paused", "orange"),
-    PlaybackState.STOPPED: StateDisplay("Stimulus stopped", "orange"),
-    PlaybackState.SENDING_SYNC: StateDisplay("Sending sync pulse...", "blue")
-}
-
-
-# === STIMULUS COUNTS ===
-
-DEFAULT_STIMULUS_COUNTS = {
-    'language': 72,
-    'command_no_prompt': 3,
-    'command_with_prompt': 3,
-    'oddball_no_prompt': 4,
-    'oddball_with_prompt': 4,
-    'loved_one': 50
-}
-
-
-# === STIMULUS TYPE DISPLAY NAMES ===
-
-STIMULUS_TYPE_DISPLAY_NAMES = {
-    "language": "Language",
-    "right_command": "Right Command",
-    "right_command+p": "Right Command + Prompt",
-    "left_command": "Left Command",
-    "left_command+p": "Left Command + Prompt",
-    "oddball": "Oddball",
-    "oddball+p": "Oddball + Prompt",
-    "loved_one_voice": "Loved One Voice",
-    "control": "Control Statement",
-    "session_note": "Session Note",
-    "manual_sync_pulse": "Manual Sync Pulse",
-    "sync_detection": "Sync Detection"
-}
-
-
-# === BUTTON ICONS ===
-
-class ButtonIcons:
-    """Button icon sizing constants."""
-    PLAY_SUBSAMPLE = (15, 15)
-    PAUSE_SUBSAMPLE = (15, 15)
-    STOP_SUBSAMPLE = (6, 6)
-
-
-# === LAYOUT ===
-
-class Layout:
-    """Layout and spacing constants."""
-    WINDOW_SIZE = (1050, 830)
-    MAIN_PADDING = 10
-    STIMULUS_LIST_HEIGHT = 12
-    NOTES_TEXT_HEIGHT = 10
-    LOG_TEXT_WIDTH = 40
-
-
-# === TREEVIEW TAGS ===
-
-TREEVIEW_TAGS = {
-    'COMPLETED': 'completed',
-    'IN_PROGRESS': 'inprogress', 
-    'PENDING': 'pending'
-}
-
-
-# === COMMAND STIMULUS PARAMETERS ===
+# =============================================================================
+# STIMULUS PARAMETERS
+# Values most likely to be tuned by researchers
+# =============================================================================
 
 class CommandStimParams:
     """Parameters for motor command stimuli."""
@@ -119,29 +21,92 @@ class CommandStimParams:
     PROMPT_DELAY_MS = 2000  # 2 seconds
 
 
-# === ODDBALL STIMULUS PARAMETERS ===
-
 class OddballStimParams:
     """Parameters for oddball stimuli."""
     INITIAL_TONES = 5
     MAIN_TONES = 20
-    TONE_DURATION_MS = 20  # Full-amplitude duration (envelope adds to this)
-    STANDARD_FREQ = 1000  # Hz
-    RARE_FREQ = 2000      # Hz
+    TONE_DURATION_MS = 20          # Full-amplitude duration (envelope adds to this)
+    STANDARD_FREQ = 1000           # Hz
+    RARE_FREQ = 2000               # Hz
     RARE_PROBABILITY = 0.2
     PROMPT_DELAY_MS = 2000
+    TONE_AMPLITUDE = 1.0           # 0.0 to 1.0
+    TONE_ENVELOPE_MS = 5           # Fade in/out duration to eliminate clicks
     # Padding to absorb stream initialization latency on slower audio backends (e.g., ChromeOS)
-    TONE_PADDING_MS = 200  # Must be >= AudioParams.STREAM_LATENCY
-    TONE_AMPLITUDE = 1.0  # 0.0 to 1.0
-    TONE_ENVELOPE_MS = 5  # Fade in/out duration to eliminate clicks
+    TONE_PADDING_MS = 200          # Must be >= AudioParams.STREAM_LATENCY
     # Interval after tone playback to achieve 1000ms onset-to-onset
     INTER_TONE_INTERVAL_MS = 1000 - (2 * TONE_PADDING_MS) - TONE_DURATION_MS - (2 * TONE_ENVELOPE_MS)
 
 
-# === SYNC PULSE PARAMETERS ===
+class LanguageStimParams:
+    """Parameters for language stimuli."""
+    SENTENCES_PER_STIMULUS = 12
+
+
+class TimingParams:
+    """Inter-stimulus timing parameters."""
+    INTER_STIMULUS_JITTER = False       # If False, use INTER_STIMULUS_FIXED_MS instead
+    INTER_STIMULUS_FIXED_MS = 1500      # Used when INTER_STIMULUS_JITTER is False
+    INTER_STIMULUS_MIN_MS = 1200        # Minimum delay between stimuli (jitter mode)
+    INTER_STIMULUS_MAX_MS = 2200        # Maximum delay between stimuli (jitter mode)
+    CALLBACK_RETRY_DELAY_MS = 100       # Delay for retry callbacks
+
+
+DEFAULT_STIMULUS_COUNTS = {
+    'language': 72,
+    'command_no_prompt': 3,
+    'command_with_prompt': 3,
+    'oddball_no_prompt': 4,
+    'oddball_with_prompt': 4,
+    'familiar_voice': 50
+}
+
+
+class AudioParams:
+    """Audio processing parameters."""
+    SAMPLE_RATE = 44100
+    STREAM_LATENCY = 0.1           # Float value for compatibility
+    MAX_AMPLITUDE = 32767          # int16 max
+    BUFFER_DTYPE = 'int16'
+
+
+# =============================================================================
+# FILE PATHS
+# All paths relative to the project root. Change these if you rename files.
+# =============================================================================
+
+class FilePaths:
+    """Standard file paths relative to the project root."""
+    # Output directories (created automatically on startup)
+    RESULTS_DIR = Path("patient_data/results")
+    EDFS_DIR    = Path("patient_data/edfs")
+
+    # Audio input directories
+    SENTENCES_DIR  = Path("audio_data/sentences")
+    FAMILIAR_DIR   = Path("audio_data/static")
+
+    # Command audio files
+    RIGHT_KEEP_AUDIO = Path("audio_data/static/right_keep.mp3")
+    RIGHT_STOP_AUDIO = Path("audio_data/static/right_stop.mp3")
+    LEFT_KEEP_AUDIO  = Path("audio_data/static/left_keep.mp3")
+    LEFT_STOP_AUDIO  = Path("audio_data/static/left_stop.mp3")
+
+    # Control / voice audio
+    MALE_CONTROL_AUDIO   = Path("audio_data/static/ControlStatement_male.wav")
+    FEMALE_CONTROL_AUDIO = Path("audio_data/static/ControlStatement_female.wav")
+    CONTROL_STATEMENTS_DIR = Path("audio_data/control_statements")
+
+    # Prompt audio
+    MOTOR_PROMPT  = Path("audio_data/prompts/motorcommandprompt.wav")
+    ODDBALL_PROMPT = Path("audio_data/prompts/oddballprompt.wav")
+
+
+# =============================================================================
+# EEG SYNC PARAMETERS
+# =============================================================================
 
 class SyncPulseParams:
-    """Parameters for EEG sync pulse.
+    """Parameters for the EEG sync pulse.
 
     The sync pulse is designed to be easily detectable in EEG recordings.
     A longer, lower-frequency square wave is more distinctive and easier
@@ -152,46 +117,151 @@ class SyncPulseParams:
     SAMPLE_RATE = 44100    # Hz
 
 
-# === AUDIO PARAMETERS ===
-
-class AudioParams:
-    """Audio processing parameters."""
-    SAMPLE_RATE = 44100
-    STREAM_LATENCY = 0.1  # Updated to a float value for compatibility
-    MAX_AMPLITUDE = 32767  # int16 max
-    BUFFER_DTYPE = 'int16'
+class SyncDetectionParams:
+    """Parameters for EEG sync point detection."""
+    SEARCH_DURATION_SEC = 300        # Search first 5 minutes
+    THRESHOLD_STD_MULTIPLIER = 3     # Standard deviations above baseline
+    BASELINE_WINDOW_FRACTION = 0.1   # Use first 10% for baseline
+    PREVIEW_DURATION_SEC = 60        # Show 60s preview
 
 
-# === LANGUAGE STIMULUS PARAMETERS ===
-
-class LanguageStimParams:
-    """Parameters for language stimuli."""
-    SENTENCES_PER_STIMULUS = 12
-
-
-# === INTER-STIMULUS TIMING ===
-
-class TimingParams:
-    """Timing parameters for stimulus presentation."""
-    INTER_STIMULUS_MIN_MS = 1200  # Minimum delay between stimuli
-    INTER_STIMULUS_MAX_MS = 2200  # Maximum delay between stimuli
-    CALLBACK_RETRY_DELAY_MS = 100  # Delay for retry callbacks
+DEFAULT_EEG_CHANNELS = [
+    'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8',
+    'FT9', 'FT10', 'T7', 'C3', 'Cz', 'C4', 'T8',
+    'P7', 'P3', 'Pz', 'P4', 'P8', 'O1', 'O2', 'Fpz'
+]
 
 
-# === FILE PATHS ===
+# =============================================================================
+# STIMULUS TYPE IDENTIFIERS
+# =============================================================================
 
-class FilePaths:
-    """Default file paths and directories."""
-    PATIENT_DATA_DIR = Path("patient_data")
-    RESULTS_DIR = PATIENT_DATA_DIR / "results"
-    EDFS_DIR = PATIENT_DATA_DIR / "edfs"
-    AUDIO_DATA_DIR = Path("audio_data")
-    SENTENCES_DIR = AUDIO_DATA_DIR / "sentences"
-    STATIC_AUDIO_DIR = AUDIO_DATA_DIR / "static"
-    PROMPTS_DIR = AUDIO_DATA_DIR / "prompts"
+class StimTypes:
+    """String identifiers for stimulus types."""
+    LANGUAGE = 'language'
+    RIGHT_COMMAND = 'right_command'
+    RIGHT_COMMAND_PROMPT = 'right_command+p'
+    LEFT_COMMAND = 'left_command'
+    LEFT_COMMAND_PROMPT = 'left_command+p'
+    ODDBALL = 'oddball'
+    ODDBALL_PROMPT = 'oddball+p'
+    FAMILIAR = 'familiar'
+    UNFAMILIAR = 'unfamiliar'
+    SESSION_NOTE = 'session_note'
+    MANUAL_SYNC_PULSE = 'manual_sync_pulse'
+    SYNC_DETECTION = 'sync_detection'
 
 
-# === LOGGING PARAMETERS ===
+class StimHandlerTypes:
+    """String identifiers for stimulus handler types."""
+    LANGUAGE = 'language'
+    COMMAND = 'command'
+    ODDBALL = 'oddball'
+    VOICE = 'voice'
+
+
+class GenderOptions:
+    """Gender options for voice stimuli."""
+    MALE = 'Male'
+    FEMALE = 'Female'
+
+
+# Names of the unfamiliar control speakers in audio_data/control_statements/
+# (files are named <Name>_normalized.wav)
+MALE_CONTROL_VOICES = ['Adam', 'Alex', 'Chris', 'Peter']
+FEMALE_CONTROL_VOICES = ['Hannah', 'Jennifer', 'Saline', 'Sarah']
+
+
+STIMULUS_TYPE_DISPLAY_NAMES = {
+    "language": "Language",
+    "right_command": "Right Command",
+    "right_command+p": "Right Command + Prompt",
+    "left_command": "Left Command",
+    "left_command+p": "Left Command + Prompt",
+    "oddball": "Oddball",
+    "oddball+p": "Oddball + Prompt",
+    "familiar": "Familiar Voice",
+    "unfamiliar": "Unfamiliar Voice",
+    "session_note": "Session Note",
+    "manual_sync_pulse": "Manual Sync Pulse",
+    "sync_detection": "Sync Detection"
+}
+
+
+# =============================================================================
+# APPLICATION STATE MACHINE
+# =============================================================================
+
+class PlaybackState(Enum):
+    """Enumeration of possible playback states."""
+    EMPTY = auto()          # No patient ID entered
+    READY = auto()          # Ready to prepare or play
+    PREPARING = auto()      # Generating stimuli
+    PLAYING = auto()        # Actively playing stimuli
+    PAUSED = auto()         # Playback paused
+    STOPPED = auto()        # Playback stopped
+    SENDING_SYNC = auto()   # Sending sync pulse
+
+
+VALID_STATE_TRANSITIONS = {
+    PlaybackState.EMPTY:        {PlaybackState.READY},
+    PlaybackState.READY:        {PlaybackState.PREPARING, PlaybackState.PLAYING, PlaybackState.EMPTY, PlaybackState.SENDING_SYNC},
+    PlaybackState.PREPARING:    {PlaybackState.READY, PlaybackState.STOPPED},
+    PlaybackState.PLAYING:      {PlaybackState.PAUSED, PlaybackState.STOPPED, PlaybackState.READY},
+    PlaybackState.PAUSED:       {PlaybackState.PLAYING, PlaybackState.STOPPED, PlaybackState.READY},
+    PlaybackState.STOPPED:      {PlaybackState.READY, PlaybackState.EMPTY},
+    PlaybackState.SENDING_SYNC: {PlaybackState.READY}
+}
+
+
+@dataclass
+class StateDisplay:
+    """Display properties for a playback state."""
+    message: str
+    color: str
+
+
+STATE_DISPLAYS = {
+    PlaybackState.EMPTY:        StateDisplay("Please enter a patient ID", "red"),
+    PlaybackState.READY:        StateDisplay("Ready to prepare stimulus", "green"),
+    PlaybackState.PREPARING:    StateDisplay("Preparing stimulus...", "blue"),
+    PlaybackState.PLAYING:      StateDisplay("Playing stimulus...", "blue"),
+    PlaybackState.PAUSED:       StateDisplay("Stimulus paused", "orange"),
+    PlaybackState.STOPPED:      StateDisplay("Stimulus stopped", "orange"),
+    PlaybackState.SENDING_SYNC: StateDisplay("Sending sync pulse...", "blue")
+}
+
+
+# =============================================================================
+# UI / LAYOUT
+# =============================================================================
+
+class ButtonIcons:
+    """Button icon sizing constants."""
+    PLAY_SUBSAMPLE = (15, 15)
+    PAUSE_SUBSAMPLE = (15, 15)
+    STOP_SUBSAMPLE = (6, 6)
+
+
+class Layout:
+    """Layout and spacing constants."""
+    WINDOW_SIZE = (1050, 830)
+    MAIN_PADDING = 10
+    STIMULUS_LIST_HEIGHT = 12
+    NOTES_TEXT_HEIGHT = 10
+    LOG_TEXT_WIDTH = 40
+
+
+TREEVIEW_TAGS = {
+    'COMPLETED': 'completed',
+    'IN_PROGRESS': 'inprogress',
+    'PENDING': 'pending'
+}
+
+
+# =============================================================================
+# SYSTEM / INFRASTRUCTURE
+# =============================================================================
 
 class LoggingParams:
     """Logging configuration parameters."""
@@ -201,88 +271,7 @@ class LoggingParams:
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 
-# === EEG SYNC DETECTION PARAMETERS ===
-
-class SyncDetectionParams:
-    """Parameters for EEG sync point detection."""
-    SEARCH_DURATION_SEC = 300  # Search first 5 minutes
-    THRESHOLD_STD_MULTIPLIER = 3  # Standard deviations above baseline
-    BASELINE_WINDOW_FRACTION = 0.1  # Use first 10% for baseline
-    PREVIEW_DURATION_SEC = 60  # Show 60s preview
-
-
-# === CLINICAL ASSESSMENT SCALES ===
-
-CPC_SCALE = [
-    "",
-    "CPC 1: No neurological deficit",
-    "CPC 2: Mild to moderate dysfunction",
-    "CPC 3: Severe dysfunction",
-    "CPC 4: Coma",
-    "CPC 5: Brain death",
-]
-
-GOSE_SCALE = [
-    "",
-    "GOSE 1: Dead",
-    "GOSE 2: Vegetative state",
-    "GOSE 3: Lower severe disability",
-    "GOSE 4: Upper severe disability",
-    "GOSE 5: Lower moderate disability",
-    "GOSE 6: Upper moderate disability",
-    "GOSE 7: Lower good recovery",
-    "GOSE 8: Upper good recovery",
-]
-
-
-# === RETRY PARAMETERS ===
-
 class RetryParams:
     """Parameters for retry logic."""
     MAX_RETRIES = 3
     RETRY_DELAY_MS = 100
-
-
-# === STIMULUS HANDLER IDENTIFIERS ===
-
-class StimHandlerTypes:
-    """Identifiers for stimulus handler types."""
-    LANGUAGE = 'language'
-    COMMAND = 'command'
-    ODDBALL = 'oddball'
-    VOICE = 'voice'
-
-
-# === STIMULUS TYPE IDENTIFIERS ===
-
-class StimTypes:
-    """Identifiers for stimulus types."""
-    LANGUAGE = 'language'
-    RIGHT_COMMAND = 'right_command'
-    RIGHT_COMMAND_PROMPT = 'right_command+p'
-    LEFT_COMMAND = 'left_command'
-    LEFT_COMMAND_PROMPT = 'left_command+p'
-    ODDBALL = 'oddball'
-    ODDBALL_PROMPT = 'oddball+p'
-    LOVED_ONE_VOICE = 'loved_one_voice'
-    CONTROL = 'control'
-    SESSION_NOTE = 'session_note'
-    MANUAL_SYNC_PULSE = 'manual_sync_pulse'
-    SYNC_DETECTION = 'sync_detection'
-
-
-# === GENDER OPTIONS ===
-
-class GenderOptions:
-    """Gender options for voice stimuli."""
-    MALE = 'Male'
-    FEMALE = 'Female'
-
-
-# === CHANNEL NAMES (for EEG analysis) ===
-
-DEFAULT_EEG_CHANNELS = [
-    'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8',
-    'FT9', 'FT10', 'T7', 'C3', 'Cz', 'C4', 'T8',
-    'P7', 'P3', 'Pz', 'P4', 'P8', 'O1', 'O2', 'Fpz'
-]

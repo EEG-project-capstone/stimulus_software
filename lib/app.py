@@ -26,7 +26,6 @@ from lib.constants import (
     FilePaths,
     Layout
 )
-from lib.exceptions import ConfigError
 from lib.logging_utils import log_operation
 from lib.edf_parser import EDFParser
 from lib.edf_viewer import EDFViewerWindow
@@ -72,13 +71,7 @@ class TkApp:
         self.root.geometry(f"{width}x{height}")
         
         # Initialize core components
-        try:
-            self._initialize_components()
-        except ConfigError as e:
-            logger.error(f"Configuration error: {e}", exc_info=True)
-            messagebox.showerror("Configuration Error", 
-                               f"Failed to load configuration:\n{e}\n\nPlease check config.yml")
-            raise
+        self._initialize_components()
         
         # Initialize state management
         self.state_manager = StateManager(PlaybackState.EMPTY)
@@ -101,7 +94,7 @@ class TkApp:
         """Initialize core application components."""
         with log_operation("component_initialization"):
             self.config = Config()
-            self.stims = Stims(self)
+            self.stims = Stims()
             self.results_manager = ResultsManager(self.config)
             self.audio_stim = AuditoryStimulator(self)
             self.analysis_manager = AnalysisManager(self)
@@ -115,7 +108,7 @@ class TkApp:
         self.lcmd_prompt_var = tk.BooleanVar()
         self.oddball_var = tk.BooleanVar()
         self.oddball_prompt_var = tk.BooleanVar()
-        self.loved_one_var = tk.BooleanVar()
+        self.familiar_var = tk.BooleanVar()
         self.gender_var = tk.StringVar(value="Male")
     
     def get_patient_id(self) -> str:
@@ -212,12 +205,13 @@ class TkApp:
                                  "Cannot send sync pulse while stimulus is active.")
             return
 
-        # Ensure results path exists
+        # Ensure results path exists and CSV is initialized
         if not self.current_results_path:
             self.current_results_path = self.config.get_results_path(patient_id)
             logger.info(f"Created results path for sync pulse: {self.current_results_path}")
+        self.results_manager.initialize_csv(patient_id)
 
-        # Transition to SENDING_SYNC state - this disables all buttons
+        # Transition to SENDING_SYNC to disable pause/stop during pulse
         self.state_manager.transition_to(PlaybackState.SENDING_SYNC)
 
         # Send the pulse via audio stimulator
@@ -225,11 +219,8 @@ class TkApp:
 
         # Reset state after pulse completes (pulse is 1000ms, wait 1500ms to be safe)
         def reset_after_pulse():
-            # Only reset if we're still in SENDING_SYNC state
-            # (in case something went wrong and state changed)
-            if self.state_manager.state == PlaybackState.SENDING_SYNC:
+            if self.state_manager.is_sending_sync():
                 self.state_manager.transition_to(PlaybackState.READY)
-                # Ensure pause button is in correct state
                 self.pause_button.config(text="Pause")
 
         self.root.after(1500, reset_after_pulse)
@@ -252,9 +243,9 @@ class TkApp:
             self.state_manager.transition_to(PlaybackState.EMPTY)
             logger.debug("Patient ID field cleared")
     
-    def toggle_loved_one_options(self):
-        """Toggle loved one voice options based on checkbox."""
-        state = 'normal' if self.loved_one_var.get() else 'disabled'
+    def toggle_familiar_options(self):
+        """Toggle familiar voice options based on checkbox."""
+        state = 'normal' if self.familiar_var.get() else 'disabled'
         self.male_radio.config(state=state)
         self.female_radio.config(state=state)
         self.file_button.config(state=state)
@@ -264,14 +255,16 @@ class TkApp:
         """Handle loved one voice file upload."""
         logger.debug("Opening voice file dialog")
         
+        audio_data_dir = Path(__file__).resolve().parent.parent / "audio_data"
         file_path = filedialog.askopenfilename(
             title="Select Voice File",
+            initialdir=str(audio_data_dir),
             filetypes=[("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
         )
         
         if file_path:
-            self.stims.loved_one_file = file_path
-            self.stims.loved_one_gender = self.gender_var.get()
+            self.stims.familiar_file = file_path
+            self.stims.familiar_gender = self.gender_var.get()
             self.file_label.config(text=Path(file_path).name)
             logger.info(f"Loved one voice file uploaded: {file_path} "
                        f"(Gender: {self.gender_var.get()})")
@@ -345,15 +338,15 @@ class TkApp:
         Returns:
             True if valid, False otherwise
         """
-        if not any([self.language_var.get(), self.right_cmd_var.get(), 
-                   self.left_cmd_var.get(), self.oddball_var.get(), 
-                   self.loved_one_var.get()]):
+        if not any([self.language_var.get(), self.right_cmd_var.get(),
+                   self.left_cmd_var.get(), self.oddball_var.get(),
+                   self.familiar_var.get()]):
             logger.warning("No stimulus type selected")
             messagebox.showwarning("No Stimulus Selected", 
                                  "Please select at least one stimulus type.")
             return False
         
-        if self.loved_one_var.get() and not self.stims.loved_one_file:
+        if self.familiar_var.get() and not self.stims.familiar_file:
             logger.warning("Loved one stimulus selected but no voice file uploaded")
             messagebox.showwarning("Missing File", 
                                  "Please upload a voice file for loved one stimulus.")
@@ -372,13 +365,17 @@ class TkApp:
                           f"{num_of_each_stim}")
                 
                 # Set gender for loved one if applicable
-                if self.loved_one_var.get():
-                    self.stims.loved_one_gender = self.gender_var.get()
+                if self.familiar_var.get():
+                    self.stims.familiar_gender = self.gender_var.get()
                     logger.debug(f"Loved one gender set to: {self.gender_var.get()}")
                 
                 # Generate stimuli
                 self.stims.generate_stims(num_of_each_stim)
-            
+
+                # Initialize CSV now that stims are prepared
+                patient_id = self.get_patient_id()
+                self.results_manager.initialize_csv(patient_id)
+
             # Transition back to ready
             self.state_manager.transition_to(PlaybackState.READY)
             
@@ -424,8 +421,8 @@ class TkApp:
             "odd+p": (DEFAULT_STIMULUS_COUNTS['oddball_with_prompt'] 
                      if self.oddball_var.get() and self.oddball_prompt_var.get() 
                      else 0),
-            "loved": (DEFAULT_STIMULUS_COUNTS['loved_one'] 
-                     if self.loved_one_var.get() else 0)
+            "loved": (DEFAULT_STIMULUS_COUNTS['familiar_voice']
+                     if self.familiar_var.get() else 0)
         }
     
     def play_stimulus(self):
@@ -746,13 +743,13 @@ class TkApp:
         stim_files = []
         if FilePaths.RESULTS_DIR.exists():
             stim_files = sorted([f.name for f in FilePaths.RESULTS_DIR.glob('*.csv')])
-        
+
         self.stimulus_combo['values'] = stim_files
         if stim_files:
             self.stimulus_combo.set("Select a stimulus file...")
         else:
             self.stimulus_combo.set("No CSV files found")
-        
+
         # EDF files (case-insensitive glob for .edf/.EDF)
         edf_files = []
         if FilePaths.EDFS_DIR.exists():
@@ -950,7 +947,7 @@ class TkApp:
         self._build_oddball_row(stim_frame, row=3)
         
         # Loved One
-        self._build_loved_one_row(stim_frame, row=4)
+        self._build_familiar_row(stim_frame, row=4)
     
     def _build_command_row(self, parent, row: int, side: str,
                           cmd_var, prompt_var, prompt_attr: str):
@@ -995,16 +992,16 @@ class TkApp:
         )
         self.oddball_prompt.pack(side='right')
     
-    def _build_loved_one_row(self, parent, row: int):
-        """Build loved one stimulus row with gender and file selection."""
+    def _build_familiar_row(self, parent, row: int):
+        """Build familiar voice stimulus row with gender and file selection."""
         frame = ttk.Frame(parent)
         frame.grid(row=row, column=0, columnspan=3, sticky='ew', pady=2)
-        
+
         ttk.Checkbutton(
             frame,
-            text="Loved One Stimulus",
-            variable=self.loved_one_var,
-            command=self.toggle_loved_one_options
+            text="Familiar Voice Stimulus",
+            variable=self.familiar_var,
+            command=self.toggle_familiar_options
         ).pack(side='left')
         
         # Gender selection

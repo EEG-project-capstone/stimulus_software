@@ -12,6 +12,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from lib.exceptions import ResultsFileError
+from lib.constants import SyncPulseParams
 
 logger = logging.getLogger('eeg_stimulus.results_manager')
 
@@ -27,7 +28,6 @@ class ResultsManager:
         'notes',
         'start_time',
         'end_time',
-        'duration'
     ]
     
     def __init__(self, config):
@@ -40,7 +40,26 @@ class ResultsManager:
         self._write_lock = threading.Lock()
         logger.info("ResultsManager initialized")
     
-    def append_result(self, 
+    def initialize_csv(self, patient_id: str) -> Path:
+        """Create the CSV file with headers if it doesn't already exist.
+
+        Args:
+            patient_id: Patient identifier
+
+        Returns:
+            Path to the results file
+        """
+        filepath = self.config.get_results_path(patient_id)
+        with self._write_lock:
+            if not filepath.exists():
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame(columns=self.COLUMNS).to_csv(filepath, index=False)
+                logger.info(f"Initialized CSV file: {filepath}")
+            else:
+                logger.debug(f"CSV file already exists: {filepath}")
+        return filepath
+
+    def append_result(self,
                      patient_id: str, 
                      result_type: str, 
                      data: Dict[str, Any]) -> Path:
@@ -108,7 +127,6 @@ class ResultsManager:
             'notes': notes_value,
             'start_time': data.get('start_time', ''),
             'end_time': data.get('end_time', ''),
-            'duration': data.get('duration', '')
         }
     
     def _write_row(self, filepath: Path, row: Dict[str, Any]):
@@ -169,11 +187,36 @@ class ResultsManager:
         data = {
             'notes': f'Manual sync pulse at {time.strftime("%H:%M:%S", time.localtime(sync_time))}',
             'start_time': sync_time,
-            'end_time': sync_time + 0.2,  # 200ms duration
-            'duration': 0.2
+            'end_time': sync_time + SyncPulseParams.DURATION_MS / 1000.0,
         }
         return self.append_result(patient_id, 'manual_sync_pulse', data)
     
+    def append_result_to_path(self,
+                              filepath: Path,
+                              patient_id: str,
+                              result_type: str,
+                              data: Dict[str, Any]) -> None:
+        """Thread-safe result writing to an explicit file path.
+
+        Use this when the target CSV is known (e.g., a previously-selected
+        analysis file) rather than derived from patient_id via get_results_path.
+
+        Args:
+            filepath: Exact path of the CSV to append to
+            patient_id: Patient identifier (used only to populate the row field)
+            result_type: Type of result
+            data: Dictionary containing result data
+        """
+        try:
+            row = self._create_row(patient_id, result_type, data)
+            with self._write_lock:
+                self._write_row(filepath, row)
+            logger.debug(f"Result appended to {filepath}: {result_type} for {patient_id}")
+        except Exception as e:
+            error_msg = f"Failed to append result to {filepath}: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise ResultsFileError(error_msg) from e
+
     def read_results(self, filepath: Path) -> Optional[pd.DataFrame]:
         """Read results from CSV file.
         
@@ -212,7 +255,7 @@ class ResultsManager:
         stimulus_types = {
             'language', 'right_command', 'right_command+p',
             'left_command', 'left_command+p', 'oddball', 'oddball+p',
-            'loved_one_voice', 'control'
+            'familiar', 'unfamiliar'
         }
         
         stimuli = []
@@ -221,7 +264,6 @@ class ResultsManager:
                 stimuli.append({
                     'type': row['stim_type'],
                     'start_time': row['start_time'],
-                    'duration': row['duration']
                 })
         
         return stimuli

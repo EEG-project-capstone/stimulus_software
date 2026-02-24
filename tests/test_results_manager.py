@@ -68,7 +68,6 @@ class TestAppendResult:
         data = {
             'start_time': time.time(),
             'end_time': time.time() + 1.0,
-            'duration': 1.0
         }
 
         filepath = results_manager.append_result('PATIENT001', 'language', data)
@@ -77,7 +76,7 @@ class TestAppendResult:
 
     def test_append_writes_header_on_first_write(self, results_manager):
         """First append should write CSV header."""
-        data = {'start_time': 1000.0, 'end_time': 1001.0, 'duration': 1.0}
+        data = {'start_time': 1000.0, 'end_time': 1001.0}
 
         filepath = results_manager.append_result('PATIENT001', 'language', data)
         df = pd.read_csv(filepath)
@@ -87,15 +86,13 @@ class TestAppendResult:
         assert 'stim_type' in df.columns
         assert 'start_time' in df.columns
         assert 'end_time' in df.columns
-        assert 'duration' in df.columns
 
     def test_append_includes_correct_data(self, results_manager):
         """append_result should write correct data."""
         start = 1000.5
         end = 1002.5
-        duration = 2.0
 
-        data = {'start_time': start, 'end_time': end, 'duration': duration}
+        data = {'start_time': start, 'end_time': end}
 
         filepath = results_manager.append_result('PATIENT001', 'language', data)
         df = pd.read_csv(filepath)
@@ -104,7 +101,7 @@ class TestAppendResult:
         assert df.iloc[0]['patient_id'] == 'PATIENT001'
         assert df.iloc[0]['stim_type'] == 'language'
         assert df.iloc[0]['start_time'] == start
-        assert df.iloc[0]['duration'] == duration
+        assert df.iloc[0]['end_time'] == end
 
     def test_append_multiple_results(self, results_manager):
         """Multiple appends should accumulate rows."""
@@ -112,7 +109,6 @@ class TestAppendResult:
             data = {
                 'start_time': 1000.0 + i,
                 'end_time': 1001.0 + i,
-                'duration': 1.0
             }
             filepath = results_manager.append_result('PATIENT001', 'language', data)
 

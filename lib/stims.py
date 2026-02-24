@@ -6,12 +6,13 @@ import logging
 from pydub import AudioSegment
 from pathlib import Path
 
+from lib.constants import FilePaths, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
+
 logger = logging.getLogger('eeg_stimulus.stims')
 
 class Stims:
 
-    def __init__(self, gui_callback):
-        self.config = gui_callback.config
+    def __init__(self):
         self.stim_dictionary = []
         self.current_stim_index = None
 
@@ -23,33 +24,36 @@ class Stims:
         self.left_keep_audio = None
         self.left_stop_audio = None
 
-        self.loved_one_file = ""
-        self.loved_one_gender = ""
-        self.loved_one_voice_audio = None
-        self.control_voice_audio = None
+        self.familiar_file = ""
+        self.familiar_gender = ""
+        self.familiar_voice_audio = None
+        self.unfamiliar_voices_audio = []
 
         self.motor_prompt_audio = None
         self.oddball_prompt_audio = None
 
         self.sample_rate = 44100
-        
+
         logger.info("Stims initialized")
- 
+
     def generate_stims(self, num_of_each_stims):
         """Generate stimulus sequence with proper validation"""
         logger.info(f"Generating stimuli: {num_of_each_stims}")
-        
+
         # Clear existing stimuli before generating new ones
-        self.stim_dictionary = []      
+        self.stim_dictionary = []
+        self.lang_audio = []
+        self.lang_stims_ids = []
+        self.unfamiliar_voices_audio = []
 
         # Validate loved one stimuli requirements
         if num_of_each_stims.get("loved", 0) > 0:
-            if not self.loved_one_file:
-                error_msg = "Loved one stimuli requested but no audio file specified"
+            if not self.familiar_file:
+                error_msg = "Familiar voice stimuli requested but no audio file specified"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            if not self.loved_one_gender or self.loved_one_gender not in ['Male', 'Female']:
-                error_msg = f"Loved one stimuli requested but gender not properly set: {self.loved_one_gender}"
+            if not self.familiar_gender or self.familiar_gender not in ['Male', 'Female']:
+                error_msg = f"Familiar voice stimuli requested but gender not properly set: {self.familiar_gender}"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -74,8 +78,8 @@ class Stims:
         # Right command (no prompt)
         if num_of_each_stims.get("rcmd", 0) > 0:
             logger.info(f"Loading right command audio for {num_of_each_stims['rcmd']} stimuli")
-            self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
-            self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
+            self.right_keep_audio = AudioSegment.from_mp3(FilePaths.RIGHT_KEEP_AUDIO)
+            self.right_stop_audio = AudioSegment.from_mp3(FilePaths.RIGHT_STOP_AUDIO)
             rcmd_block = [{"type": "right_command", "status": "pending"} for _ in range(num_of_each_stims["rcmd"])]
             blocks.append(rcmd_block)
             logger.debug(f"Added {len(rcmd_block)} right command stimuli")
@@ -83,9 +87,9 @@ class Stims:
         # Right command + prompt
         if num_of_each_stims.get("rcmd+p", 0) > 0:
             logger.info(f"Loading right command with prompt audio for {num_of_each_stims['rcmd+p']} stimuli")
-            self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
-            self.right_keep_audio = AudioSegment.from_mp3(self.config.file['right_keep_path'])
-            self.right_stop_audio = AudioSegment.from_mp3(self.config.file['right_stop_path'])
+            self.motor_prompt_audio = AudioSegment.from_wav(FilePaths.MOTOR_PROMPT)
+            self.right_keep_audio = AudioSegment.from_mp3(FilePaths.RIGHT_KEEP_AUDIO)
+            self.right_stop_audio = AudioSegment.from_mp3(FilePaths.RIGHT_STOP_AUDIO)
             rcmd_p_block = [{"type": "right_command+p", "status": "pending"} for _ in range(num_of_each_stims["rcmd+p"])]
             blocks.append(rcmd_p_block)
             logger.debug(f"Added {len(rcmd_p_block)} right command+prompt stimuli")
@@ -93,8 +97,8 @@ class Stims:
         # Left command (no prompt)
         if num_of_each_stims.get("lcmd", 0) > 0:
             logger.info(f"Loading left command audio for {num_of_each_stims['lcmd']} stimuli")
-            self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
-            self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
+            self.left_keep_audio = AudioSegment.from_mp3(FilePaths.LEFT_KEEP_AUDIO)
+            self.left_stop_audio = AudioSegment.from_mp3(FilePaths.LEFT_STOP_AUDIO)
             lcmd_block = [{"type": "left_command", "status": "pending"} for _ in range(num_of_each_stims["lcmd"])]
             blocks.append(lcmd_block)
             logger.debug(f"Added {len(lcmd_block)} left command stimuli")
@@ -102,9 +106,9 @@ class Stims:
         # Left command + prompt
         if num_of_each_stims.get("lcmd+p", 0) > 0:
             logger.info(f"Loading left command with prompt audio for {num_of_each_stims['lcmd+p']} stimuli")
-            self.motor_prompt_audio = AudioSegment.from_wav(self.config.file['motor_prompt_path'])
-            self.left_keep_audio = AudioSegment.from_mp3(self.config.file['left_keep_path'])
-            self.left_stop_audio = AudioSegment.from_mp3(self.config.file['left_stop_path'])
+            self.motor_prompt_audio = AudioSegment.from_wav(FilePaths.MOTOR_PROMPT)
+            self.left_keep_audio = AudioSegment.from_mp3(FilePaths.LEFT_KEEP_AUDIO)
+            self.left_stop_audio = AudioSegment.from_mp3(FilePaths.LEFT_STOP_AUDIO)
             lcmd_p_block = [{"type": "left_command+p", "status": "pending"} for _ in range(num_of_each_stims["lcmd+p"])]
             blocks.append(lcmd_p_block)
             logger.debug(f"Added {len(lcmd_p_block)} left command+prompt stimuli")
@@ -119,49 +123,60 @@ class Stims:
         # Oddball + prompt
         if num_of_each_stims.get("odd+p", 0) > 0:
             logger.info(f"Loading oddball prompt audio for {num_of_each_stims['odd+p']} stimuli")
-            self.oddball_prompt_audio = AudioSegment.from_wav(self.config.file['oddball_prompt_path'])
+            self.oddball_prompt_audio = AudioSegment.from_wav(FilePaths.ODDBALL_PROMPT)
             odd_p_block = [{"type": "oddball+p", "status": "pending"} for _ in range(num_of_each_stims["odd+p"])]
             blocks.append(odd_p_block)
             logger.debug(f"Added {len(odd_p_block)} oddball+prompt stimuli")
-                
-        # Loved one stimuli
+
+        # Loved one stimuli — 50% familiar, 50% unfamiliar (gender-matched)
         if num_of_each_stims.get("loved", 0) > 0:
-            logger.info(f"Loading loved one voice audio for {num_of_each_stims['loved']} stimulus pairs")
-            lof = self.loved_one_file
-            temp_path = Path(lof) if Path(lof).is_absolute() else self.config.file['loved_one_path'] / lof
-            
-            # Validate file exists
+            n = num_of_each_stims["loved"]
+            logger.info(f"Loading loved one voice audio for {n} trials (50% familiar / 50% unfamiliar)")
+
+            # Load familiar voice
+            lof = self.familiar_file
+            temp_path = Path(lof) if Path(lof).is_absolute() else FilePaths.FAMILIAR_DIR / lof
             if not temp_path.exists():
-                error_msg = f"Loved one audio file not found: {temp_path}"
+                error_msg = f"Familiar voice audio file not found: {temp_path}"
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
-            
             logger.debug(f"Loading loved one audio from: {temp_path}")
-            self.loved_one_voice_audio = self._load_audio_as_int16(temp_path)
-            
-            if self.loved_one_gender == 'Male':
-                control_path = self.config.file['male_control_path']
-            elif self.loved_one_gender == 'Female':
-                control_path = self.config.file['female_control_path']
+            self.familiar_voice_audio = self._load_audio_as_int16(temp_path)
+
+            # Load all gender-matched unfamiliar control statements
+            if self.familiar_gender == 'Male':
+                voice_names = MALE_CONTROL_VOICES
+            elif self.familiar_gender == 'Female':
+                voice_names = FEMALE_CONTROL_VOICES
             else:
-                error_msg = f"Invalid gender: {self.loved_one_gender}"
+                error_msg = f"Invalid gender: {self.familiar_gender}"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
-            
-            if not control_path.exists():
-                error_msg = f"Control audio file not found: {control_path}"
-                logger.error(error_msg)
-                raise FileNotFoundError(error_msg)
-            
-            logger.debug(f"Loading control audio from: {control_path}")
-            self.control_voice_audio = self._load_audio_as_int16(control_path)
-            
+
+            control_dir = FilePaths.CONTROL_STATEMENTS_DIR
+            self.unfamiliar_voices_audio = []
+            for name in voice_names:
+                path = control_dir / f"{name}_normalized.wav"
+                if not path.exists():
+                    error_msg = f"Unfamiliar voice audio not found: {path}"
+                    logger.error(error_msg)
+                    raise FileNotFoundError(error_msg)
+                logger.debug(f"Loading unfamiliar voice from: {path}")
+                self.unfamiliar_voices_audio.append(self._load_audio_as_int16(path))
+
+            # Build balanced 50/50 block: n_familiar familiar + n_unfamiliar unfamiliar
+            n_familiar = n // 2
+            n_unfamiliar = n - n_familiar
+
             loved_block = []
-            for i in range(num_of_each_stims["loved"]):
-                loved_block.append({"type": "control", "status": "pending"})
-                loved_block.append({"type": "loved_one_voice", "status": "pending"})
+            for _ in range(n_familiar):
+                loved_block.append({"type": "familiar", "status": "pending"})
+            for _ in range(n_unfamiliar):
+                voice_index = random.randrange(len(self.unfamiliar_voices_audio))
+                loved_block.append({"type": "unfamiliar", "voice_index": voice_index, "status": "pending"})
+            random.shuffle(loved_block)
             blocks.append(loved_block)
-            logger.debug(f"Added {len(loved_block)} voice stimuli (control + loved one pairs)")
+            logger.debug(f"Added {len(loved_block)} voice stimuli ({n_familiar} familiar, {n_unfamiliar} unfamiliar)")
 
         # Randomize the order of blocks
         logger.info(f"Randomizing {len(blocks)} stimulus blocks")
@@ -170,20 +185,20 @@ class Stims:
         # Flatten blocks into final stimulus list
         for block in blocks:
             self.stim_dictionary.extend(block)
-        
+
         logger.info(f"Stimulus generation complete: {len(self.stim_dictionary)} total stimuli")
-        
+
         # Log stimulus type summary
         stim_summary = {}
         for stim in self.stim_dictionary:
             stim_type = stim['type']
             stim_summary[stim_type] = stim_summary.get(stim_type, 0) + 1
         logger.info(f"Stimulus type summary: {stim_summary}")
-    
+
     def _generate_language_stimuli(self, num_of_lang_stims):
         """Generate the specified number of language stimuli"""
         logger.info(f"Generating {num_of_lang_stims} language stimuli")
-        
+
         for i in range(num_of_lang_stims):
             try:
                 self._random_lang_stim()
@@ -200,7 +215,7 @@ class Stims:
         This ensures consistency with the rest of the audio pipeline.
         """
         logger.debug(f"Loading audio file: {path}")
-        
+
         try:
             if path.suffix == '.mp3':
                 audio_segment = AudioSegment.from_mp3(path)
@@ -208,20 +223,20 @@ class Stims:
                 audio_segment = AudioSegment.from_wav(path)
             else:
                 raise ValueError(f"Unsupported file format: {path}")
-        
+
             # Log original audio properties
             logger.debug(f"Audio properties: {audio_segment.frame_rate}Hz, "
                         f"{audio_segment.channels} channels, "
                         f"{len(audio_segment)}ms duration")
-            
+
             # Resample to 44100 Hz to standardize
             if audio_segment.frame_rate != 44100:
                 logger.debug(f"Resampling from {audio_segment.frame_rate}Hz to 44100Hz")
                 audio_segment = audio_segment.set_frame_rate(44100)
-            
+
             # Convert to numpy array (already int16 from pydub)
             samples = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
-            
+
             # Reshape for proper channel handling
             if audio_segment.channels == 2:
                 samples = samples.reshape((-1, 2))
@@ -230,7 +245,7 @@ class Stims:
                 # Mono audio as (n_samples, 1) for consistency
                 samples = samples.reshape((-1, 1))
                 logger.debug(f"Loaded mono audio: shape={samples.shape}")
-            
+
             logger.info(f"Successfully loaded audio: {path} ({samples.shape})")
             return samples
 
@@ -240,14 +255,14 @@ class Stims:
 
     def _random_lang_stim(self, num_sentence=12):
         """Create a random language stimulus from available sentence files"""
-        sentence_path = self.config.file['sentences_path']
+        sentence_path = FilePaths.SENTENCES_DIR
         logger.debug(f"Creating language stimulus from: {sentence_path}")
-        
+
         if not sentence_path.exists():
             error_msg = f"Sentences directory not found: {sentence_path}"
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
-        
+
         # Use pathlib for file listing
         wav_files = list(sentence_path.glob('*.wav'))
         logger.debug(f"Found {len(wav_files)} wav files in sentences directory")
@@ -258,38 +273,23 @@ class Stims:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        selected_ids = set()  # To keep track of already selected IDs
         combined = AudioSegment.empty()
         sample_ids = []
 
-        while len(sample_ids) < num_sentence:
-            # Randomly choose an ID
-            id = random.choice(range(len(wav_files)))
-            if id in selected_ids:
-                continue  # Skip if this ID was already selected
-            file = sentence_path / f'lang{id}.wav'
-            if file.exists():
-                # If the file exists, add its ID to sample_ids and selected_ids
-                sample_ids.append(id)
-                selected_ids.add(id)
+        chosen_files = random.sample(wav_files, num_sentence)
+        for file in chosen_files:
+            try:
+                audio = AudioSegment.from_wav(file)
+                combined += audio
+                sample_ids.append(file.stem)
+            except Exception as e:
+                logger.error(f"Error loading sentence file {file}: {e}", exc_info=True)
+                raise
 
-                # Read and concatenate the audio
-                try:
-                    audio = AudioSegment.from_wav(file)
-                    combined += audio
-                except Exception as e:
-                    logger.warning(f"Error loading sentence file {file}: {e}")
-                    selected_ids.remove(id)
-                    sample_ids.remove(id)
-                    continue
-            else:
-                logger.warning(f"Expected sentence file not found: {file}")
-                continue
-        
         # save audio segment
         self.lang_audio.append(combined)
         # save sample IDs
         self.lang_stims_ids.append(sample_ids)
-        
+
         logger.debug(f"Language stimulus created: {len(sample_ids)} sentences, "
                     f"{len(combined)}ms total duration, IDs={sample_ids}")

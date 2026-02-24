@@ -7,38 +7,12 @@ import numpy as np
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-# Add lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.stims import Stims
-
-
-class MockConfig:
-    """Mock configuration for Stims testing."""
-
-    def __init__(self, temp_dir):
-        self.temp_dir = Path(temp_dir)
-        self.file = {
-            'sentences_path': self.temp_dir / 'sentences',
-            'right_keep_path': self.temp_dir / 'right_keep.mp3',
-            'right_stop_path': self.temp_dir / 'right_stop.mp3',
-            'left_keep_path': self.temp_dir / 'left_keep.mp3',
-            'left_stop_path': self.temp_dir / 'left_stop.mp3',
-            'motor_prompt_path': self.temp_dir / 'motorcommandprompt.wav',
-            'oddball_prompt_path': self.temp_dir / 'oddballprompt.wav',
-            'loved_one_path': self.temp_dir / 'loved_one',
-            'male_control_path': self.temp_dir / 'male_control.wav',
-            'female_control_path': self.temp_dir / 'female_control.wav',
-        }
-
-
-class MockGuiCallback:
-    """Mock GUI callback for Stims testing."""
-
-    def __init__(self, config):
-        self.config = config
+from lib.constants import FilePaths
 
 
 @pytest.fixture
@@ -47,25 +21,17 @@ def stims_temp_dir():
     tmp = tempfile.mkdtemp()
     tmp_path = Path(tmp)
 
-    # Create subdirectories
     (tmp_path / 'sentences').mkdir()
-    (tmp_path / 'loved_one').mkdir()
+    (tmp_path / 'familiar').mkdir()
 
     yield tmp_path
     shutil.rmtree(tmp)
 
 
 @pytest.fixture
-def mock_stims_config(stims_temp_dir):
-    """Create a mock config with the temp directory."""
-    return MockConfig(stims_temp_dir)
-
-
-@pytest.fixture
-def stims_instance(mock_stims_config):
-    """Create a Stims instance with mock config."""
-    gui_callback = MockGuiCallback(mock_stims_config)
-    return Stims(gui_callback)
+def stims_instance():
+    """Create a Stims instance."""
+    return Stims()
 
 
 class TestStimsInit:
@@ -85,8 +51,8 @@ class TestStimsInit:
         assert stims_instance.right_stop_audio is None
         assert stims_instance.left_keep_audio is None
         assert stims_instance.left_stop_audio is None
-        assert stims_instance.loved_one_voice_audio is None
-        assert stims_instance.control_voice_audio is None
+        assert stims_instance.familiar_voice_audio is None
+        assert stims_instance.unfamiliar_voices_audio == []
 
 
 class TestGenerateStimsValidation:
@@ -98,21 +64,21 @@ class TestGenerateStimsValidation:
         stims_instance.generate_stims({})
         assert stims_instance.stim_dictionary == []
 
-    def test_generate_stims_requires_loved_one_file(self, stims_instance):
-        """generate_stims should raise if loved one stimuli requested without file."""
+    def test_generate_stims_requires_familiar_file(self, stims_instance):
+        """generate_stims should raise if familiar voice stimuli requested without file."""
         with pytest.raises(ValueError, match="no audio file specified"):
             stims_instance.generate_stims({"loved": 1})
 
-    def test_generate_stims_requires_loved_one_gender(self, stims_instance):
-        """generate_stims should raise if loved one stimuli requested without valid gender."""
-        stims_instance.loved_one_file = "test.wav"
+    def test_generate_stims_requires_familiar_gender(self, stims_instance):
+        """generate_stims should raise if familiar voice stimuli requested without valid gender."""
+        stims_instance.familiar_file = "test.wav"
         with pytest.raises(ValueError, match="gender not properly set"):
             stims_instance.generate_stims({"loved": 1})
 
     def test_generate_stims_requires_valid_gender(self, stims_instance):
         """generate_stims should raise if gender is invalid."""
-        stims_instance.loved_one_file = "test.wav"
-        stims_instance.loved_one_gender = "Invalid"
+        stims_instance.familiar_file = "test.wav"
+        stims_instance.familiar_gender = "Invalid"
         with pytest.raises(ValueError, match="gender not properly set"):
             stims_instance.generate_stims({"loved": 1})
 
@@ -129,14 +95,9 @@ class TestOddballStimuli:
         assert all(s['status'] == 'pending' for s in oddball_stims)
 
     @patch('lib.stims.AudioSegment.from_wav')
-    def test_generate_oddball_with_prompt(self, mock_from_wav, stims_instance, stims_temp_dir):
+    def test_generate_oddball_with_prompt(self, mock_from_wav, stims_instance):
         """generate_stims should create oddball+prompt stimuli and load prompt audio."""
-        # Create mock audio file
-        prompt_file = stims_temp_dir / 'oddballprompt.wav'
-        prompt_file.touch()
-
-        mock_audio = MagicMock()
-        mock_from_wav.return_value = mock_audio
+        mock_from_wav.return_value = MagicMock()
 
         stims_instance.generate_stims({"odd+p": 2})
 
@@ -149,14 +110,9 @@ class TestCommandStimuli:
     """Tests for command stimulus generation."""
 
     @patch('lib.stims.AudioSegment.from_mp3')
-    def test_generate_right_command_stimuli(self, mock_from_mp3, stims_instance, stims_temp_dir):
+    def test_generate_right_command_stimuli(self, mock_from_mp3, stims_instance):
         """generate_stims should create right command stimuli."""
-        # Create mock audio files
-        for path_key in ['right_keep_path', 'right_stop_path']:
-            stims_instance.config.file[path_key].touch()
-
-        mock_audio = MagicMock()
-        mock_from_mp3.return_value = mock_audio
+        mock_from_mp3.return_value = MagicMock()
 
         stims_instance.generate_stims({"rcmd": 2})
 
@@ -166,13 +122,9 @@ class TestCommandStimuli:
         assert stims_instance.right_stop_audio is not None
 
     @patch('lib.stims.AudioSegment.from_mp3')
-    def test_generate_left_command_stimuli(self, mock_from_mp3, stims_instance, stims_temp_dir):
+    def test_generate_left_command_stimuli(self, mock_from_mp3, stims_instance):
         """generate_stims should create left command stimuli."""
-        for path_key in ['left_keep_path', 'left_stop_path']:
-            stims_instance.config.file[path_key].touch()
-
-        mock_audio = MagicMock()
-        mock_from_mp3.return_value = mock_audio
+        mock_from_mp3.return_value = MagicMock()
 
         stims_instance.generate_stims({"lcmd": 3})
 
@@ -282,7 +234,7 @@ class TestLoadAudioAsInt16:
         test_file.touch()
 
         mock_audio = MagicMock()
-        mock_audio.frame_rate = 22050  # Not 44100
+        mock_audio.frame_rate = 22050
         mock_audio.channels = 1
         mock_audio.get_array_of_samples.return_value = np.array([100], dtype=np.int16)
         mock_audio.set_frame_rate.return_value = mock_audio
@@ -301,7 +253,6 @@ class TestLoadAudioAsInt16:
         mock_audio = MagicMock()
         mock_audio.frame_rate = 44100
         mock_audio.channels = 2
-        # Interleaved stereo samples: L R L R
         mock_audio.get_array_of_samples.return_value = np.array([1, 2, 3, 4, 5, 6], dtype=np.int16)
         mock_from_wav.return_value = mock_audio
 
@@ -331,21 +282,20 @@ class TestRandomLangStim:
 
     def test_missing_sentences_directory_raises(self, stims_instance, stims_temp_dir):
         """_random_lang_stim should raise if sentences directory missing."""
-        # Remove the sentences directory
-        shutil.rmtree(stims_temp_dir / 'sentences')
-
-        with pytest.raises(FileNotFoundError, match="Sentences directory not found"):
-            stims_instance._random_lang_stim()
+        nonexistent = stims_temp_dir / 'nonexistent_sentences'
+        with patch.object(FilePaths, 'SENTENCES_DIR', nonexistent):
+            with pytest.raises(FileNotFoundError, match="Sentences directory not found"):
+                stims_instance._random_lang_stim()
 
     def test_insufficient_sentences_raises(self, stims_instance, stims_temp_dir):
         """_random_lang_stim should raise if not enough sentences."""
-        # Create only 5 sentence files when 12 are needed by default
         sentences_dir = stims_temp_dir / 'sentences'
         for i in range(5):
             (sentences_dir / f'lang{i}.wav').touch()
 
-        with pytest.raises(ValueError, match="Requested 12 sentences, but only 5 available"):
-            stims_instance._random_lang_stim()
+        with patch.object(FilePaths, 'SENTENCES_DIR', sentences_dir):
+            with pytest.raises(ValueError, match="Requested 12 sentences, but only 5 available"):
+                stims_instance._random_lang_stim()
 
 
 class TestBlockRandomization:
@@ -354,7 +304,6 @@ class TestBlockRandomization:
     @patch.object(Stims, '_random_lang_stim')
     def test_blocks_are_shuffled(self, mock_random_lang, stims_instance):
         """generate_stims should shuffle blocks (not individual stimuli)."""
-        # Generate multiple times and check that order varies
         orders = []
         for _ in range(10):
             stims_instance.generate_stims({
@@ -364,75 +313,107 @@ class TestBlockRandomization:
             order = [s['type'] for s in stims_instance.stim_dictionary]
             orders.append(tuple(order))
 
-        # With shuffling, we should see at least 2 different orderings in 10 trials
-        # (probability of same order 10 times is 1/1024 for 2 items)
         unique_orders = set(orders)
-        assert len(unique_orders) >= 1  # At minimum, we have valid orders
+        assert len(unique_orders) >= 1
 
     @patch.object(Stims, '_random_lang_stim')
     def test_stimuli_within_block_preserved(self, mock_random_lang, stims_instance):
         """Stimuli within a block should stay together."""
         stims_instance.generate_stims({"lang": 3})
 
-        # All language stimuli should be contiguous (single block)
         lang_indices = [i for i, s in enumerate(stims_instance.stim_dictionary) if s['type'] == 'language']
 
         if lang_indices:
-            # Check they are sequential
             for i in range(len(lang_indices) - 1):
                 assert lang_indices[i + 1] - lang_indices[i] == 1
 
 
-class TestLovedOneStimuli:
-    """Tests for loved one voice stimulus generation."""
+class TestVoiceStimuli:
+    """Tests for familiar/unfamiliar voice stimulus generation."""
+
+    def _make_control_statements_dir(self, tmp_path, gender):
+        """Create a mock control_statements directory with the expected normalized wav files."""
+        import lib.constants as const
+        cs_dir = tmp_path / 'control_statements'
+        cs_dir.mkdir(exist_ok=True)
+        names = const.MALE_CONTROL_VOICES if gender == 'Male' else const.FEMALE_CONTROL_VOICES
+        for name in names:
+            (cs_dir / f"{name}_normalized.wav").touch()
+        return cs_dir
 
     @patch.object(Stims, '_load_audio_as_int16')
-    def test_generate_loved_one_creates_pairs(self, mock_load_audio, stims_instance, stims_temp_dir):
-        """generate_stims should create paired control + loved_one stimuli."""
-        # Set up loved one requirements
-        stims_instance.loved_one_file = "loved.wav"
-        stims_instance.loved_one_gender = "Male"
+    def test_generate_voice_balanced_split(self, mock_load_audio, stims_instance, stims_temp_dir):
+        """generate_stims should create an equal number of familiar and unfamiliar trials."""
+        stims_instance.familiar_file = "familiar.wav"
+        stims_instance.familiar_gender = "Male"
 
-        # Create mock audio files
-        (stims_temp_dir / 'loved_one' / 'loved.wav').touch()
-        (stims_temp_dir / 'male_control.wav').touch()
+        familiar_dir = stims_temp_dir / 'familiar'
+        (familiar_dir / 'familiar.wav').touch()
+        cs_dir = self._make_control_statements_dir(stims_temp_dir, 'Male')
 
         mock_load_audio.return_value = np.array([[100]], dtype=np.int16)
 
-        stims_instance.generate_stims({"loved": 2})
+        with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
+             patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
+            stims_instance.generate_stims({"loved": 4})
 
-        control_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'control']
-        loved_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'loved_one_voice']
+        familiar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'familiar']
+        unfamiliar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'unfamiliar']
 
-        assert len(control_stims) == 2
-        assert len(loved_stims) == 2
-        # Total should be 4 (2 pairs)
+        assert len(familiar_stims) == 2
+        assert len(unfamiliar_stims) == 2
         assert len(stims_instance.stim_dictionary) == 4
 
     @patch.object(Stims, '_load_audio_as_int16')
-    def test_loved_one_missing_file_raises(self, mock_load_audio, stims_instance, stims_temp_dir):
-        """generate_stims should raise if loved one file not found."""
-        stims_instance.loved_one_file = "nonexistent.wav"
-        stims_instance.loved_one_gender = "Male"
+    def test_unfamiliar_stims_have_voice_index(self, mock_load_audio, stims_instance, stims_temp_dir):
+        """Unfamiliar stims should carry a voice_index key referencing a loaded speaker."""
+        stims_instance.familiar_file = "familiar.wav"
+        stims_instance.familiar_gender = "Male"
 
-        with pytest.raises(FileNotFoundError, match="Loved one audio file not found"):
-            stims_instance.generate_stims({"loved": 1})
-
-    @patch.object(Stims, '_load_audio_as_int16')
-    def test_female_control_path_used(self, mock_load_audio, stims_instance, stims_temp_dir):
-        """generate_stims should use female control for Female gender."""
-        stims_instance.loved_one_file = "loved.wav"
-        stims_instance.loved_one_gender = "Female"
-
-        (stims_temp_dir / 'loved_one' / 'loved.wav').touch()
-        (stims_temp_dir / 'female_control.wav').touch()
+        familiar_dir = stims_temp_dir / 'familiar'
+        (familiar_dir / 'familiar.wav').touch()
+        cs_dir = self._make_control_statements_dir(stims_temp_dir, 'Male')
 
         mock_load_audio.return_value = np.array([[100]], dtype=np.int16)
 
-        stims_instance.generate_stims({"loved": 1})
+        with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
+             patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
+            stims_instance.generate_stims({"loved": 2})
 
-        # Check that female_control_path was loaded (second call)
-        assert mock_load_audio.call_count == 2
-        # Second call should be for control path
-        call_args = mock_load_audio.call_args_list[1]
-        assert 'female_control' in str(call_args)
+        unfamiliar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'unfamiliar']
+        for s in unfamiliar_stims:
+            assert 'voice_index' in s
+            assert 0 <= s['voice_index'] < 4
+
+    @patch.object(Stims, '_load_audio_as_int16')
+    def test_familiar_missing_file_raises(self, mock_load_audio, stims_instance, stims_temp_dir):
+        """generate_stims should raise if the familiar voice file is not found."""
+        stims_instance.familiar_file = "nonexistent.wav"
+        stims_instance.familiar_gender = "Male"
+
+        with patch.object(FilePaths, 'FAMILIAR_DIR', stims_temp_dir / 'familiar'):
+            with pytest.raises(FileNotFoundError, match="Familiar voice audio file not found"):
+                stims_instance.generate_stims({"loved": 1})
+
+    @patch.object(Stims, '_load_audio_as_int16')
+    def test_female_unfamiliar_voices_loaded(self, mock_load_audio, stims_instance, stims_temp_dir):
+        """generate_stims should load all four female unfamiliar speakers for Female gender."""
+        import lib.constants as const
+        stims_instance.familiar_file = "familiar.wav"
+        stims_instance.familiar_gender = "Female"
+
+        familiar_dir = stims_temp_dir / 'familiar'
+        (familiar_dir / 'familiar.wav').touch()
+        cs_dir = self._make_control_statements_dir(stims_temp_dir, 'Female')
+
+        mock_load_audio.return_value = np.array([[100]], dtype=np.int16)
+
+        with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
+             patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
+            stims_instance.generate_stims({"loved": 2})
+
+        # 1 familiar load + 4 unfamiliar speaker loads = 5 total
+        assert mock_load_audio.call_count == 5
+        loaded_paths = [str(call.args[0]) for call in mock_load_audio.call_args_list[1:]]
+        for name in const.FEMALE_CONTROL_VOICES:
+            assert any(name in p for p in loaded_paths)

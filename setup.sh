@@ -25,7 +25,9 @@ fi
 # Install dependencies
 echo "Installing dependencies..."
 conda install -y -n "$ENV_NAME" tk pip
-conda run -n "$ENV_NAME" pip install .
+DEPS=$(conda run -n "$ENV_NAME" python -c \
+  "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(' '.join(d['project']['dependencies']))")
+conda run -n "$ENV_NAME" pip install $DEPS
 
 echo ""
 echo "Setup complete. Run ./run.sh to start the application."

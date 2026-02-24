@@ -5,7 +5,6 @@ from lib.app import TkApp
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-import sys
 
 def shutdown_logging():
     logger = logging.getLogger('eeg_stimulus')

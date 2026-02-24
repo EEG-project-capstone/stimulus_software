@@ -1,5 +1,4 @@
 import tkinter as tk
-import pandas as pd
 from tkinter import messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -62,17 +61,12 @@ class AnalysisManager:
             else:
                 patient_id = "Unknown"
 
-            sync_row = {
-                'patient_id': patient_id,
-                'date': time.strftime("%Y-%m-%d"),
-                'stim_type': 'sync_detection',
-                'notes': f"SYNC_TIME_EDF_SEC={parser.sync_time:.6f}",
-                'start_time': '',
-                'end_time': '',
-                'duration': ''
-            }
-            sync_df = pd.DataFrame([sync_row])
-            sync_df.to_csv(stimulus_csv_path, mode='a', header=False, index=False)
+            self.app.results_manager.append_result_to_path(
+                Path(stimulus_csv_path),
+                patient_id,
+                'sync_detection',
+                {'notes': f"SYNC_TIME_EDF_SEC={parser.sync_time:.6f}"},
+            )
             logger.info(f"Sync time {parser.sync_time:.3f}s saved to {stimulus_csv_path}")
         else:
             self.app.sync_time = None

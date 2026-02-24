@@ -8,7 +8,6 @@ Uses AudioStreamManager, ResultsManager, and modular handlers.
 import time
 import random
 import threading
-import json
 import numpy as np
 import logging
 from typing import Optional
@@ -21,7 +20,9 @@ from lib.stim_handlers import (
     OddballStimHandler,
     VoiceStimHandler
 )
-from lib.constants import SyncPulseParams, TimingParams, OddballStimParams
+from pathlib import Path
+from lib.constants import (SyncPulseParams, TimingParams, OddballStimParams, AudioParams,
+                           MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES)
 from lib.exceptions import AudioError
 from lib.logging_utils import log_operation
 
@@ -44,7 +45,7 @@ class AuditoryStimulator:
         self.stream_manager = AudioStreamManager()
         self.results_manager = gui_callback.results_manager
 
-        # Initialize handlers (shared voice handler for control/loved_one)
+        # Initialize handlers (shared voice handler for familiar/unfamiliar)
         voice_handler = VoiceStimHandler(self)
         self.handlers = {
             'language': LanguageStimHandler(self),
@@ -54,8 +55,8 @@ class AuditoryStimulator:
             'left_command+p': CommandStimHandler(self),
             'oddball': OddballStimHandler(self),
             'oddball+p': OddballStimHandler(self),
-            'control': voice_handler,
-            'loved_one_voice': voice_handler,
+            'familiar': voice_handler,
+            'unfamiliar': voice_handler,
         }
 
         # Callback scheduling
@@ -399,7 +400,7 @@ class AuditoryStimulator:
         # Log audio event with timestamp
         if log_label is not None:
             # Onset time = now + stream latency + any offset (e.g., padding before actual sound)
-            onset_time = time.time() + 0.01 + (onset_offset_ms / 1000.0)
+            onset_time = time.time() + AudioParams.STREAM_LATENCY + (onset_offset_ms / 1000.0)
             self.current_stim_sentences.append({
                 'event': log_label,
                 'onset_time': onset_time
@@ -408,8 +409,9 @@ class AuditoryStimulator:
         
         # Create finish handler
         def on_finish():
-            # Only run callback if still playing (not paused or stopped)
-            if self.gui_callback.state_manager.is_playing() and callback is not None:
+            # Run callback if playing normally or sending a sync pulse
+            sm = self.gui_callback.state_manager
+            if (sm.is_playing() or sm.is_sending_sync()) and callback is not None:
                 self._schedule(10, callback)
         
         # Play using stream manager
@@ -444,7 +446,7 @@ class AuditoryStimulator:
                 self._save_oddball_results(patient_id, stim_type)
             else:
                 # For other stimuli, save as single row with all events
-                self._save_standard_result(patient_id, stim_type)
+                self._save_standard_result(patient_id, stim_type, stim)
         except Exception as e:
             logger.error(f"Failed to save stimulus result: {e}", exc_info=True)
 
@@ -453,11 +455,14 @@ class AuditoryStimulator:
         self.gui_callback.update_stim_list_status()
         self.stims.current_stim_index += 1
 
-        # Inter-stimulus delay (randomized)
-        delay = random.randint(
-            TimingParams.INTER_STIMULUS_MIN_MS,
-            TimingParams.INTER_STIMULUS_MAX_MS
-        )
+        # Inter-stimulus delay
+        if TimingParams.INTER_STIMULUS_JITTER:
+            delay = random.randint(
+                TimingParams.INTER_STIMULUS_MIN_MS,
+                TimingParams.INTER_STIMULUS_MAX_MS
+            )
+        else:
+            delay = TimingParams.INTER_STIMULUS_FIXED_MS
         logger.debug(f"Inter-stimulus delay: {delay}ms")
         self._schedule(delay, self.continue_playback)
 
@@ -489,7 +494,6 @@ class AuditoryStimulator:
                 'notes': tone_type,  # Just the tone type (standard_tone or rare_tone)
                 'start_time': onset_time,
                 'end_time': onset_time + tone_duration_sec,
-                'duration': tone_duration_sec
             }
 
             self.results_manager.append_result(
@@ -498,25 +502,23 @@ class AuditoryStimulator:
                 data=beep_data
             )
 
-    def _save_standard_result(self, patient_id: str, stim_type: str):
+    def _save_standard_result(self, patient_id: str, stim_type: str, stim: dict):
         """Save standard stimulus result - single row with clean notes.
 
         Args:
             patient_id: Patient identifier
             stim_type: Stimulus type
+            stim: Stimulus dictionary
         """
         end_time = time.time()
-        duration = (end_time - self.current_stim_start_time
-                   if self.current_stim_start_time else 0)
 
         # Create clean notes based on stimulus type
-        notes = self._format_stimulus_notes(stim_type, self.current_stim_sentences)
+        notes = self._format_stimulus_notes(stim_type, self.current_stim_sentences, stim)
 
         stim_result_data = {
             'notes': notes,
             'start_time': self.current_stim_start_time,
             'end_time': end_time,
-            'duration': duration
         }
 
         self.results_manager.append_result(
@@ -525,12 +527,13 @@ class AuditoryStimulator:
             data=stim_result_data
         )
 
-    def _format_stimulus_notes(self, stim_type: str, events: list) -> str:
+    def _format_stimulus_notes(self, stim_type: str, events: list, stim: dict) -> str:
         """Format clean notes for stimulus based on type.
 
         Args:
             stim_type: Type of stimulus
             events: List of event dictionaries
+            stim: Stimulus dictionary
 
         Returns:
             Formatted notes string
@@ -543,6 +546,15 @@ class AuditoryStimulator:
                     if sentence_ids:
                         return f"Sentences: {sentence_ids}"
             return "Language stimulus"
+
+        elif stim_type == 'familiar':
+            return f"file: {Path(self.stims.familiar_file).name}"
+
+        elif stim_type == 'unfamiliar':
+            voice_index = stim.get('voice_index', 0)
+            voices = MALE_CONTROL_VOICES if self.stims.familiar_gender == 'Male' else FEMALE_CONTROL_VOICES
+            speaker = voices[voice_index]
+            return f"speaker: {speaker}"
 
         elif stim_type in ('right_command', 'right_command+p', 'left_command', 'left_command+p'):
             # For command stimuli, extract side and cycles
@@ -561,8 +573,7 @@ class AuditoryStimulator:
                 return f"{side.capitalize()} command: {cycles} cycles{prompt_str}"
             return f"{side.capitalize()} command stimulus"
 
-        # For other stimuli, keep the full event log as JSON for now
-        return json.dumps(events)
+        return ''
     
     def _log_event(self, event_type: str, metadata: Optional[dict] = None):
         """Log structured event with timestamp.

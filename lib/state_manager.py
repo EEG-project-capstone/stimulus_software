@@ -6,7 +6,7 @@ Provides a robust state machine for playback control.
 """
 
 import logging
-from typing import Callable, Optional, Set
+from typing import Callable, Set
 from lib.constants import PlaybackState, VALID_STATE_TRANSITIONS
 from lib.exceptions import StateError
 
@@ -146,6 +146,10 @@ class StateManager:
         """Check if playing or paused (active playback session)."""
         return self._state in {PlaybackState.PLAYING, PlaybackState.PAUSED}
     
+    def is_sending_sync(self) -> bool:
+        """Check if currently sending a sync pulse."""
+        return self._state == PlaybackState.SENDING_SYNC
+
     def is_ready(self) -> bool:
         """Check if ready for operations."""
         return self._state == PlaybackState.READY

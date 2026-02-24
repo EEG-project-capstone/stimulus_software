@@ -11,7 +11,7 @@ import time
 import numpy as np
 import logging
 from lib.base_stim_handler import BaseStimHandler
-from lib.constants import CommandStimParams, OddballStimParams
+from lib.constants import CommandStimParams, OddballStimParams, AudioParams
 
 logger = logging.getLogger('eeg_stimulus.handlers')
 
@@ -292,7 +292,7 @@ class OddballStimHandler(BaseStimHandler):
 
         # Store playback start time for calculating actual onset times
         playback_start_time = time.time()
-        stream_latency_sec = 0.01  # Approximate stream initialization latency
+        stream_latency_sec = AudioParams.STREAM_LATENCY
 
         # Log each tone event with calculated onset time for CSV
         for event in tone_events:
@@ -336,7 +336,7 @@ class OddballStimHandler(BaseStimHandler):
 
 
 class VoiceStimHandler(BaseStimHandler):
-    """Handler for voice stimuli (control and loved one)."""
+    """Handler for familiar and unfamiliar voice stimuli."""
 
     def start(self, stim: dict):
         """Start a voice stimulus.
@@ -345,17 +345,17 @@ class VoiceStimHandler(BaseStimHandler):
             stim: Stimulus dictionary
         """
         self.is_active = True
-        stim_type = stim.get('type', 'control')
-        is_control = stim_type == 'control'
-        logger.info(f"Starting {'control' if is_control else 'loved_one'} voice stimulus")
-
-        self.log_event('voice_stim_start', {'type': stim_type})
+        stim_type = stim.get('type', 'unfamiliar')
+        is_unfamiliar = stim_type == 'unfamiliar'
+        logger.info(f"Starting {'unfamiliar' if is_unfamiliar else 'familiar'} voice stimulus")
 
         # Get audio data based on stim type
-        audio_data = (self.audio_stim.stims.control_voice_audio
-                     if is_control
-                     else self.audio_stim.stims.loved_one_voice_audio)
-        
+        if is_unfamiliar:
+            voice_index = stim.get('voice_index', 0)
+            audio_data = self.audio_stim.stims.unfamiliar_voices_audio[voice_index]
+        else:
+            audio_data = self.audio_stim.stims.familiar_voice_audio
+
         if audio_data is None:
             logger.error(f"{stim_type} audio data is None, skipping stimulus")
             self.audio_stim.finish_current_stim()
@@ -374,7 +374,7 @@ class VoiceStimHandler(BaseStimHandler):
             samples=audio_data,
             sample_rate=self.audio_stim.stims.sample_rate,
             on_finish=self.safe_finish,
-            log_label=stim_type
+            log_label=None
         )
     
     def continue_stim(self):
