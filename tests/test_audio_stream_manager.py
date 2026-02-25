@@ -2,20 +2,14 @@
 """Tests for audio_stream_manager.py - Thread-safe audio playback."""
 
 import pytest
-import sys
 import numpy as np
 import threading
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.audio_stream_manager import AudioStreamManager
 from lib.exceptions import AudioPlaybackError, AudioDeviceError
 from lib.constants import AudioParams
-
 
 class TestAudioStreamManagerInit:
     """Tests for AudioStreamManager initialization."""
@@ -31,7 +25,6 @@ class TestAudioStreamManagerInit:
         """is_playing should return False when no stream is active."""
         manager = AudioStreamManager()
         assert manager.is_playing() is False
-
 
 class TestSampleValidation:
     """Tests for _validate_samples method."""
@@ -92,7 +85,6 @@ class TestSampleValidation:
         samples = np.array([100, 200, 300], dtype=np.int32)
         result = manager._validate_samples(samples)
         assert result.dtype == np.int16
-
 
 class TestPlayMethod:
     """Tests for play method with mocked sounddevice."""
@@ -163,7 +155,6 @@ class TestPlayMethod:
         assert np.array_equal(manager._buffer, samples)
         assert manager._buffer_position == 0
 
-
 class TestStopMethod:
     """Tests for stop method."""
 
@@ -207,7 +198,6 @@ class TestStopMethod:
         manager.stop()
         assert manager._stream is None
 
-
 class TestIsPlayingMethod:
     """Tests for is_playing method."""
 
@@ -237,7 +227,6 @@ class TestIsPlayingMethod:
 
         assert manager.is_playing() is False
 
-
 class TestOnFinishCallback:
     """Tests for on_finish callback functionality."""
 
@@ -265,7 +254,6 @@ class TestOnFinishCallback:
         finished_callback()
 
         assert callback_called[0] is True
-
 
 class TestErrorHandling:
     """Tests for error handling."""
@@ -297,7 +285,6 @@ class TestErrorHandling:
 
         with pytest.raises(AudioPlaybackError):
             manager.play(samples)
-
 
 class TestThreadSafety:
     """Tests for thread-safe operations."""
@@ -346,7 +333,6 @@ class TestThreadSafety:
 
         # All results should be boolean
         assert all(isinstance(r, bool) for r in results)
-
 
 class TestCleanup:
     """Tests for cleanup behavior."""

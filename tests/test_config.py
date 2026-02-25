@@ -2,14 +2,9 @@
 """Tests for config.py - Configuration management."""
 
 import pytest
-import sys
-from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.config import Config
-
 
 class TestConfigPaths:
     """Tests for path generation methods."""
@@ -50,7 +45,6 @@ class TestConfigPaths:
         config = Config()
         with pytest.raises(ValueError):
             config.get_edf_path('')
-
 
 class TestConfigSummary:
     """Tests for config summary."""

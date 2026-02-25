@@ -2,19 +2,14 @@
 """Tests for edf_parser.py - EDF file parsing and validation."""
 
 import pytest
-import sys
 import numpy as np
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.edf_parser import EDFParser
 from lib.exceptions import EDFFileError
-
 
 @pytest.fixture
 def temp_dir():
@@ -22,7 +17,6 @@ def temp_dir():
     tmp = tempfile.mkdtemp()
     yield Path(tmp)
     shutil.rmtree(tmp)
-
 
 @pytest.fixture
 def minimal_edf_file(temp_dir):
@@ -78,7 +72,6 @@ def minimal_edf_file(temp_dir):
 
     return edf_path
 
-
 class TestEDFParserInit:
     """Tests for EDFParser initialization."""
 
@@ -94,7 +87,6 @@ class TestEDFParserInit:
         """EDFParser should accept Path objects."""
         parser = EDFParser(temp_dir / 'test.edf')
         assert parser.edf_path == temp_dir / 'test.edf'
-
 
 class TestValidateFile:
     """Tests for file validation."""
@@ -137,7 +129,6 @@ class TestValidateFile:
         assert result['header'] is not None
         assert result['header']['n_channels'] == 2
 
-
 class TestReadEDFHeader:
     """Tests for _read_edf_header method."""
 
@@ -161,7 +152,6 @@ class TestReadEDFHeader:
 
         # 10 records * 1 second each = 10 seconds
         assert header['total_duration_sec'] == 10.0
-
 
 class TestLoadEDF:
     """Tests for load_edf method."""
@@ -194,7 +184,6 @@ class TestLoadEDF:
         parser = EDFParser(str(minimal_edf_file))
         with pytest.raises(EDFFileError, match='Failed to load EDF with MNE'):
             parser.load_edf()
-
 
 class TestGetInfoSummary:
     """Tests for get_info_summary method."""
@@ -251,7 +240,6 @@ class TestGetInfoSummary:
         assert '1h' in summary['duration_formatted']
         assert '2m' in summary['duration_formatted']
 
-
 class TestFormatDuration:
     """Tests for _format_duration method."""
 
@@ -273,7 +261,6 @@ class TestFormatDuration:
         assert '1h' in formatted
         assert '2m' in formatted
         assert '3.0s' in formatted
-
 
 class TestExtractSubjectInfo:
     """Tests for _extract_subject_info method."""
@@ -314,7 +301,6 @@ class TestExtractSubjectInfo:
 
         # Should get patient ID from header
         assert 'Test Patient' in subject.get('id', '')
-
 
 class TestGetChannelTypeSummary:
     """Tests for _get_channel_type_summary method."""

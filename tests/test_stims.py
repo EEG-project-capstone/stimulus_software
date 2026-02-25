@@ -2,18 +2,14 @@
 """Tests for stims.py - Stimulus generation and management."""
 
 import pytest
-import sys
 import numpy as np
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.stims import Stims
 from lib.constants import FilePaths
-
 
 @pytest.fixture
 def stims_temp_dir():
@@ -27,12 +23,10 @@ def stims_temp_dir():
     yield tmp_path
     shutil.rmtree(tmp)
 
-
 @pytest.fixture
 def stims_instance():
     """Create a Stims instance."""
     return Stims()
-
 
 class TestStimsInit:
     """Tests for Stims initialization."""
@@ -53,7 +47,6 @@ class TestStimsInit:
         assert stims_instance.left_stop_audio is None
         assert stims_instance.familiar_voice_audio is None
         assert stims_instance.unfamiliar_voices_audio == []
-
 
 class TestGenerateStimsValidation:
     """Tests for stimulus generation validation."""
@@ -82,7 +75,6 @@ class TestGenerateStimsValidation:
         with pytest.raises(ValueError, match="gender not properly set"):
             stims_instance.generate_stims({"familiar_voice": 1})
 
-
 class TestOddballStimuli:
     """Tests for oddball stimulus generation."""
 
@@ -104,7 +96,6 @@ class TestOddballStimuli:
         oddball_p_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'oddball+p']
         assert len(oddball_p_stims) == 2
         assert stims_instance.oddball_prompt_audio is not None
-
 
 class TestCommandStimuli:
     """Tests for command stimulus generation."""
@@ -131,7 +122,6 @@ class TestCommandStimuli:
         lcmd_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'left_command']
         assert len(lcmd_stims) == 3
 
-
 class TestLanguageStimuli:
     """Tests for language stimulus generation."""
 
@@ -152,7 +142,6 @@ class TestLanguageStimuli:
         lang_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'language']
         audio_indices = [s['audio_index'] for s in lang_stims]
         assert audio_indices == [0, 1, 2]
-
 
 class TestStimulusCounts:
     """Tests for stimulus count combinations."""
@@ -181,7 +170,6 @@ class TestStimulusCounts:
         """generate_stims should handle empty counts dict."""
         stims_instance.generate_stims({})
         assert stims_instance.stim_dictionary == []
-
 
 class TestLoadAudioAsInt16:
     """Tests for _load_audio_as_int16 method."""
@@ -276,7 +264,6 @@ class TestLoadAudioAsInt16:
 
         assert result.shape == (3, 1)
 
-
 class TestRandomLangStim:
     """Tests for _random_lang_stim method."""
 
@@ -296,7 +283,6 @@ class TestRandomLangStim:
         with patch.object(FilePaths, 'SENTENCES_DIR', sentences_dir):
             with pytest.raises(ValueError, match="Requested 12 sentences, but only 5 available"):
                 stims_instance._random_lang_stim()
-
 
 class TestBlockRandomization:
     """Tests for block randomization in generate_stims."""
@@ -326,7 +312,6 @@ class TestBlockRandomization:
         if lang_indices:
             for i in range(len(lang_indices) - 1):
                 assert lang_indices[i + 1] - lang_indices[i] == 1
-
 
 class TestVoiceStimuli:
     """Tests for familiar/unfamiliar voice stimulus generation."""

@@ -2,7 +2,6 @@
 """Tests for results_manager.py - Results file management."""
 
 import pytest
-import sys
 import tempfile
 import time
 import threading
@@ -10,12 +9,8 @@ import pandas as pd
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.results_manager import ResultsManager
 from lib.exceptions import ResultsFileError
-
 
 class MockConfig:
     """Mock configuration for testing."""
@@ -28,7 +23,6 @@ class MockConfig:
         filename = f"{patient_id}_{self.current_date}_stimulus_results.csv"
         return self.result_dir / filename
 
-
 @pytest.fixture
 def temp_results_dir(temp_dir):
     """Create a temporary results directory."""
@@ -36,18 +30,15 @@ def temp_results_dir(temp_dir):
     results.mkdir()
     return results
 
-
 @pytest.fixture
 def mock_config(temp_results_dir):
     """Create a mock config object."""
     return MockConfig(temp_results_dir)
 
-
 @pytest.fixture
 def results_manager(mock_config):
     """Create a ResultsManager instance."""
     return ResultsManager(mock_config)
-
 
 class TestResultsManagerInit:
     """Tests for ResultsManager initialization."""
@@ -57,7 +48,6 @@ class TestResultsManagerInit:
         rm = ResultsManager(mock_config)
         assert rm is not None
         assert rm.config == mock_config
-
 
 class TestAppendResult:
     """Tests for append_result method."""
@@ -149,7 +139,6 @@ class TestAppendResult:
 
         assert 'Patient showed response' in df.iloc[0]['notes']
 
-
 class TestAppendNote:
     """Tests for append_note method."""
 
@@ -161,7 +150,6 @@ class TestAppendNote:
         assert len(df) == 1
         assert df.iloc[0]['stim_type'] == 'session_note'
         assert 'Test note content' in df.iloc[0]['notes']
-
 
 class TestAppendSyncPulse:
     """Tests for append_sync_pulse method."""
@@ -175,7 +163,6 @@ class TestAppendSyncPulse:
         assert len(df) == 1
         assert df.iloc[0]['stim_type'] == 'manual_sync_pulse'
         assert df.iloc[0]['start_time'] == sync_time
-
 
 class TestReadResults:
     """Tests for read_results method."""
@@ -197,7 +184,6 @@ class TestReadResults:
         result = results_manager.read_results(non_existent)
 
         assert result is None
-
 
 class TestGetStimulusSequence:
     """Tests for get_stimulus_sequence method."""
@@ -229,7 +215,6 @@ class TestGetStimulusSequence:
         assert len(sequence) == 1
         assert sequence[0]['type'] == 'language'
 
-
 class TestGetSessionLog:
     """Tests for get_session_log method."""
 
@@ -243,7 +228,6 @@ class TestGetSessionLog:
         assert len(logs) >= 2
         assert any('First note' in log for log in logs)
         assert any('Second note' in log for log in logs)
-
 
 class TestThreadSafety:
     """Tests for thread-safe operations."""

@@ -161,60 +161,6 @@ class AuditoryStimulator:
             logger.error(f"Error starting stimulus playback: {e}", exc_info=True)
             self.gui_callback.playback_error(f"Failed to start {stim_type}: {e}")
     
-    def _generate_tone(self, frequency: int, duration_ms: int,
-                      sample_rate: int = 44100) -> np.ndarray:
-        """Generate a pure tone with leading/trailing padding and envelope.
-
-        The tone structure is: leading_padding + fade_in + full_amplitude + fade_out + trailing_padding
-        This ensures reliable playback on all platforms (including ChromeOS).
-
-        Args:
-            frequency: Frequency in Hz
-            duration_ms: Duration of full-amplitude portion in milliseconds
-            sample_rate: Sample rate in Hz
-
-        Returns:
-            Tone samples as int16 array
-        """
-        if frequency <= 0 or duration_ms <= 0:
-            raise ValueError(f"Invalid tone parameters: freq={frequency}, duration={duration_ms}")
-
-        # Generate silence padding to absorb stream initialization latency
-        padding_samples = int(sample_rate * OddballStimParams.TONE_PADDING_MS / 1000.0)
-        padding = np.zeros(padding_samples, dtype=np.float64)
-
-        # Generate envelope and full-amplitude tone separately
-        # Total tone = fade_in + full_amplitude + fade_out
-        envelope_sec = OddballStimParams.TONE_ENVELOPE_MS / 1000.0
-        envelope_samples = int(sample_rate * envelope_sec)
-        duration_sec = duration_ms / 1000.0
-        full_amp_samples = int(sample_rate * duration_sec)
-
-        # Total tone duration including envelopes
-        total_samples = envelope_samples + full_amp_samples + envelope_samples
-        total_sec = total_samples / sample_rate
-
-        t = np.linspace(0, total_sec, total_samples, False)
-        tone = OddballStimParams.TONE_AMPLITUDE * np.sin(2 * np.pi * frequency * t)
-
-        # Apply fade in/out envelope
-        if envelope_samples > 0:
-            fade_in = np.linspace(0, 1, envelope_samples)
-            fade_out = np.linspace(1, 0, envelope_samples)
-            tone[:envelope_samples] *= fade_in
-            tone[-envelope_samples:] *= fade_out
-
-        # Trailing silence ensures tone plays out before stream closes
-        trailing_padding = np.zeros(padding_samples, dtype=np.float64)
-
-        # Concatenate: leading padding + tone + trailing padding
-        combined = np.concatenate([padding, tone, trailing_padding])
-
-        logger.debug(f"Generated tone: freq={frequency}Hz, duration={duration_ms}ms, "
-                    f"padding={OddballStimParams.TONE_PADDING_MS}ms, total_samples={len(combined)}")
-
-        return (np.clip(combined, -1.0, 1.0) * 32767).astype(np.int16)
-
     def _generate_oddball_sequence(self, sample_rate: int = 44100) -> tuple:
         """Generate the complete oddball tone sequence as a single buffer.
 

@@ -2,17 +2,11 @@
 """Tests for logging_utils.py - Logging context managers."""
 
 import pytest
-import sys
 import logging
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from lib.logging_utils import log_operation, log_phase
-
 
 class TestLogOperation:
     """Tests for log_operation context manager."""
@@ -91,7 +85,6 @@ class TestLogOperation:
         assert any("Completed: inner" in m for m in messages)
         assert any("Completed: outer" in m for m in messages)
 
-
 class TestLogPhase:
     """Tests for log_phase context manager."""
 
@@ -159,7 +152,6 @@ class TestLogPhase:
         assert any("Phase completed: inner_phase" in m for m in messages)
         assert any("Phase completed: outer_phase" in m for m in messages)
 
-
 class TestLogOperationEdgeCases:
     """Edge case tests for log_operation."""
 
@@ -189,7 +181,6 @@ class TestLogOperationEdgeCases:
         assert len(completed) == 1
         # Should show 0.00s or similar
         assert "0." in completed[0].message
-
 
 class TestLogPhaseEdgeCases:
     """Edge case tests for log_phase."""

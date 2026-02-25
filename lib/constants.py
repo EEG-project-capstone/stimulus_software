@@ -34,8 +34,6 @@ class OddballStimParams:
     TONE_ENVELOPE_MS = 5           # Fade in/out duration to eliminate clicks
     # Padding to absorb stream initialization latency on slower audio backends (e.g., ChromeOS)
     TONE_PADDING_MS = 200          # Must be >= AudioParams.STREAM_LATENCY
-    # Interval after tone playback to achieve 1000ms onset-to-onset
-    INTER_TONE_INTERVAL_MS = 1000 - (2 * TONE_PADDING_MS) - TONE_DURATION_MS - (2 * TONE_ENVELOPE_MS)
 
 
 class LanguageStimParams:

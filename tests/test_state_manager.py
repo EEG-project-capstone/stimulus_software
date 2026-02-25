@@ -2,16 +2,10 @@
 """Tests for state_manager.py - State machine functionality."""
 
 import pytest
-import sys
-from pathlib import Path
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.constants import PlaybackState, VALID_STATE_TRANSITIONS
 from lib.state_manager import StateManager
 from lib.exceptions import StateError
-
 
 class TestStateManagerInit:
     """Tests for StateManager initialization."""
@@ -30,7 +24,6 @@ class TestStateManagerInit:
         """StateManager repr should show current state."""
         sm = StateManager()
         assert "EMPTY" in repr(sm)
-
 
 class TestStateTransitions:
     """Tests for state transitions."""
@@ -116,7 +109,6 @@ class TestStateTransitions:
         assert result is True
         assert sm.state == PlaybackState.PLAYING
 
-
 class TestStateValidation:
     """Tests for state validation methods."""
 
@@ -146,7 +138,6 @@ class TestStateValidation:
         expected = {PlaybackState.PREPARING, PlaybackState.PLAYING,
                    PlaybackState.EMPTY, PlaybackState.SENDING_SYNC}
         assert valid == expected
-
 
 class TestStateHelpers:
     """Tests for helper methods."""
@@ -190,7 +181,6 @@ class TestStateHelpers:
         sm = StateManager(initial_state=PlaybackState.PLAYING)
         sm.reset()
         assert sm.state == PlaybackState.EMPTY
-
 
 class TestStateListeners:
     """Tests for state change listeners."""
@@ -257,7 +247,6 @@ class TestStateListeners:
         # Should not raise despite bad_listener throwing
         result = sm.transition_to(PlaybackState.READY)
         assert result is True
-
 
 class TestValidStateTransitionsConsistency:
     """Tests to verify VALID_STATE_TRANSITIONS constant is consistent."""

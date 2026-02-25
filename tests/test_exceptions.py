@@ -2,11 +2,6 @@
 """Tests for exceptions.py - Custom exception classes."""
 
 import pytest
-import sys
-from pathlib import Path
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.exceptions import (
     StimulusError,
@@ -24,7 +19,6 @@ from lib.exceptions import (
     EDFFileError,
     StateError
 )
-
 
 class TestExceptionHierarchy:
     """Tests for exception class hierarchy."""
@@ -85,7 +79,6 @@ class TestExceptionHierarchy:
         """StateError should be a base Exception."""
         assert issubclass(StateError, Exception)
 
-
 class TestExceptionRaising:
     """Tests for raising and catching custom exceptions."""
 
@@ -113,7 +106,6 @@ class TestExceptionRaising:
         """StateError should be raisable with message."""
         with pytest.raises(StateError, match="invalid state transition"):
             raise StateError("invalid state transition")
-
 
 class TestExceptionCatching:
     """Tests for catching exceptions in hierarchy."""
@@ -153,7 +145,6 @@ class TestExceptionCatching:
         except FileManagementError:
             caught = True
         assert caught is True
-
 
 class TestExceptionMessages:
     """Tests for exception message handling."""

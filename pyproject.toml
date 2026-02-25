@@ -14,3 +14,7 @@ dependencies = [
 dev = ["pytest"]
 scripts = ["gtts"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
