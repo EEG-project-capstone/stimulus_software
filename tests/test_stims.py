@@ -67,20 +67,20 @@ class TestGenerateStimsValidation:
     def test_generate_stims_requires_familiar_file(self, stims_instance):
         """generate_stims should raise if familiar voice stimuli requested without file."""
         with pytest.raises(ValueError, match="no audio file specified"):
-            stims_instance.generate_stims({"loved": 1})
+            stims_instance.generate_stims({"familiar_voice": 1})
 
     def test_generate_stims_requires_familiar_gender(self, stims_instance):
         """generate_stims should raise if familiar voice stimuli requested without valid gender."""
         stims_instance.familiar_file = "test.wav"
         with pytest.raises(ValueError, match="gender not properly set"):
-            stims_instance.generate_stims({"loved": 1})
+            stims_instance.generate_stims({"familiar_voice": 1})
 
     def test_generate_stims_requires_valid_gender(self, stims_instance):
         """generate_stims should raise if gender is invalid."""
         stims_instance.familiar_file = "test.wav"
         stims_instance.familiar_gender = "Invalid"
         with pytest.raises(ValueError, match="gender not properly set"):
-            stims_instance.generate_stims({"loved": 1})
+            stims_instance.generate_stims({"familiar_voice": 1})
 
 
 class TestOddballStimuli:
@@ -355,7 +355,7 @@ class TestVoiceStimuli:
 
         with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
              patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
-            stims_instance.generate_stims({"loved": 4})
+            stims_instance.generate_stims({"familiar_voice": 4})
 
         familiar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'familiar']
         unfamiliar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'unfamiliar']
@@ -378,7 +378,7 @@ class TestVoiceStimuli:
 
         with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
              patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
-            stims_instance.generate_stims({"loved": 2})
+            stims_instance.generate_stims({"familiar_voice": 2})
 
         unfamiliar_stims = [s for s in stims_instance.stim_dictionary if s['type'] == 'unfamiliar']
         for s in unfamiliar_stims:
@@ -393,7 +393,7 @@ class TestVoiceStimuli:
 
         with patch.object(FilePaths, 'FAMILIAR_DIR', stims_temp_dir / 'familiar'):
             with pytest.raises(FileNotFoundError, match="Familiar voice audio file not found"):
-                stims_instance.generate_stims({"loved": 1})
+                stims_instance.generate_stims({"familiar_voice": 1})
 
     @patch.object(Stims, '_load_audio_as_int16')
     def test_female_unfamiliar_voices_loaded(self, mock_load_audio, stims_instance, stims_temp_dir):
@@ -410,7 +410,7 @@ class TestVoiceStimuli:
 
         with patch.object(FilePaths, 'FAMILIAR_DIR', familiar_dir), \
              patch.object(FilePaths, 'CONTROL_STATEMENTS_DIR', cs_dir):
-            stims_instance.generate_stims({"loved": 2})
+            stims_instance.generate_stims({"familiar_voice": 2})
 
         # 1 familiar load + 4 unfamiliar speaker loads = 5 total
         assert mock_load_audio.call_count == 5

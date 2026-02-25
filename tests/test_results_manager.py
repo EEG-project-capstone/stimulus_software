@@ -4,7 +4,6 @@
 import pytest
 import sys
 import tempfile
-import yaml
 import time
 import threading
 import pandas as pd

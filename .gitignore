@@ -8,9 +8,24 @@ __pycache__/
 *.pyd
 lib/__pycache__
 
+# Virtual environment
+.venv/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
 # Logs
 logs/
 *.log
 
 # Patient data
 patient_data/
+
+# IDE and tools
+.vscode/
+.claude/
+
+# Testing
+.pytest_cache/

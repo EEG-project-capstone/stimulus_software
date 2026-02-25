@@ -6,7 +6,7 @@ import logging
 from pydub import AudioSegment
 from pathlib import Path
 
-from lib.constants import FilePaths, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
+from lib.constants import FilePaths, LanguageStimParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
 
 logger = logging.getLogger('eeg_stimulus.stims')
 
@@ -46,8 +46,8 @@ class Stims:
         self.lang_stims_ids = []
         self.unfamiliar_voices_audio = []
 
-        # Validate loved one stimuli requirements
-        if num_of_each_stims.get("loved", 0) > 0:
+        # Validate familiar voice stimuli requirements
+        if num_of_each_stims.get("familiar_voice", 0) > 0:
             if not self.familiar_file:
                 error_msg = "Familiar voice stimuli requested but no audio file specified"
                 logger.error(error_msg)
@@ -128,10 +128,10 @@ class Stims:
             blocks.append(odd_p_block)
             logger.debug(f"Added {len(odd_p_block)} oddball+prompt stimuli")
 
-        # Loved one stimuli — 50% familiar, 50% unfamiliar (gender-matched)
-        if num_of_each_stims.get("loved", 0) > 0:
-            n = num_of_each_stims["loved"]
-            logger.info(f"Loading loved one voice audio for {n} trials (50% familiar / 50% unfamiliar)")
+        # Familiar voice stimuli — 50% familiar, 50% unfamiliar (gender-matched)
+        if num_of_each_stims.get("familiar_voice", 0) > 0:
+            n = num_of_each_stims["familiar_voice"]
+            logger.info(f"Loading familiar voice audio for {n} trials (50% familiar / 50% unfamiliar)")
 
             # Load familiar voice
             lof = self.familiar_file
@@ -140,7 +140,7 @@ class Stims:
                 error_msg = f"Familiar voice audio file not found: {temp_path}"
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
-            logger.debug(f"Loading loved one audio from: {temp_path}")
+            logger.debug(f"Loading familiar voice audio from: {temp_path}")
             self.familiar_voice_audio = self._load_audio_as_int16(temp_path)
 
             # Load all gender-matched unfamiliar control statements
@@ -168,15 +168,15 @@ class Stims:
             n_familiar = n // 2
             n_unfamiliar = n - n_familiar
 
-            loved_block = []
+            voice_block = []
             for _ in range(n_familiar):
-                loved_block.append({"type": "familiar", "status": "pending"})
+                voice_block.append({"type": "familiar", "status": "pending"})
             for _ in range(n_unfamiliar):
                 voice_index = random.randrange(len(self.unfamiliar_voices_audio))
-                loved_block.append({"type": "unfamiliar", "voice_index": voice_index, "status": "pending"})
-            random.shuffle(loved_block)
-            blocks.append(loved_block)
-            logger.debug(f"Added {len(loved_block)} voice stimuli ({n_familiar} familiar, {n_unfamiliar} unfamiliar)")
+                voice_block.append({"type": "unfamiliar", "voice_index": voice_index, "status": "pending"})
+            random.shuffle(voice_block)
+            blocks.append(voice_block)
+            logger.debug(f"Added {len(voice_block)} voice stimuli ({n_familiar} familiar, {n_unfamiliar} unfamiliar)")
 
         # Randomize the order of blocks
         logger.info(f"Randomizing {len(blocks)} stimulus blocks")
@@ -253,7 +253,7 @@ class Stims:
             logger.error(f"Error loading audio file {path}: {e}", exc_info=True)
             raise
 
-    def _random_lang_stim(self, num_sentence=12):
+    def _random_lang_stim(self, num_sentence=LanguageStimParams.SENTENCES_PER_STIMULUS):
         """Create a random language stimulus from available sentence files"""
         sentence_path = FilePaths.SENTENCES_DIR
         logger.debug(f"Creating language stimulus from: {sentence_path}")

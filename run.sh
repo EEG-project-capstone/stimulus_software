@@ -4,10 +4,13 @@
 
 set -e
 
-ENV_NAME="eeg"
+VENV_DIR=".venv"
 
-# Create logs directory if it doesn't exist
+if [[ ! -d "$VENV_DIR" ]]; then
+  echo "Virtual environment not found. Run ./setup.sh first."
+  exit 1
+fi
+
 mkdir -p logs
 
-# Run the application inside the conda environment, capturing output
-conda run -n "$ENV_NAME" python main.py 2>&1 | tee -a logs/terminal_output.log
+"$VENV_DIR/bin/python" main.py 2>&1 | tee -a logs/terminal_output.log

@@ -249,10 +249,10 @@ class TkApp:
         self.male_radio.config(state=state)
         self.female_radio.config(state=state)
         self.file_button.config(state=state)
-        logger.debug(f"Loved one options toggled: {state}")
+        logger.debug(f"Familiar voice options toggled: {state}")
     
     def upload_voice_file(self):
-        """Handle loved one voice file upload."""
+        """Handle familiar voice file upload."""
         logger.debug("Opening voice file dialog")
         
         audio_data_dir = Path(__file__).resolve().parent.parent / "audio_data"
@@ -266,7 +266,7 @@ class TkApp:
             self.stims.familiar_file = file_path
             self.stims.familiar_gender = self.gender_var.get()
             self.file_label.config(text=Path(file_path).name)
-            logger.info(f"Loved one voice file uploaded: {file_path} "
+            logger.info(f"Familiar voice file uploaded: {file_path} "
                        f"(Gender: {self.gender_var.get()})")
         else:
             logger.debug("Voice file upload cancelled")
@@ -347,9 +347,9 @@ class TkApp:
             return False
         
         if self.familiar_var.get() and not self.stims.familiar_file:
-            logger.warning("Loved one stimulus selected but no voice file uploaded")
-            messagebox.showwarning("Missing File", 
-                                 "Please upload a voice file for loved one stimulus.")
+            logger.warning("Familiar voice stimulus selected but no voice file uploaded")
+            messagebox.showwarning("Missing File",
+                                 "Please upload a voice file for familiar voice stimulus.")
             return False
         
         return True
@@ -364,10 +364,10 @@ class TkApp:
                 logger.info(f"Starting stimulus preparation with configuration: "
                           f"{num_of_each_stim}")
                 
-                # Set gender for loved one if applicable
+                # Set gender for familiar voice if applicable
                 if self.familiar_var.get():
                     self.stims.familiar_gender = self.gender_var.get()
-                    logger.debug(f"Loved one gender set to: {self.gender_var.get()}")
+                    logger.debug(f"Familiar voice gender set to: {self.gender_var.get()}")
                 
                 # Generate stimuli
                 self.stims.generate_stims(num_of_each_stim)
@@ -421,8 +421,8 @@ class TkApp:
             "odd+p": (DEFAULT_STIMULUS_COUNTS['oddball_with_prompt'] 
                      if self.oddball_var.get() and self.oddball_prompt_var.get() 
                      else 0),
-            "loved": (DEFAULT_STIMULUS_COUNTS['familiar_voice']
-                     if self.familiar_var.get() else 0)
+            "familiar_voice": (DEFAULT_STIMULUS_COUNTS['familiar_voice']
+                              if self.familiar_var.get() else 0)
         }
     
     def play_stimulus(self):
@@ -946,7 +946,7 @@ class TkApp:
         # Oddball
         self._build_oddball_row(stim_frame, row=3)
         
-        # Loved One
+        # Familiar Voice
         self._build_familiar_row(stim_frame, row=4)
     
     def _build_command_row(self, parent, row: int, side: str,

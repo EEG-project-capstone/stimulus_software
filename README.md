@@ -78,8 +78,14 @@ Compatible with **Windows**, **macOS**, and **Linux** (including ChromeOS with L
 
 ### Prerequisites
 
-- [Anaconda](https://docs.anaconda.com/anaconda/install/) or [Miniconda](https://docs.anaconda.com/miniconda/)
-- Python 3.12+
+No pre-installed Python manager required. `setup.sh` bootstraps everything automatically.
+
+| Platform | Requirements |
+| --- | --- |
+| **macOS** | None — Homebrew is installed automatically if absent |
+| **Linux (Ubuntu/Debian)** | `sudo` access for `apt-get` |
+| **ChromeOS** | Enable Linux (Crostini) first, then identical to Linux |
+| **Windows** | Use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) with Ubuntu, then follow the Linux path |
 
 ### Setup
 
@@ -87,7 +93,15 @@ Compatible with **Windows**, **macOS**, and **Linux** (including ChromeOS with L
 ./setup.sh
 ```
 
-This creates a conda environment (`eeg`), installs Tkinter, and installs all Python dependencies. Safe to re-run.
+This installs system dependencies (Python 3.12, PortAudio, ffmpeg, Tkinter), creates a `.venv` virtual environment, and installs all Python packages. Safe to re-run — updates an existing environment in place.
+
+### Selecting the interpreter in VSCode
+
+After running `setup.sh`, point VSCode to the new environment:
+
+1. Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+2. Run **Python: Select Interpreter**
+3. Choose `.venv/bin/python` (listed as *Recommended*)
 
 ### Dependencies
 
@@ -140,12 +154,11 @@ stimulus_software/
 ├── main.py                        # Application entry point
 ├── setup.sh                       # One-time environment setup
 ├── run.sh                         # Launch the application
-├── config.yml                     # File paths and settings
-├── requirements.txt               # Python dependencies
+├── pyproject.toml                 # Python dependencies
 │
 ├── lib/                           # Core application code
 │   ├── app.py                     # Main Tkinter GUI (tabbed interface)
-│   ├── config.py                  # YAML config loading and validation
+│   ├── config.py                  # Runtime config (output paths, session state)
 │   ├── constants.py               # Enums, timing parameters, clinical scales
 │   ├── exceptions.py              # Custom exception hierarchy
 │   ├── state_manager.py           # Playback state machine
@@ -217,28 +230,14 @@ patient_data/
 The project includes a pytest-based test suite covering state management, configuration, audio playback, stimulus generation, EDF parsing, and UI controls.
 
 ```bash
-conda activate eeg
-pytest tests/
+.venv/bin/python -m pytest tests/
 ```
 
 ---
 
 ## Configuration
 
-All file paths are defined in [config.yml](config.yml):
-
-```yaml
-# Output paths
-edf_dir: 'patient_data/edfs/'
-result_dir: 'patient_data/results/'
-
-# Audio input paths
-sentences_path: 'audio_data/sentences/'
-right_keep_path: 'audio_data/static/right_keep.mp3'
-# ... (see config.yml for full listing)
-```
-
-Key timing parameters are defined in `lib/constants.py` and include inter-stimulus intervals, tone durations, command cycle timing, and oddball probabilities.
+All file paths and timing parameters are defined in `lib/constants.py`. This includes output directories, audio file locations, inter-stimulus intervals, tone durations, command cycle timing, and oddball probabilities.
 
 ---
 
