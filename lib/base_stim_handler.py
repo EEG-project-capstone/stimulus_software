@@ -108,32 +108,6 @@ class BaseStimHandler(ABC):
             self.is_active = False  # Prevent double-finish from watchdog + real callback
             self.audio_stim.finish_current_stim()
 
-    def _schedule_watchdog(self, expected_duration_ms: int):
-        """Schedule a watchdog that forces completion if finished_callback never fires.
-
-        Args:
-            expected_duration_ms: Expected audio duration in ms (watchdog fires at +10 s)
-        """
-        expected_index = self.audio_stim.stims.current_stim_index
-        watchdog_ms = expected_duration_ms + 10000  # 10 s grace period
-        self.safe_schedule(watchdog_ms, lambda: self._watchdog_completion(expected_index))
-
-    def _watchdog_completion(self, expected_stim_index: int):
-        """Force completion if the stream never reported natural completion.
-
-        Guards against double-completion: safe_finish() sets is_active=False so
-        if the real callback already fired, this is a no-op. The stim-index
-        check ensures a stale watchdog from trial N can't cut trial N+1 short.
-        """
-        if (self.is_active and
-                self.audio_stim.stims.current_stim_index == expected_stim_index):
-            logger.warning(
-                f"{self.__class__.__name__} watchdog triggered for stim index "
-                f"{expected_stim_index} — finished_callback never fired. "
-                f"Forcing completion."
-            )
-            self.safe_finish()
-    
     def _handle_error(self, error: Exception):
         """Handle errors during stimulus execution.
         
@@ -162,18 +136,29 @@ class BaseStimHandler(ABC):
                        on_finish: Optional[Callable[[], None]] = None,
                        log_label: Optional[str] = None,
                        onset_offset_ms: float = 0):
-        """Play audio with safe finish callback.
+        """Play audio and guarantee on_finish fires exactly once.
+
+        on_finish is called either by the real sounddevice finished_callback or,
+        if that callback never arrives (audio-device sleep, ChromeOS driver bug,
+        etc.), by a watchdog scheduled at audio_duration + 10 s.  The fired[]
+        guard prevents double-execution regardless of which path triggers first.
 
         Args:
-            samples: Audio samples
+            samples: Audio samples (int16 numpy array)
             sample_rate: Sample rate in Hz
-            on_finish: Callback after playback
+            on_finish: Callback to invoke when playback finishes
             log_label: Label for logging
-            onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
+            onset_offset_ms: Onset-time offset in ms for padding
         """
-        def wrapped_finish():
+        fired = [False]  # mutable cell shared by real callback and watchdog
+
+        def safe_on_finish():
+            if fired[0]:
+                return
+            fired[0] = True
             logger.debug(
-                f"Playback finish callback for {self.__class__.__name__} (is_active={self.is_active})"
+                f"Playback finish for {self.__class__.__name__} "
+                f"(is_active={self.is_active})"
             )
             if on_finish:
                 try:
@@ -188,10 +173,16 @@ class BaseStimHandler(ABC):
         self.audio_stim.play_audio(
             samples=samples,
             sample_rate=sample_rate,
-            callback=wrapped_finish,
+            callback=safe_on_finish,
             log_label=log_label,
             onset_offset_ms=onset_offset_ms
         )
+
+        # Watchdog fires safe_on_finish if finished_callback never arrives.
+        # safe_schedule's is_active guard prevents the watchdog from running
+        # after a pause/stop resets the handler.
+        expected_duration_ms = int(len(samples) / sample_rate * 1000)
+        self.safe_schedule(expected_duration_ms + 10000, safe_on_finish)
     
     def reshape_audio_samples(self, audio_segment) -> 'np.ndarray':
         """Reshape audio samples from AudioSegment for playback.

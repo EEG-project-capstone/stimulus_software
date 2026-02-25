@@ -41,17 +41,13 @@ class LanguageStimHandler(BaseStimHandler):
                 'duration_sec': len(samples) / audio_segment.frame_rate
             })
             
-            # Play audio with safe finish
+            # play_audio_safe includes a built-in watchdog
             self.play_audio_safe(
                 samples=samples,
                 sample_rate=audio_segment.frame_rate,
                 on_finish=self.safe_finish,
                 log_label="language_audio"
             )
-
-            # Watchdog: recover if finished_callback never fires
-            expected_duration_ms = int(len(samples) / audio_segment.frame_rate * 1000)
-            self._schedule_watchdog(expected_duration_ms)
         else:
             logger.error(f"Invalid language audio index: {n}")
             self.audio_stim.finish_current_stim()
@@ -383,13 +379,7 @@ class VoiceStimHandler(BaseStimHandler):
             log_label=None
         )
 
-        # Watchdog: recover if finished_callback never fires (e.g. audio device
-        # sleep, driver bug). Voice files can be many minutes long so this is
-        # much more likely here than for any other stimulus type.
-        expected_duration_ms = int(
-            audio_data.shape[0] / self.audio_stim.stims.sample_rate * 1000
-        )
-        self._schedule_watchdog(expected_duration_ms)
+        # play_audio_safe includes a built-in watchdog
 
     def continue_stim(self):
         """Voice stimuli don't have continuation logic."""
