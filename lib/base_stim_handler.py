@@ -146,8 +146,18 @@ class BaseStimHandler(ABC):
             onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
         """
         def wrapped_finish():
-            if on_finish and self.is_active:
-                on_finish()
+            logger.debug(
+                f"Playback finish callback for {self.__class__.__name__} (is_active={self.is_active})"
+            )
+            if on_finish:
+                try:
+                    on_finish()
+                except Exception as e:
+                    logger.error(
+                        f"Error in on_finish for {self.__class__.__name__}: {e}",
+                        exc_info=True
+                    )
+                    self._handle_error(e)
 
         self.audio_stim.play_audio(
             samples=samples,

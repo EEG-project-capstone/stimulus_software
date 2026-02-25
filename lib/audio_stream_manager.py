@@ -67,22 +67,30 @@ class AudioStreamManager:
         
         # Create callback
         def stream_callback(outdata, frames, time_info, status):
-            if status:
-                logger.warning(f"Audio stream status: {status}")
+            try:
+                if status:
+                    logger.warning(f"Audio stream status: {status}")
 
-            with self._lock:
-                if self._buffer is None or self._buffer_position >= len(self._buffer):
-                    outdata.fill(0)
-                    raise sd.CallbackStop
+                with self._lock:
+                    if self._buffer is None or self._buffer_position >= len(self._buffer):
+                        outdata.fill(0)
+                        raise sd.CallbackStop
 
-                available = len(self._buffer) - self._buffer_position
-                chunk_size = min(frames, available)
-                chunk = self._buffer[self._buffer_position:self._buffer_position + chunk_size]
-                self._buffer_position += chunk_size
+                    available = len(self._buffer) - self._buffer_position
+                    chunk_size = min(frames, available)
+                    chunk = self._buffer[self._buffer_position:self._buffer_position + chunk_size]
+                    self._buffer_position += chunk_size
 
-            outdata[:chunk_size] = chunk
-            if chunk_size < frames:
-                outdata[chunk_size:] = 0
+                outdata[:chunk_size] = chunk
+                if chunk_size < frames:
+                    outdata[chunk_size:] = 0
+                    logger.debug(
+                        f"End of buffer chunk: chunk_size={chunk_size}, frames={frames}, "
+                        f"new_position={self._buffer_position}, buffer_len={0 if self._buffer is None else len(self._buffer)}"
+                    )
+            except Exception as e:
+                logger.error(f"Exception in stream_callback: {e}", exc_info=True)
+                raise
         
         # Create finished callback
         def finished_callback():
@@ -91,6 +99,11 @@ class AudioStreamManager:
 
             # Check if we're in an intentional stop - skip callback if so
             with self._lock:
+                buffer_len = 0 if self._buffer is None else len(self._buffer)
+                logger.debug(
+                    f"finished_callback state: _stopping={self._stopping}, buffer_position={self._buffer_position}, buffer_len={buffer_len}, stream_is_none={self._stream is None}"
+                )
+
                 if self._stopping:
                     logger.debug("Skipping on_finish callback during intentional stop")
                     self._buffer = None
