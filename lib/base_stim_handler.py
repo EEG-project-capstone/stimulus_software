@@ -107,6 +107,32 @@ class BaseStimHandler(ABC):
         if self.is_active:
             self.is_active = False  # Prevent double-finish from watchdog + real callback
             self.audio_stim.finish_current_stim()
+
+    def _schedule_watchdog(self, expected_duration_ms: int):
+        """Schedule a watchdog that forces completion if finished_callback never fires.
+
+        Args:
+            expected_duration_ms: Expected audio duration in ms (watchdog fires at +10 s)
+        """
+        expected_index = self.audio_stim.stims.current_stim_index
+        watchdog_ms = expected_duration_ms + 10000  # 10 s grace period
+        self.safe_schedule(watchdog_ms, lambda: self._watchdog_completion(expected_index))
+
+    def _watchdog_completion(self, expected_stim_index: int):
+        """Force completion if the stream never reported natural completion.
+
+        Guards against double-completion: safe_finish() sets is_active=False so
+        if the real callback already fired, this is a no-op. The stim-index
+        check ensures a stale watchdog from trial N can't cut trial N+1 short.
+        """
+        if (self.is_active and
+                self.audio_stim.stims.current_stim_index == expected_stim_index):
+            logger.warning(
+                f"{self.__class__.__name__} watchdog triggered for stim index "
+                f"{expected_stim_index} — finished_callback never fired. "
+                f"Forcing completion."
+            )
+            self.safe_finish()
     
     def _handle_error(self, error: Exception):
         """Handle errors during stimulus execution.

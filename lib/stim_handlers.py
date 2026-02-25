@@ -48,6 +48,10 @@ class LanguageStimHandler(BaseStimHandler):
                 on_finish=self.safe_finish,
                 log_label="language_audio"
             )
+
+            # Watchdog: recover if finished_callback never fires
+            expected_duration_ms = int(len(samples) / audio_segment.frame_rate * 1000)
+            self._schedule_watchdog(expected_duration_ms)
         else:
             logger.error(f"Invalid language audio index: {n}")
             self.audio_stim.finish_current_stim()
@@ -385,25 +389,7 @@ class VoiceStimHandler(BaseStimHandler):
         expected_duration_ms = int(
             audio_data.shape[0] / self.audio_stim.stims.sample_rate * 1000
         )
-        watchdog_ms = expected_duration_ms + 10000  # 10 s grace period
-        expected_index = self.audio_stim.stims.current_stim_index
-        self.safe_schedule(watchdog_ms, lambda: self._watchdog_completion(expected_index))
-
-    def _watchdog_completion(self, expected_stim_index: int):
-        """Fire if the stream never reported natural completion.
-
-        Guards against double-completion: safe_finish() sets is_active=False so
-        if the real callback fires first, this becomes a no-op.  The stim-index
-        check ensures a stale watchdog from trial N can't cut trial N+1 short.
-        """
-        if (self.is_active and
-                self.audio_stim.stims.current_stim_index == expected_stim_index):
-            logger.warning(
-                f"Voice stimulus watchdog triggered for stim index "
-                f"{expected_stim_index} — stream likely never called "
-                f"finished_callback. Forcing completion."
-            )
-            self.safe_finish()
+        self._schedule_watchdog(expected_duration_ms)
 
     def continue_stim(self):
         """Voice stimuli don't have continuation logic."""
