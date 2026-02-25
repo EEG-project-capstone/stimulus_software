@@ -144,10 +144,11 @@ class CommandStimHandler(BaseStimHandler):
         })
         
         audio = (self.audio_stim.stims.right_keep_audio 
-                if self.state['side'] == 'right'
-                else self.audio_stim.stims.left_keep_audio)
-        
-        samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+            if self.state['side'] == 'right'
+            else self.audio_stim.stims.left_keep_audio)
+
+        # Use the shared reshaping helper to correctly handle mono/stereo
+        samples = self.reshape_audio_samples(audio)
         
         # Use method reference instead of lambda
         self.play_audio_safe(
@@ -176,10 +177,11 @@ class CommandStimHandler(BaseStimHandler):
         })
         
         audio = (self.audio_stim.stims.right_stop_audio 
-                if self.state['side'] == 'right'
-                else self.audio_stim.stims.left_stop_audio)
-        
-        samples = np.array(audio.get_array_of_samples(), dtype=np.int16).reshape(-1, 1)
+            if self.state['side'] == 'right'
+            else self.audio_stim.stims.left_stop_audio)
+
+        # Use the shared reshaping helper to correctly handle mono/stereo
+        samples = self.reshape_audio_samples(audio)
         
         # Use method reference instead of lambda
         self.play_audio_safe(

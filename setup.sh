@@ -14,6 +14,17 @@ info() { printf "${GREEN}[setup]${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}[setup] WARN:${NC} %s\n" "$*"; }
 die()  { printf "${RED}[setup] ERROR:${NC} %s\n" "$*" >&2; exit 1; }
 
+# ── Check if a Python version is usable (3.11+) ────────────────────────────────
+python_ok() {
+  local cmd="$1"
+  command -v "$cmd" &>/dev/null || return 1
+  local major minor
+  read -r major minor < <("$cmd" -c \
+    "import sys; print(sys.version_info.major, sys.version_info.minor)" 2>/dev/null) \
+    || return 1
+  [[ "$major" -gt 3 ]] || { [[ "$major" -eq 3 ]] && [[ "$minor" -ge 11 ]]; }
+}
+
 # ── OS detection ───────────────────────────────────────────────────────────────
 OS="$(uname -s)"
 case "$OS" in
@@ -47,40 +58,44 @@ setup_linux() {
   info "Updating apt package lists..."
   sudo apt-get update -qq
 
-  # python3.12 may not be in default repos on older Ubuntu — try deadsnakes PPA
-  if ! apt-cache show python3.12 &>/dev/null 2>&1; then
-    info "python3.12 not in default repos — adding deadsnakes PPA..."
-    sudo apt-get install -y software-properties-common
-    sudo add-apt-repository -y ppa:deadsnakes/ppa
-    sudo apt-get update -qq
+  # Check if we already have a suitable Python version
+  if python_ok python3; then
+    info "python3 already available ($(python3 --version))"
+  else
+    # python3.12 may not be in default repos on older Ubuntu — try deadsnakes PPA
+    if ! apt-cache show python3.12 &>/dev/null 2>&1; then
+      info "python3.12 not in default repos — trying deadsnakes PPA..."
+      if command -v software-properties-common &>/dev/null || sudo apt-get install -y software-properties-common 2>/dev/null; then
+        sudo add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || warn "Could not add PPA, will attempt to use system Python"
+        sudo apt-get update -qq 2>/dev/null || true
+      fi
+    fi
   fi
 
-  info "Installing system packages..."
+  info "Installing system packages (python3, venv, tk, portaudio, ffmpeg)..."
+  # Try to install python3-tk, but don't fail if it doesn't exist as python3.12-tk
   sudo apt-get install -y \
-    python3.12 \
-    python3.12-venv \
-    python3.12-tk \
+    python3-venv \
+    python3-tk \
     portaudio19-dev \
     libsndfile1 \
-    ffmpeg
+    ffmpeg 2>/dev/null || {
+    warn "Some packages failed to install, attempting alternative names..."
+    sudo apt-get install -y \
+      portaudio19-dev \
+      libsndfile1 \
+      ffmpeg 2>/dev/null || true
+  }
 }
 
 [[ "$PLATFORM" == "macos" ]] && setup_macos || setup_linux
 
-# ── Find a usable Python 3.12+ ────────────────────────────────────────────────
-python_ok() {
-  local cmd="$1"
-  command -v "$cmd" &>/dev/null || return 1
-  local major minor
-  read -r major minor < <("$cmd" -c \
-    "import sys; print(sys.version_info.major, sys.version_info.minor)" 2>/dev/null) \
-    || return 1
-  [[ "$major" -gt 3 ]] || { [[ "$major" -eq 3 ]] && [[ "$minor" -ge 12 ]]; }
-}
+# ── Find a usable Python 3.11+ ────────────────────────────────────────────────
 
 PYTHON=""
 for candidate in \
     python3.12 \
+    python3.11 \
     python3 \
     python \
     /opt/homebrew/bin/python3.12 \
@@ -93,7 +108,7 @@ for candidate in \
 done
 
 [[ -n "$PYTHON" ]] \
-  || die "Python 3.12+ not found after installation. Check your PATH or install manually."
+  || die "Python 3.11+ not found after installation. Check your PATH or install manually."
 info "Using Python: $PYTHON ($($PYTHON --version))"
 
 # ── Create / update virtual environment ───────────────────────────────────────
