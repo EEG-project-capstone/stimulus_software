@@ -105,6 +105,7 @@ class BaseStimHandler(ABC):
     def safe_finish(self):
         """Safely finish stimulus only if still active."""
         if self.is_active:
+            self.is_active = False  # Prevent double-finish from watchdog + real callback
             self.audio_stim.finish_current_stim()
     
     def _handle_error(self, error: Exception):

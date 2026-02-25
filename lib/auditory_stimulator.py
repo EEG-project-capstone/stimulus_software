@@ -355,9 +355,11 @@ class AuditoryStimulator:
         
         # Create finish handler
         def on_finish():
-            # Run callback if playing normally or sending a sync pulse
-            sm = self.gui_callback.state_manager
-            if (sm.is_playing() or sm.is_sending_sync()) and callback is not None:
+            # Always schedule the callback - finish_current_stim() and
+            # _handle_sync_pulse_complete() each handle their own state checks.
+            # Dropping the callback here based on state causes silent hangs if
+            # the state is ever unexpectedly wrong during long stimuli.
+            if callback is not None:
                 self._schedule(10, callback)
         
         # Play using stream manager
@@ -374,6 +376,10 @@ class AuditoryStimulator:
     def finish_current_stim(self):
         """Finish the current stimulus and move to next."""
         if not self.gui_callback.state_manager.is_playing():
+            logger.warning(
+                f"finish_current_stim called while state="
+                f"{self.gui_callback.state_manager.state.name}, skipping"
+            )
             return
 
         patient_id = self.gui_callback.get_patient_id()

@@ -378,7 +378,33 @@ class VoiceStimHandler(BaseStimHandler):
             on_finish=self.safe_finish,
             log_label=None
         )
-    
+
+        # Watchdog: recover if finished_callback never fires (e.g. audio device
+        # sleep, driver bug). Voice files can be many minutes long so this is
+        # much more likely here than for any other stimulus type.
+        expected_duration_ms = int(
+            audio_data.shape[0] / self.audio_stim.stims.sample_rate * 1000
+        )
+        watchdog_ms = expected_duration_ms + 10000  # 10 s grace period
+        expected_index = self.audio_stim.stims.current_stim_index
+        self.safe_schedule(watchdog_ms, lambda: self._watchdog_completion(expected_index))
+
+    def _watchdog_completion(self, expected_stim_index: int):
+        """Fire if the stream never reported natural completion.
+
+        Guards against double-completion: safe_finish() sets is_active=False so
+        if the real callback fires first, this becomes a no-op.  The stim-index
+        check ensures a stale watchdog from trial N can't cut trial N+1 short.
+        """
+        if (self.is_active and
+                self.audio_stim.stims.current_stim_index == expected_stim_index):
+            logger.warning(
+                f"Voice stimulus watchdog triggered for stim index "
+                f"{expected_stim_index} — stream likely never called "
+                f"finished_callback. Forcing completion."
+            )
+            self.safe_finish()
+
     def continue_stim(self):
         """Voice stimuli don't have continuation logic."""
         pass
