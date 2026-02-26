@@ -143,10 +143,10 @@ class BaseStimHandler(ABC):
                        onset_offset_ms: float = 0):
         """Play audio and guarantee on_finish fires exactly once.
 
-        on_finish is called either by the real sounddevice finished_callback or,
-        if that callback never arrives (audio-device sleep, ChromeOS driver bug,
-        etc.), by a watchdog scheduled at audio_duration + 10 s.  The fired[]
-        guard prevents double-execution regardless of which path triggers first.
+        on_finish is called deterministically by AudioStreamManager.stream_callback
+        when the buffer is exhausted.  A watchdog scheduled at audio_duration + 10 s
+        provides a fallback in case the stream is interrupted (device sleep, etc.).
+        The fired[] guard prevents double-execution regardless of which path fires first.
 
         Args:
             samples: Audio samples (int16 numpy array)
@@ -183,7 +183,8 @@ class BaseStimHandler(ABC):
             onset_offset_ms=onset_offset_ms
         )
 
-        # Watchdog fires safe_on_finish if finished_callback never arrives.
+        # Watchdog fires safe_on_finish if stream_callback exhaustion detection fails
+        # (guards against device sleep or other rare stream interruptions).
         # safe_schedule's is_active guard prevents the watchdog from running
         # after a pause/stop resets the handler.
         expected_duration_ms = int(len(samples) / sample_rate * 1000)
