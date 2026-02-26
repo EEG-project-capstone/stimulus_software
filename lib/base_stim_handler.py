@@ -10,6 +10,11 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable, Optional, Dict, Any
 
 import numpy as np
+from math import gcd
+
+from scipy.signal import resample_poly
+
+from lib.constants import AudioParams
 
 if TYPE_CHECKING:
     from lib.auditory_stimulator import AuditoryStimulator
@@ -187,17 +192,40 @@ class BaseStimHandler(ABC):
     def reshape_audio_samples(self, audio_segment) -> 'np.ndarray':
         """Reshape audio samples from AudioSegment for playback.
 
+        Resamples to AudioParams.SAMPLE_RATE if needed so audio plays at
+        the correct speed on the persistent fixed-rate stream.
+
         Args:
             audio_segment: pydub AudioSegment
 
         Returns:
             Reshaped numpy array (n_samples, channels)
         """
-        import numpy as np
-        samples = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
+        raw = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
+
+        if audio_segment.frame_rate != AudioParams.SAMPLE_RATE:
+            logger.warning(
+                f"Resampling audio from {audio_segment.frame_rate}Hz "
+                f"to {AudioParams.SAMPLE_RATE}Hz"
+            )
+            src = audio_segment.frame_rate
+            dst = AudioParams.SAMPLE_RATE
+            g = gcd(dst, src)
+            up, down = dst // g, src // g
+            channels = audio_segment.channels
+            if channels == 2:
+                raw2d = raw.reshape(-1, 2).astype(np.float32)
+                resampled = np.stack(
+                    [resample_poly(raw2d[:, ch], up, down) for ch in range(2)],
+                    axis=1,
+                )
+            else:
+                resampled = resample_poly(raw.astype(np.float32), up, down).reshape(-1, 1)
+            return np.clip(resampled, -32768, 32767).astype(np.int16)
+
         if audio_segment.channels == 2:
-            return samples.reshape(-1, 2)
-        return samples.reshape(-1, 1)
+            return raw.reshape(-1, 2)
+        return raw.reshape(-1, 1)
 
     def __repr__(self) -> str:
         return (f"{self.__class__.__name__}(active={self.is_active}, "

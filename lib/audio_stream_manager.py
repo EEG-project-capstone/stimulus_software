@@ -2,12 +2,15 @@
 
 """
 Audio stream management for the EEG Stimulus Package.
-Provides simplified, thread-safe audio playback.
+
+Uses a single persistent OutputStream that runs for the lifetime of the app.
+play() swaps the active buffer; stop() clears it.  Between clips the stream
+outputs silence, keeping the audio device active and preventing the low-power
+sleep that causes finished_callback to silently drop on ChromeOS / macOS.
 """
 
 import logging
 import threading
-import time
 import numpy as np
 import sounddevice as sd
 from typing import Optional, Callable
@@ -18,215 +21,212 @@ logger = logging.getLogger('eeg_stimulus.audio_stream')
 
 
 class AudioStreamManager:
-    """Manages audio stream lifecycle with proper cleanup."""
+    """Persistent-stream audio playback.
+
+    One OutputStream is opened at startup and never closed until shutdown().
+    Playback is controlled by swapping self._buffer:
+      - buffer set  → stream_callback reads from it and advances position
+      - buffer None → stream_callback outputs silence
+    Completion is detected when the buffer is exhausted inside stream_callback,
+    which fires on_finish exactly once (guarded by _finish_fired).
+    """
 
     def __init__(self):
-        """Initialize audio stream manager."""
-        self._stream: Optional[sd.OutputStream] = None
+        """Open the persistent audio stream."""
         self._lock = threading.Lock()
         self._buffer: Optional[np.ndarray] = None
-        self._buffer_position = 0
-        self._stopping = False  # Flag to skip callbacks during intentional stop
+        self._buffer_position: int = 0
+        self._on_finish: Optional[Callable[[], None]] = None
+        self._finish_fired: bool = False
+        self._stream: Optional[sd.OutputStream] = None
+        self._channels: int = 2  # Fixed stereo; mono inputs are upmixed
+        self._start_persistent_stream()
         logger.info("AudioStreamManager initialized")
-    
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def play(self,
              samples: np.ndarray,
              sample_rate: int = AudioParams.SAMPLE_RATE,
              on_finish: Optional[Callable[[], None]] = None) -> None:
-        """Play audio samples with automatic cleanup.
+        """Queue audio samples for playback.
 
         Args:
             samples: Audio samples (int16, shape: (n_samples, n_channels))
-            sample_rate: Sample rate in Hz
-            on_finish: Callback to execute when playback finishes
+            sample_rate: Sample rate in Hz (must match stream rate, 44100)
+            on_finish: Callback executed when the buffer is exhausted
 
         Raises:
-            AudioDeviceError: If audio device cannot be accessed
-            AudioPlaybackError: If playback fails
+            AudioPlaybackError: If samples are invalid or stream unavailable
         """
-        # Validate samples
         samples = self._validate_samples(samples)
 
-        # Check if stream is currently active before stopping
-        was_active = False
-        with self._lock:
-            # Reset stopping flag for new playback
-            self._stopping = False
-            if self._stream is not None and self._stream.active:
-                was_active = True
-                logger.warning("New play() called while previous stream active, stopping previous")
+        # Upmix mono to stereo to match the persistent stream channel count
+        if samples.shape[1] == 1 and self._channels == 2:
+            samples = np.column_stack([samples, samples])
 
-        # Stop any existing stream
-        logger.debug(f"play() calling stop() (was_active={was_active})")
-        self.stop()
-        
-        # Set up buffer
+        if sample_rate != AudioParams.SAMPLE_RATE:
+            logger.warning(
+                f"Sample rate {sample_rate}Hz differs from stream rate "
+                f"{AudioParams.SAMPLE_RATE}Hz; audio may play at wrong speed"
+            )
+
         with self._lock:
+            if self._stream is None:
+                raise AudioPlaybackError("Persistent stream is not available")
+            was_playing = (
+                self._buffer is not None and
+                self._buffer_position < len(self._buffer)
+            )
             self._buffer = samples.copy()
             self._buffer_position = 0
-        
-        # Create callback
-        def stream_callback(outdata, frames, time_info, status):
+            self._on_finish = on_finish
+            self._finish_fired = False
+
+        if was_playing:
+            logger.warning("play() called while previous buffer active, replacing buffer")
+
+        logger.debug(
+            f"Audio stream configured with buffer size={len(samples)} "
+            f"samples at {sample_rate}Hz"
+        )
+
+    def stop(self) -> None:
+        """Stop current playback; persistent stream continues outputting silence."""
+        with self._lock:
+            self._buffer = None
+            self._buffer_position = 0
+            self._on_finish = None
+            self._finish_fired = True   # Block any in-flight completion
+        logger.debug("Audio playback stopped")
+
+    def shutdown(self) -> None:
+        """Close the persistent stream. Call once on application exit."""
+        self.stop()
+        with self._lock:
+            stream = self._stream
+            self._stream = None
+        if stream is not None:
             try:
-                if status:
-                    logger.warning(f"Audio stream status: {status}")
+                stream.stop()
+                stream.close()
+                logger.info("Persistent audio stream closed")
+            except Exception as e:
+                logger.error(f"Error closing audio stream: {e}", exc_info=True)
 
-                with self._lock:
-                    if self._buffer is None or self._buffer_position >= len(self._buffer):
-                        outdata.fill(0)
-                        raise sd.CallbackStop
+    def is_playing(self) -> bool:
+        """Return True while the buffer has unread samples."""
+        with self._lock:
+            return (
+                self._buffer is not None and
+                self._buffer_position < len(self._buffer)
+            )
 
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _start_persistent_stream(self) -> None:
+        """Open the OutputStream and start it."""
+
+        def stream_callback(outdata, frames, time_info, status):
+            if status:
+                logger.warning(f"Audio stream status: {status}")
+
+            fire_finish = None
+
+            with self._lock:
+                if self._buffer is None or self._buffer_position >= len(self._buffer):
+                    # No audio queued — output silence
+                    outdata.fill(0)
+                    # First arrival at exhaustion (not a deliberate stop)
+                    if self._on_finish is not None and not self._finish_fired:
+                        self._finish_fired = True
+                        fire_finish = self._on_finish
+                        self._on_finish = None
+                else:
                     available = len(self._buffer) - self._buffer_position
                     chunk_size = min(frames, available)
-                    chunk = self._buffer[self._buffer_position:self._buffer_position + chunk_size]
+                    chunk = self._buffer[
+                        self._buffer_position:self._buffer_position + chunk_size
+                    ]
                     self._buffer_position += chunk_size
 
-                outdata[:chunk_size] = chunk
-                if chunk_size < frames:
-                    outdata[chunk_size:] = 0
-                    logger.debug(
-                        f"End of buffer chunk: chunk_size={chunk_size}, frames={frames}, "
-                        f"new_position={self._buffer_position}, buffer_len={0 if self._buffer is None else len(self._buffer)}"
-                    )
-            except Exception as e:
-                logger.error(f"Exception in stream_callback: {e}", exc_info=True)
-                raise
-        
-        # Create finished callback
-        def finished_callback():
-            finish_time = time.time()
-            logger.debug(f"Audio playback finished at {finish_time:.3f}")
+                    outdata[:chunk_size] = chunk
+                    if chunk_size < frames:
+                        # Buffer exhausted within this chunk
+                        outdata[chunk_size:].fill(0)
+                        if self._on_finish is not None and not self._finish_fired:
+                            self._finish_fired = True
+                            fire_finish = self._on_finish
+                            self._on_finish = None
 
-            # Check if we're in an intentional stop - skip callback if so
-            with self._lock:
-                buffer_len = 0 if self._buffer is None else len(self._buffer)
-                logger.debug(
-                    f"finished_callback state: _stopping={self._stopping}, buffer_position={self._buffer_position}, buffer_len={buffer_len}, stream_is_none={self._stream is None}"
-                )
-
-                if self._stopping:
-                    logger.debug("Skipping on_finish callback during intentional stop")
-                    self._buffer = None
-                    self._buffer_position = 0
-                    self._stream = None
-                    return
-
-                # Track if this is being called after stream was already cleared
-                was_already_none = self._stream is None
-                self._buffer = None
-                self._buffer_position = 0
-                self._stream = None
-
-            if on_finish is not None:
+            # Call outside the lock: avoids holding it during external code
+            if fire_finish is not None:
                 try:
-                    logger.debug(f"Calling on_finish callback (stream_was_none={was_already_none})")
-                    on_finish()
+                    fire_finish()
                 except Exception as e:
-                    logger.error(f"Error in finish callback: {e}", exc_info=True)
-        
-        # Create and start stream
+                    logger.error(f"Error in on_finish callback: {e}", exc_info=True)
+
         try:
-            logger.debug(f"AudioParams.STREAM_LATENCY value: {AudioParams.STREAM_LATENCY}")
             stream = sd.OutputStream(
-                samplerate=sample_rate,
-                channels=samples.shape[1],
+                samplerate=AudioParams.SAMPLE_RATE,
+                channels=self._channels,
                 dtype=AudioParams.BUFFER_DTYPE,
                 callback=stream_callback,
-                finished_callback=finished_callback,
-                latency=max(float(AudioParams.STREAM_LATENCY), 0.1)  # Ensure STREAM_LATENCY is a float
+                latency=max(float(AudioParams.STREAM_LATENCY), 0.1),
             )
-            
-            logger.debug(f"Audio stream configured with latency={stream.latency} and buffer size={len(samples)}")
-            
+            stream.start()
             with self._lock:
                 self._stream = stream
-            
-            stream.start()
-            logger.debug(f"Audio stream started: {len(samples)} samples at {sample_rate}Hz, "
-                        f"{samples.shape[1]} channels")
-            
+            logger.info(
+                f"Persistent audio stream started "
+                f"({AudioParams.SAMPLE_RATE}Hz, {self._channels}ch)"
+            )
         except sd.PortAudioError as e:
             error_msg = f"Audio device error: {e}"
             logger.error(error_msg)
             raise AudioDeviceError(error_msg) from e
         except Exception as e:
-            error_msg = f"Audio playback failed: {e}"
+            error_msg = f"Failed to start persistent audio stream: {e}"
             logger.error(error_msg, exc_info=True)
-            raise AudioPlaybackError(error_msg) from e
-    
-    def stop(self) -> None:
-        """Stop audio playback immediately with cleanup."""
-        # Get stream reference while holding lock
-        with self._lock:
-            stream_to_close = self._stream
-            # Set stopping flag to prevent callbacks from executing
-            self._stopping = True
-            # Clear state immediately so no new operations use this stream
-            self._stream = None
-            self._buffer = None
-            self._buffer_position = 0
+            raise AudioDeviceError(error_msg) from e
 
-        # Close stream OUTSIDE the lock to avoid deadlock with finished_callback
-        if stream_to_close is not None:
-            try:
-                if stream_to_close.active:
-                    logger.debug("Aborting active audio stream")
-                    stream_to_close.abort()  # Immediate stop
-                stream_to_close.close()  # Wait for termination (may call finished_callback)
-                logger.debug("Audio stream closed")
-            except Exception as e:
-                logger.error(f"Error stopping audio stream: {e}", exc_info=True)
-
-        # Clear stopping flag after stream is fully closed
-        with self._lock:
-            self._stopping = False
-    
-    def is_playing(self) -> bool:
-        """Check if audio is currently playing.
-        
-        Returns:
-            True if stream is active
-        """
-        with self._lock:
-            return self._stream is not None and self._stream.active
-    
     def _validate_samples(self, samples: np.ndarray) -> np.ndarray:
         """Validate and reshape audio samples.
-        
+
         Args:
             samples: Input samples
-            
+
         Returns:
             Validated samples (n_samples, n_channels)
-            
+
         Raises:
             AudioPlaybackError: If samples are invalid
         """
         if not isinstance(samples, np.ndarray):
             raise AudioPlaybackError("Samples must be a numpy array")
-        
-        # Ensure correct dtype
+
         if samples.dtype != np.int16:
             logger.warning(f"Converting samples from {samples.dtype} to int16")
             if np.issubdtype(samples.dtype, np.floating):
-                # Convert float to int16
                 samples = np.clip(samples, -1.0, 1.0)
                 samples = (samples * AudioParams.MAX_AMPLITUDE).astype(np.int16)
             else:
                 samples = samples.astype(np.int16)
-        
-        # Reshape to (n_samples, n_channels)
+
         if samples.ndim == 1:
             samples = samples.reshape(-1, 1)
         elif samples.ndim != 2:
             raise AudioPlaybackError(f"Samples must be 1D or 2D, got {samples.ndim}D")
-        
-        # Validate not empty
+
         if len(samples) == 0:
             raise AudioPlaybackError("Cannot play empty audio samples")
-        
+
         return samples
-    
+
     def __del__(self):
         """Cleanup on deletion."""
-        self.stop()
+        self.shutdown()

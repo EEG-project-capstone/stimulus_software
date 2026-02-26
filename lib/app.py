@@ -32,7 +32,6 @@ from lib.edf_viewer import EDFViewerWindow
 
 logger = logging.getLogger('eeg_stimulus.app')
 
-
 @dataclass
 class AnalysisFiles:
     """Tracks files selected for analysis."""
@@ -696,6 +695,17 @@ class TkApp:
         else:
             self.oddball_prompt.config(state='normal')
     
+    def _apply_ctrl_btn(self, btn: tk.Button, enabled: bool) -> None:
+        """Apply enabled/disabled state with corresponding shading to a control button."""
+        if enabled:
+            btn.config(state='normal', bg='#e2e2e2', fg='#111111',
+                       activebackground='#c8c8c8', activeforeground='#111111',
+                       relief='raised')
+        else:
+            btn.config(state='disabled', bg='#c0c0c0', fg='#888888',
+                       activebackground='#c0c0c0', activeforeground='#888888',
+                       relief='flat')
+
     def update_button_states(self):
         """Update button enabled/disabled states based on current state."""
         # Define button states for each playback state
@@ -731,11 +741,11 @@ class TkApp:
             state_configs[PlaybackState.EMPTY]
         )
 
-        self.prepare_button.config(state=states['prepare'])
-        self.play_button.config(state=states['play'])
-        self.pause_button.config(state=states['pause'])
-        self.stop_button.config(state=states['stop'])
-        self.sync_pulse_button.config(state=states['sync'])
+        self._apply_ctrl_btn(self.prepare_button,   states['prepare'] == 'normal')
+        self._apply_ctrl_btn(self.play_button,       states['play']    == 'normal')
+        self._apply_ctrl_btn(self.pause_button,      states['pause']   == 'normal')
+        self._apply_ctrl_btn(self.stop_button,       states['stop']    == 'normal')
+        self._apply_ctrl_btn(self.sync_pulse_button, states['sync']    == 'normal')
     
     def load_file_options(self):
         """Populate file selection dropdowns."""
@@ -1042,41 +1052,40 @@ class TkApp:
         control_frame = ttk.Frame(parent)
         control_frame.pack(fill='x', pady=10)
 
-        self.prepare_button = ttk.Button(
+        self.prepare_button = tk.Button(
             control_frame,
             text="Prepare Stimulus",
             command=self.prepare_stimulus
         )
-        self.prepare_button.pack(side='left', padx=5, ipady=10)
+        self.prepare_button.pack(side='left', padx=5, ipady=4)
 
-        self.sync_pulse_button = ttk.Button(
+        self.sync_pulse_button = tk.Button(
             control_frame,
             text="Send Sync Pulse",
             command=self.send_sync_pulse,
-            state='disabled'
         )
-        self.sync_pulse_button.pack(side='left', padx=5, ipady=10)
+        self.sync_pulse_button.pack(side='left', padx=5, ipady=4)
 
-        self.play_button = ttk.Button(
+        self.play_button = tk.Button(
             control_frame,
             text="Play Stimulus",
             command=self.play_stimulus
         )
-        self.play_button.pack(side='left', padx=5, ipady=10)
+        self.play_button.pack(side='left', padx=5, ipady=4)
 
-        self.pause_button = ttk.Button(
-            control_frame,
-            text="Pause",
-            command=self.toggle_pause
-        )
-        self.pause_button.pack(side='left', padx=5, ipady=10)
-
-        self.stop_button = ttk.Button(
+        self.stop_button = tk.Button(
             control_frame,
             text="Stop",
             command=self.stop_stimulus
         )
-        self.stop_button.pack(side='right', padx=5, ipady=10)
+        self.stop_button.pack(side='left', padx=5, ipady=4)
+
+        self.pause_button = tk.Button(
+            control_frame,
+            text="Pause",
+            command=self.toggle_pause
+        )
+        self.pause_button.pack(side='left', padx=5, ipady=4)
     
     def _build_sequence_and_notes(self, parent):
         """Build side-by-side stimulus sequence list and session notes."""
@@ -1298,6 +1307,10 @@ class TkApp:
             # Cancel any scheduled callbacks
             if hasattr(self, 'audio_stim') and self.audio_stim:
                 self.audio_stim._cancel_scheduled_callbacks()
+
+            # Close the persistent audio stream
+            if hasattr(self, 'audio_stim') and self.audio_stim:
+                self.audio_stim.stream_manager.shutdown()
 
             logger.info("Cleanup completed successfully")
         except Exception as e:

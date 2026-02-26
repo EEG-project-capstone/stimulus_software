@@ -38,13 +38,13 @@ class LanguageStimHandler(BaseStimHandler):
                 'audio_index': n,
                 'sentence_ids': (self.audio_stim.stims.lang_stims_ids[n] 
                                if n < len(self.audio_stim.stims.lang_stims_ids) else None),
-                'duration_sec': len(samples) / audio_segment.frame_rate
+                'duration_sec': len(samples) / AudioParams.SAMPLE_RATE
             })
-            
+
             # play_audio_safe includes a built-in watchdog
             self.play_audio_safe(
                 samples=samples,
-                sample_rate=audio_segment.frame_rate,
+                sample_rate=AudioParams.SAMPLE_RATE,
                 on_finish=self.safe_finish,
                 log_label="language_audio"
             )
@@ -100,7 +100,7 @@ class CommandStimHandler(BaseStimHandler):
 
         self.play_audio_safe(
             samples=samples,
-            sample_rate=prompt_seg.frame_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_prompt,
             log_label="motor_prompt"
         )
@@ -153,7 +153,7 @@ class CommandStimHandler(BaseStimHandler):
         # Use method reference instead of lambda
         self.play_audio_safe(
             samples=samples,
-            sample_rate=audio.frame_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_keep_command,
             log_label=f"{self.state['side']}_keep"
         )
@@ -186,7 +186,7 @@ class CommandStimHandler(BaseStimHandler):
         # Use method reference instead of lambda
         self.play_audio_safe(
             samples=samples,
-            sample_rate=audio.frame_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_stop_command,
             log_label=f"{self.state['side']}_stop"
         )
@@ -273,7 +273,7 @@ class OddballStimHandler(BaseStimHandler):
 
         self.play_audio_safe(
             samples=samples,
-            sample_rate=prompt_seg.frame_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_prompt,
             log_label="oddball_prompt"
         )
