@@ -15,7 +15,6 @@ import logging
 from lib.config import Config
 from lib.stims import Stims
 from lib.auditory_stimulator import AuditoryStimulator
-from lib.analysis_manager import AnalysisManager
 from lib.state_manager import StateManager
 from lib.results_manager import ResultsManager
 from lib.constants import (
@@ -96,7 +95,6 @@ class TkApp:
             self.stims = Stims()
             self.results_manager = ResultsManager(self.config)
             self.audio_stim = AuditoryStimulator(self)
-            self.analysis_manager = AnalysisManager(self)
     
     def _initialize_variables(self):
         """Initialize Tkinter variables for UI."""
@@ -227,12 +225,18 @@ class TkApp:
     
     def on_patient_id_change(self, event=None):
         """Handle patient ID entry changes.
-        
+
         Args:
             event: Tkinter event (unused)
         """
         patient_id = self.get_patient_id()
-        
+
+        # Don't disrupt an active playback session — editing the ID field
+        # during PLAYING or PAUSED would cause an invalid state transition.
+        if self.state_manager.is_active():
+            self.current_patient = patient_id or None
+            return
+
         if patient_id:
             self.current_patient = patient_id
             self.state_manager.transition_to(PlaybackState.READY)
@@ -427,21 +431,21 @@ class TkApp:
     def play_stimulus(self):
         """Start stimulus playback."""
         logger.info("Play stimulus button clicked")
-        
+
         if not self.state_manager.is_ready() or len(self.stims.stim_dictionary) == 0:
             logger.warning(f"Play stimulus called in invalid state: "
                          f"{self.state_manager.state.name}, "
                          f"stims: {len(self.stims.stim_dictionary)}")
             return
-        
+
         patient_id = self.require_patient_id()
         if not patient_id:
             return
-        
+
         # Transition to playing
         self.state_manager.transition_to(PlaybackState.PLAYING)
         self.update_stim_list_status()
-        
+
         logger.info(f"Starting stimulus playback for patient: {patient_id}")
         self.audio_stim.play_stim_sequence()
     
@@ -538,7 +542,6 @@ class TkApp:
             self.submit_btn.config(state='normal')
         else:
             self.submit_btn.config(state='disabled')
-            self.sync_preview_btn.config(state='disabled')
 
         # Enable Parse EDF / View EDF buttons if EDF is selected (doesn't need CSV)
         if self.analysis_files.edf_path is not None:
@@ -572,9 +575,6 @@ class TkApp:
             text=self.analysis_files.edf_path.name,
             foreground="green"
         )
-        
-        # Enable sync preview
-        self.sync_preview_btn.config(state='normal')
         
         # Load session data
         self.load_session_data_from_csv(self.analysis_files.stimulus_path)
@@ -730,6 +730,10 @@ class TkApp:
                 'prepare': 'disabled', 'play': 'disabled',
                 'pause': 'normal', 'stop': 'normal', 'sync': 'disabled'
             },
+            PlaybackState.STOPPED: {
+                'prepare': 'normal', 'play': 'normal',
+                'pause': 'disabled', 'stop': 'disabled', 'sync': 'normal'
+            },
             PlaybackState.SENDING_SYNC: {
                 'prepare': 'disabled', 'play': 'disabled',
                 'pause': 'disabled', 'stop': 'disabled', 'sync': 'disabled'
@@ -772,16 +776,6 @@ class TkApp:
         else:
             self.edf_combo.set("No EDF files found")
     
-    def detect_and_preview_sync(self):
-        """Run sync detection and show preview."""
-        if not self.analysis_files.ready:
-            messagebox.showwarning("No Files Selected", 
-                                 "Please select and confirm files using "
-                                 "'Use Selected Files' first.")
-            return
-        
-        self.analysis_manager.run_sync_detection_and_preview()
-
     def parse_edf(self):
         """Parse the selected EDF file and display its information in session log."""
         if self.analysis_files.edf_path is None:
@@ -1209,14 +1203,6 @@ class TkApp:
         )
         self.parse_edf_btn.pack(side='left', padx=(0, 5))
 
-        self.sync_preview_btn = ttk.Button(
-            frame,
-            text="Detect Sync & Preview",
-            command=self.detect_and_preview_sync,
-            state="disabled"
-        )
-        self.sync_preview_btn.pack(side='left')
-
         self.view_edf_btn = ttk.Button(
             frame,
             text="View EDF",
@@ -1299,17 +1285,10 @@ class TkApp:
         """Clean up resources before closing the application."""
         logger.info("Cleaning up application resources")
         try:
-            # Stop any active audio playback
             if hasattr(self, 'audio_stim') and self.audio_stim:
                 logger.debug("Stopping audio stimulator")
                 self.audio_stim.stop_stimulus()
-
-            # Cancel any scheduled callbacks
-            if hasattr(self, 'audio_stim') and self.audio_stim:
                 self.audio_stim._cancel_scheduled_callbacks()
-
-            # Close the persistent audio stream
-            if hasattr(self, 'audio_stim') and self.audio_stim:
                 self.audio_stim.stream_manager.shutdown()
 
             logger.info("Cleanup completed successfully")

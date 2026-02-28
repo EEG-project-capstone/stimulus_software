@@ -10,7 +10,7 @@ import random
 import threading
 import numpy as np
 import logging
-from typing import Optional
+from typing import Callable, Optional
 from functools import partial
 
 from lib.audio_stream_manager import AudioStreamManager
@@ -125,13 +125,6 @@ class AuditoryStimulator:
             self.current_stim_start_time = time.time()
             self.current_stim_sentences = []
             
-            # Log stimulus start event
-            self._log_event('stim_start', {
-                'stim_index': self.stims.current_stim_index,
-                'stim_type': stim.get('type'),
-                'patient_id': patient_id
-            })
-            
             # Start playing the stimulus using handler registry
             self.start_stim_playback(stim)
             self.gui_callback.update_stim_list_status()
@@ -161,14 +154,14 @@ class AuditoryStimulator:
             logger.error(f"Error starting stimulus playback: {e}", exc_info=True)
             self.gui_callback.playback_error(f"Failed to start {stim_type}: {e}")
     
-    def _generate_oddball_sequence(self, sample_rate: int = 44100) -> tuple:
+    def _generate_oddball_sequence(self, sample_rate: int = AudioParams.SAMPLE_RATE) -> tuple:
         """Generate the complete oddball tone sequence as a single buffer.
 
         This provides sample-accurate 1000ms onset-to-onset timing by pre-generating
         all tones in a single continuous audio buffer.
 
         Args:
-            sample_rate: Sample rate in Hz (default 44100)
+            sample_rate: Sample rate in Hz
 
         Returns:
             Tuple of (audio_samples, tone_events) where:
@@ -252,7 +245,7 @@ class AuditoryStimulator:
         return audio_samples, tone_events
 
     def _generate_square_wave(self, frequency: int, duration_ms: int,
-                             sample_rate: int = 44100) -> np.ndarray:
+                             sample_rate: int = AudioParams.SAMPLE_RATE) -> np.ndarray:
         """Generate a square wave sync pulse.
         
         Args:
@@ -280,31 +273,32 @@ class AuditoryStimulator:
     
     def send_sync_pulse(self, patient_id: str):
         """Send a sync pulse to mark the EEG recording.
-        
+
         Args:
             patient_id: Patient identifier for logging
         """
         logger.info(f"Sending sync pulse for patient: {patient_id}")
-        
+
         # Generate square wave sync pulse
         sync_pulse = self._generate_square_wave(
             frequency=SyncPulseParams.FREQUENCY,
             duration_ms=SyncPulseParams.DURATION_MS,
             sample_rate=SyncPulseParams.SAMPLE_RATE
         )
-        
+
         # Reshape for mono playback
         if sync_pulse.ndim == 1:
             sync_pulse = sync_pulse.reshape(-1, 1)
-        
-        # Record sync time
-        sync_time = time.time()
+
+        # Record sync time using the same latency correction as stimulus onsets
+        # so that sync_time and onset_time values share the same reference
+        sync_time = time.time() + AudioParams.STREAM_LATENCY
         logger.info(f"Sync pulse generated at time: {sync_time}")
-        
+
         # Play the sync pulse with completion callback
         try:
             callback = partial(self._handle_sync_pulse_complete, patient_id, sync_time)
-            
+
             self.play_audio(
                 samples=sync_pulse,
                 sample_rate=SyncPulseParams.SAMPLE_RATE,
@@ -314,19 +308,25 @@ class AuditoryStimulator:
         except AudioError as e:
             logger.error(f"Failed to play sync pulse: {e}")
             self.gui_callback.playback_error(f"Sync pulse failed: {e}")
-    
+
     def _handle_sync_pulse_complete(self, patient_id: str, sync_time: float):
         """Handle completion of sync pulse playback.
-        
+
         Args:
             patient_id: Patient identifier
             sync_time: Timestamp of sync pulse
         """
         logger.info("Sync pulse playback completed")
-        
+
         try:
-            # Save sync event using results manager
-            self.results_manager.append_sync_pulse(patient_id, sync_time)
+            # Extract the DAC onset time written by on_onset during playback
+            sync_event = next(
+                (e for e in self.current_stim_sentences if e.get('event') == 'sync_pulse'),
+                None
+            )
+            sync_dac_time = sync_event.get('dac_onset_time') if sync_event else None
+
+            self.results_manager.append_sync_pulse(patient_id, sync_time, sync_dac_time)
             logger.info("Sync pulse event saved successfully")
         except Exception as e:
             logger.error(f"Error saving sync pulse: {e}", exc_info=True)
@@ -343,16 +343,26 @@ class AuditoryStimulator:
             log_label: Optional label for logging
             onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
         """
-        # Log audio event with timestamp
+        # Log audio event with timestamp; on_onset will add dac_onset_time when
+        # the first sample of this buffer actually reaches the DAC.
+        on_onset: Optional[Callable[[float], None]] = None
         if log_label is not None:
-            # Onset time = now + stream latency + any offset (e.g., padding before actual sound)
             onset_time = time.time() + AudioParams.STREAM_LATENCY + (onset_offset_ms / 1000.0)
-            self.current_stim_sentences.append({
+            event = {
                 'event': log_label,
-                'onset_time': onset_time
-            })
+                'onset_time': onset_time,
+            }
+            self.current_stim_sentences.append(event)
             logger.debug(f"Audio event: {log_label} at {onset_time:.3f}")
-        
+
+            duration_sec = len(samples) / sample_rate
+
+            def _onset_handler(dac_time: float, _event: dict = event,
+                                _dur: float = duration_sec) -> None:
+                _event['dac_onset_time'] = dac_time
+                _event['dac_end_time'] = dac_time + _dur
+            on_onset = _onset_handler
+
         # Create finish handler
         def on_finish():
             # Always schedule the callback - finish_current_stim() and
@@ -361,13 +371,14 @@ class AuditoryStimulator:
             # the state is ever unexpectedly wrong during long stimuli.
             if callback is not None:
                 self._schedule(10, callback)
-        
+
         # Play using stream manager
         try:
             self.stream_manager.play(
                 samples=samples,
                 sample_rate=sample_rate,
-                on_finish=on_finish
+                on_finish=on_finish,
+                on_onset=on_onset,
             )
         except AudioError as e:
             logger.error(f"Audio playback error: {e}", exc_info=True)
@@ -425,33 +436,41 @@ class AuditoryStimulator:
             patient_id: Patient identifier
             stim_type: Stimulus type
         """
-        # Filter for tone events (standard_tone, rare_tone)
+        # The "oddball_sequence" event holds the DAC time of the buffer start,
+        # written by the on_onset closure in play_audio().
+        seq_event = next(
+            (e for e in self.current_stim_sentences if e.get('event') == 'oddball_sequence'),
+            None
+        )
+        buffer_dac = seq_event.get('dac_onset_time') if seq_event else None
+
+        tone_duration_sec = (OddballStimParams.TONE_DURATION_MS +
+                             2 * OddballStimParams.TONE_ENVELOPE_MS) / 1000.0
+
         tone_events = [
-            event for event in self.current_stim_sentences
-            if event.get('event') in ('standard_tone', 'rare_tone')
+            e for e in self.current_stim_sentences
+            if e.get('event') in ('standard_tone', 'rare_tone')
         ]
 
         logger.info(f"Saving {len(tone_events)} oddball beeps to CSV")
 
-        # Save each beep as a separate row
-        # Actual audible tone = TONE_DURATION_MS + (2 * TONE_ENVELOPE_MS)
-        tone_duration_sec = (OddballStimParams.TONE_DURATION_MS +
-                            2 * OddballStimParams.TONE_ENVELOPE_MS) / 1000.0
-
         for event in tone_events:
-            onset_time = event.get('onset_time', 0)
-            tone_type = event.get('event', 'unknown')
-
-            beep_data = {
-                'notes': tone_type,  # Just the tone type (standard_tone or rare_tone)
-                'start_time': onset_time,
-                'end_time': onset_time + tone_duration_sec,
-            }
+            onset_sec = event.get('onset_sample', 0) / AudioParams.SAMPLE_RATE
+            if buffer_dac is not None:
+                dac_onset = buffer_dac + onset_sec
+                dac_end = dac_onset + tone_duration_sec
+            else:
+                dac_onset = None
+                dac_end = None
 
             self.results_manager.append_result(
                 patient_id=patient_id,
                 result_type=stim_type,
-                data=beep_data
+                data={
+                    'notes': event.get('event', 'unknown'),
+                    'start_time': dac_onset,
+                    'end_time': dac_end,
+                }
             )
 
     def _save_standard_result(self, patient_id: str, stim_type: str, stim: dict):
@@ -462,15 +481,25 @@ class AuditoryStimulator:
             stim_type: Stimulus type
             stim: Stimulus dictionary
         """
-        end_time = time.time()
+        # DAC times from first and last logged audio events for this stimulus
+        first_dac = next(
+            (e.get('dac_onset_time') for e in self.current_stim_sentences
+             if 'dac_onset_time' in e),
+            None
+        )
+        last_dac_end = next(
+            (e.get('dac_end_time') for e in reversed(self.current_stim_sentences)
+             if 'dac_end_time' in e),
+            None
+        )
 
         # Create clean notes based on stimulus type
         notes = self._format_stimulus_notes(stim_type, self.current_stim_sentences, stim)
 
         stim_result_data = {
             'notes': notes,
-            'start_time': self.current_stim_start_time,
-            'end_time': end_time,
+            'start_time': first_dac,
+            'end_time': last_dac_end,
         }
 
         self.results_manager.append_result(
@@ -496,7 +525,8 @@ class AuditoryStimulator:
                 if event.get('event') == 'language_stim_meta':
                     sentence_ids = event.get('sentence_ids', [])
                     if sentence_ids:
-                        return f"Sentences: {sentence_ids}"
+                        nums = [sid.removeprefix('lang') for sid in sentence_ids]
+                        return f"Sentences: {nums}"
             return "Language stimulus"
 
         elif stim_type == 'familiar':
@@ -572,20 +602,6 @@ class AuditoryStimulator:
             # We just transitioned TO playing - restart stimulus from beginning
             logger.debug("Resuming playback - restarting current stimulus")
             self.play_current_stim()
-    
-    def reset_current_stim_state(self):
-        """Reset state variables for current stimulus."""
-        if not self.stims.stim_dictionary:
-            return
-
-        self.current_stim_start_time = 0
-        self.current_stim_sentences = []
-
-        for handler in self.handlers.values():
-            handler.reset()
-
-        stim = self.stims.stim_dictionary[self.stims.current_stim_index]
-        stim['status'] = 'pending'
     
     def stop_stimulus(self):
         """Stop all stimulus playback."""

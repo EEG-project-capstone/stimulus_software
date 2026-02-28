@@ -90,8 +90,6 @@ class FilePaths:
     LEFT_STOP_AUDIO  = Path("audio_data/static/left_stop.mp3")
 
     # Control / voice audio
-    MALE_CONTROL_AUDIO   = Path("audio_data/static/ControlStatement_male.wav")
-    FEMALE_CONTROL_AUDIO = Path("audio_data/static/ControlStatement_female.wav")
     CONTROL_STATEMENTS_DIR = Path("audio_data/control_statements")
 
     # Prompt audio
@@ -115,53 +113,9 @@ class SyncPulseParams:
     SAMPLE_RATE = 44100    # Hz
 
 
-class SyncDetectionParams:
-    """Parameters for EEG sync point detection."""
-    SEARCH_DURATION_SEC = 300        # Search first 5 minutes
-    THRESHOLD_STD_MULTIPLIER = 3     # Standard deviations above baseline
-    BASELINE_WINDOW_FRACTION = 0.1   # Use first 10% for baseline
-    PREVIEW_DURATION_SEC = 60        # Show 60s preview
-
-
-DEFAULT_EEG_CHANNELS = [
-    'Fp1', 'Fp2', 'F7', 'F3', 'Fz', 'F4', 'F8',
-    'FT9', 'FT10', 'T7', 'C3', 'Cz', 'C4', 'T8',
-    'P7', 'P3', 'Pz', 'P4', 'P8', 'O1', 'O2', 'Fpz'
-]
-
-
 # =============================================================================
 # STIMULUS TYPE IDENTIFIERS
 # =============================================================================
-
-class StimTypes:
-    """String identifiers for stimulus types."""
-    LANGUAGE = 'language'
-    RIGHT_COMMAND = 'right_command'
-    RIGHT_COMMAND_PROMPT = 'right_command+p'
-    LEFT_COMMAND = 'left_command'
-    LEFT_COMMAND_PROMPT = 'left_command+p'
-    ODDBALL = 'oddball'
-    ODDBALL_PROMPT = 'oddball+p'
-    FAMILIAR = 'familiar'
-    UNFAMILIAR = 'unfamiliar'
-    SESSION_NOTE = 'session_note'
-    MANUAL_SYNC_PULSE = 'manual_sync_pulse'
-    SYNC_DETECTION = 'sync_detection'
-
-
-class StimHandlerTypes:
-    """String identifiers for stimulus handler types."""
-    LANGUAGE = 'language'
-    COMMAND = 'command'
-    ODDBALL = 'oddball'
-    VOICE = 'voice'
-
-
-class GenderOptions:
-    """Gender options for voice stimuli."""
-    MALE = 'Male'
-    FEMALE = 'Female'
 
 
 # Names of the unfamiliar control speakers in audio_data/control_statements/
@@ -234,13 +188,6 @@ STATE_DISPLAYS = {
 # UI / LAYOUT
 # =============================================================================
 
-class ButtonIcons:
-    """Button icon sizing constants."""
-    PLAY_SUBSAMPLE = (15, 15)
-    PAUSE_SUBSAMPLE = (15, 15)
-    STOP_SUBSAMPLE = (6, 6)
-
-
 class Layout:
     """Layout and spacing constants."""
     WINDOW_SIZE = (1050, 830)
@@ -248,13 +195,6 @@ class Layout:
     STIMULUS_LIST_HEIGHT = 12
     NOTES_TEXT_HEIGHT = 10
     LOG_TEXT_WIDTH = 40
-
-
-TREEVIEW_TAGS = {
-    'COMPLETED': 'completed',
-    'IN_PROGRESS': 'inprogress',
-    'PENDING': 'pending'
-}
 
 
 # =============================================================================
@@ -269,7 +209,3 @@ class LoggingParams:
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 
-class RetryParams:
-    """Parameters for retry logic."""
-    MAX_RETRIES = 3
-    RETRY_DELAY_MS = 100

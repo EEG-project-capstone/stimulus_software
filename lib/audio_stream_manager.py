@@ -37,6 +37,7 @@ class AudioStreamManager:
         self._buffer: Optional[np.ndarray] = None
         self._buffer_position: int = 0
         self._on_finish: Optional[Callable[[], None]] = None
+        self._on_onset: Optional[Callable[[float], None]] = None
         self._finish_fired: bool = False
         self._stream: Optional[sd.OutputStream] = None
         self._channels: int = 2  # Fixed stereo; mono inputs are upmixed
@@ -50,7 +51,8 @@ class AudioStreamManager:
     def play(self,
              samples: np.ndarray,
              sample_rate: int = AudioParams.SAMPLE_RATE,
-             on_finish: Optional[Callable[[], None]] = None) -> None:
+             on_finish: Optional[Callable[[], None]] = None,
+             on_onset: Optional[Callable[[float], None]] = None) -> None:
         """Queue audio samples for playback.
 
         Args:
@@ -83,6 +85,7 @@ class AudioStreamManager:
             self._buffer = samples.copy()
             self._buffer_position = 0
             self._on_finish = on_finish
+            self._on_onset = on_onset
             self._finish_fired = False
 
         if was_playing:
@@ -99,6 +102,7 @@ class AudioStreamManager:
             self._buffer = None
             self._buffer_position = 0
             self._on_finish = None
+            self._on_onset = None
             self._finish_fired = True   # Block any in-flight completion
         logger.debug("Audio playback stopped")
 
@@ -136,6 +140,7 @@ class AudioStreamManager:
                 logger.warning(f"Audio stream status: {status}")
 
             fire_finish = None
+            fire_onset = None
 
             with self._lock:
                 if self._buffer is None or self._buffer_position >= len(self._buffer):
@@ -147,6 +152,11 @@ class AudioStreamManager:
                         fire_finish = self._on_finish
                         self._on_finish = None
                 else:
+                    # First chunk of a new buffer — capture DAC onset time
+                    if self._buffer_position == 0 and self._on_onset is not None:
+                        fire_onset = self._on_onset
+                        self._on_onset = None
+
                     available = len(self._buffer) - self._buffer_position
                     chunk_size = min(frames, available)
                     chunk = self._buffer[
@@ -164,6 +174,11 @@ class AudioStreamManager:
                             self._on_finish = None
 
             # Call outside the lock: avoids holding it during external code
+            if fire_onset is not None:
+                try:
+                    fire_onset(time_info.outputBufferDacTime)
+                except Exception as e:
+                    logger.error(f"Error in on_onset callback: {e}", exc_info=True)
             if fire_finish is not None:
                 try:
                     fire_finish()

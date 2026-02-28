@@ -53,9 +53,7 @@ class BaseStimHandler(ABC):
     
     def reset(self):
         """Reset handler state to initial conditions."""
-        self._cancel_all_callbacks()
-        self.state = {}
-        self.is_active = False
+        self.stop()
 
     def stop(self):
         """Stop handler immediately with full cleanup."""

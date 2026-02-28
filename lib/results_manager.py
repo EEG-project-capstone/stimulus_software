@@ -171,23 +171,25 @@ class ResultsManager:
         data = {'notes': note}
         return self.append_result(patient_id, 'session_note', data)
     
-    def append_sync_pulse(self, patient_id: str, sync_time: float) -> Path:
+    def append_sync_pulse(self, patient_id: str, sync_time: float,
+                          sync_dac_time: Optional[float] = None) -> Path:
         """Append a manual sync pulse event.
 
         Args:
             patient_id: Patient identifier
-            sync_time: Time of sync pulse
+            sync_time: Wall-clock time of sync pulse (for human-readable notes)
+            sync_dac_time: PortAudio DAC time when pulse first hit the hardware
 
         Returns:
             Path to results file
         """
         import time
 
-        # Simplified - just store time in columns, not in events array
+        duration_sec = SyncPulseParams.DURATION_MS / 1000.0
         data = {
             'notes': f'Manual sync pulse at {time.strftime("%H:%M:%S", time.localtime(sync_time))}',
-            'start_time': sync_time,
-            'end_time': sync_time + SyncPulseParams.DURATION_MS / 1000.0,
+            'start_time': sync_dac_time,
+            'end_time': sync_dac_time + duration_sec if sync_dac_time is not None else None,
         }
         return self.append_result(patient_id, 'manual_sync_pulse', data)
     
@@ -282,13 +284,11 @@ class ResultsManager:
             return []
         
         # Filter for log-type entries
-        log_types = {'session_note', 'manual_sync_pulse', 'sync_detection'}
+        log_types = {'session_note', 'manual_sync_pulse'}
         
         logs = []
         for _, row in df.iterrows():
-            notes_value = row['notes']
-            has_notes = notes_value is not None and str(notes_value).strip() != ''
-            if row['stim_type'] in log_types or has_notes:
+            if row['stim_type'] in log_types:
                 date = row.get('date', 'Unknown')
                 notes = str(row.get('notes', '')).strip()
                 if notes:

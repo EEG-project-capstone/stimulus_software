@@ -7,7 +7,6 @@ Fixed for Python 3.9 compatibility - no lambda in callbacks.
 """
 
 import random
-import time
 import numpy as np
 import logging
 from lib.base_stim_handler import BaseStimHandler
@@ -79,12 +78,7 @@ class CommandStimHandler(BaseStimHandler):
         
         logger.info(f"Starting {self.state['side']} command stimulus "
                    f"(prompt={self.state['has_prompt']})")
-        
-        self.log_event('command_stim_start', {
-            'side': self.state['side'],
-            'prompt': self.state['has_prompt']
-        })
-        
+
         if self.state['has_prompt']:
             self._play_prompt()
         else:
@@ -113,21 +107,15 @@ class CommandStimHandler(BaseStimHandler):
         """Continue the command stimulus cycle."""
         if not self.should_continue():
             return
-        
+
         if self.state['cycle'] >= CommandStimParams.TOTAL_CYCLES:
             self._finish_stim()
             return
-        
-        phase = self.state['phase']
-        
-        if phase == 'keep':
+
+        if self.state['phase'] == 'keep':
             self._play_keep_command()
-        elif phase == 'pause_after_keep':
-            self.safe_schedule(CommandStimParams.KEEP_PAUSE_MS, self._start_stop_phase)
-        elif phase == 'stop':
+        else:
             self._play_stop_command()
-        elif phase == 'pause_after_stop':
-            self.safe_schedule(CommandStimParams.STOP_PAUSE_MS, self._next_cycle)
     
     def _play_keep_command(self):
         """Play the 'keep' command audio."""
@@ -136,13 +124,7 @@ class CommandStimHandler(BaseStimHandler):
         
         logger.debug(f"Command stimulus cycle {self.state['cycle'] + 1}/"
                     f"{CommandStimParams.TOTAL_CYCLES}: KEEP phase")
-        
-        self.log_event('command_cycle', {
-            'cycle': self.state['cycle'] + 1,
-            'phase': 'keep',
-            'side': self.state['side']
-        })
-        
+
         audio = (self.audio_stim.stims.right_keep_audio 
             if self.state['side'] == 'right'
             else self.audio_stim.stims.left_keep_audio)
@@ -160,7 +142,7 @@ class CommandStimHandler(BaseStimHandler):
     
     def _after_keep_command(self):
         """Called after keep command finishes."""
-        self._set_phase('pause_after_keep')
+        self.safe_schedule(CommandStimParams.KEEP_PAUSE_MS, self._start_stop_phase)
     
     def _play_stop_command(self):
         """Play the 'stop' command audio."""
@@ -169,13 +151,7 @@ class CommandStimHandler(BaseStimHandler):
         
         logger.debug(f"Command stimulus cycle {self.state['cycle'] + 1}/"
                     f"{CommandStimParams.TOTAL_CYCLES}: STOP phase")
-        
-        self.log_event('command_cycle', {
-            'cycle': self.state['cycle'] + 1,
-            'phase': 'stop',
-            'side': self.state['side']
-        })
-        
+
         audio = (self.audio_stim.stims.right_stop_audio 
             if self.state['side'] == 'right'
             else self.audio_stim.stims.left_stop_audio)
@@ -193,23 +169,15 @@ class CommandStimHandler(BaseStimHandler):
     
     def _after_stop_command(self):
         """Called after stop command finishes."""
-        self._set_phase('pause_after_stop')
-    
+        self.safe_schedule(CommandStimParams.STOP_PAUSE_MS, self._next_cycle)
+
     def _start_stop_phase(self):
         """Transition to stop phase."""
-        self._set_phase('stop')
-    
-    def _set_phase(self, phase: str):
-        """Set the current phase and continue.
-        
-        Args:
-            phase: New phase name
-        """
         if not self.is_active:
             return
-        self.state['phase'] = phase
+        self.state['phase'] = 'stop'
         self.continue_stim()
-    
+
     def _next_cycle(self):
         """Move to the next cycle."""
         if not self.is_active:
@@ -256,7 +224,6 @@ class OddballStimHandler(BaseStimHandler):
         }
 
         logger.info(f"Starting oddball stimulus (prompt={self.state['has_prompt']})")
-        self.log_event('oddball_stim_start', {'prompt': self.state['has_prompt']})
 
         if self.state['has_prompt']:
             self._play_prompt()
@@ -287,38 +254,31 @@ class OddballStimHandler(BaseStimHandler):
         if not self.is_active:
             return
 
-        sample_rate = 44100
-
         # Generate the complete sequence with all tones
-        audio_samples, tone_events = self.audio_stim._generate_oddball_sequence(sample_rate)
+        audio_samples, tone_events = self.audio_stim._generate_oddball_sequence(
+            AudioParams.SAMPLE_RATE
+        )
 
-        # Store playback start time for calculating actual onset times
-        playback_start_time = time.time()
-        stream_latency_sec = AudioParams.STREAM_LATENCY
-
-        # Log each tone event with calculated onset time for CSV
+        # Store each tone's raw sample offset from the buffer start.
+        # _save_oddball_results() converts to seconds and adds the buffer's
+        # dac_onset_time to get each tone's precise DAC time.
         for event in tone_events:
-            onset_sample = event['onset_sample']
-            onset_sec_from_buffer_start = onset_sample / sample_rate
-
-            # Actual onset time = playback start + stream latency + position in buffer
-            onset_time = playback_start_time + stream_latency_sec + onset_sec_from_buffer_start
-
             label = 'rare_tone' if event['type'] == 'rare' else 'standard_tone'
             self.audio_stim.current_stim_sentences.append({
                 'event': label,
-                'onset_time': onset_time
+                'onset_sample': event['onset_sample'],
             })
 
         logger.info(f"Playing oddball sequence: {len(tone_events)} tones, "
-                   f"duration={len(audio_samples)/sample_rate:.2f}s")
+                   f"duration={len(audio_samples)/AudioParams.SAMPLE_RATE:.2f}s")
 
-        # Play the entire sequence as a single stream
+        # log_label="oddball_sequence" attaches on_onset to capture the true DAC
+        # time of the buffer start, used in _save_oddball_results() for per-tone times.
         self.play_audio_safe(
             samples=audio_samples,
-            sample_rate=sample_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._finish_stim,
-            log_label=None  # Individual tones already logged above
+            log_label="oddball_sequence"
         )
 
     def continue_stim(self):
@@ -330,10 +290,8 @@ class OddballStimHandler(BaseStimHandler):
         if not self.is_active:
             return
 
-        total_tones = OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES
-        logger.debug(f"Oddball stimulus sequence completed ({total_tones} tones)")
-        self.log_event('oddball_stim_end', {'total_tones': total_tones})
-
+        logger.debug(f"Oddball stimulus sequence completed "
+                    f"({OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES} tones)")
         self.audio_stim.finish_current_stim()
 
 
@@ -374,9 +332,9 @@ class VoiceStimHandler(BaseStimHandler):
         # Play audio
         self.play_audio_safe(
             samples=audio_data,
-            sample_rate=self.audio_stim.stims.sample_rate,
+            sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self.safe_finish,
-            log_label=None
+            log_label="voice_audio"
         )
 
         # play_audio_safe includes a built-in watchdog

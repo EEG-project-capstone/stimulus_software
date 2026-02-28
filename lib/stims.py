@@ -6,7 +6,7 @@ import logging
 from pydub import AudioSegment
 from pathlib import Path
 
-from lib.constants import FilePaths, LanguageStimParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
+from lib.constants import FilePaths, LanguageStimParams, AudioParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
 
 logger = logging.getLogger('eeg_stimulus.stims')
 
@@ -31,8 +31,6 @@ class Stims:
 
         self.motor_prompt_audio = None
         self.oddball_prompt_audio = None
-
-        self.sample_rate = 44100
 
         logger.info("Stims initialized")
 
@@ -68,7 +66,6 @@ class Stims:
             for i in range(num_of_each_stims["lang"]):
                 lang_block.append({
                     "type": "language",
-                    "subtype": f"lang_{i}",
                     "audio_index": i,
                     "status": "pending"
                 })
@@ -229,10 +226,10 @@ class Stims:
                         f"{audio_segment.channels} channels, "
                         f"{len(audio_segment)}ms duration")
 
-            # Resample to 44100 Hz to standardize
-            if audio_segment.frame_rate != 44100:
-                logger.debug(f"Resampling from {audio_segment.frame_rate}Hz to 44100Hz")
-                audio_segment = audio_segment.set_frame_rate(44100)
+            # Resample to target sample rate if needed
+            if audio_segment.frame_rate != AudioParams.SAMPLE_RATE:
+                logger.debug(f"Resampling from {audio_segment.frame_rate}Hz to {AudioParams.SAMPLE_RATE}Hz")
+                audio_segment = audio_segment.set_frame_rate(AudioParams.SAMPLE_RATE)
 
             # Convert to numpy array (already int16 from pydub)
             samples = np.array(audio_segment.get_array_of_samples(), dtype=np.int16)
