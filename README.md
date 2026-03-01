@@ -4,10 +4,6 @@ A clinical-grade auditory stimulus administration platform for EEG research.
 
 Built with Python and Tkinter, this software provides a cross-platform graphical interface for delivering precisely timed auditory stimuli during EEG recording sessions. Designed for TBI and disorders-of-consciousness research, it supports multiple experimental paradigms, real-time session management, and structured data export for downstream analysis.
 
-<!-- markdownlint-disable MD033 -->
-<img width="1000" alt="Stimulus Software GUI" src="https://github.com/user-attachments/assets/eeb55158-1a26-47cf-b6da-322d35dd44e1" />
-<!-- markdownlint-enable MD033 -->
-
 ---
 
 ## Table of Contents
