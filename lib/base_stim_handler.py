@@ -137,8 +137,7 @@ class BaseStimHandler(ABC):
                        samples,
                        sample_rate: int,
                        on_finish: Optional[Callable[[], None]] = None,
-                       log_label: Optional[str] = None,
-                       onset_offset_ms: float = 0):
+                       log_label: Optional[str] = None):
         """Play audio and guarantee on_finish fires exactly once.
 
         on_finish is called deterministically by AudioStreamManager.stream_callback
@@ -151,7 +150,6 @@ class BaseStimHandler(ABC):
             sample_rate: Sample rate in Hz
             on_finish: Callback to invoke when playback finishes
             log_label: Label for logging
-            onset_offset_ms: Onset-time offset in ms for padding
         """
         fired = [False]  # mutable cell shared by real callback and watchdog
 
@@ -178,7 +176,6 @@ class BaseStimHandler(ABC):
             sample_rate=sample_rate,
             callback=safe_on_finish,
             log_label=log_label,
-            onset_offset_ms=onset_offset_ms
         )
 
         # Watchdog fires safe_on_finish if stream_callback exhaustion detection fails

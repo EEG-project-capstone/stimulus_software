@@ -176,9 +176,6 @@ class AuditoryStimulator:
         # Samples between tone onsets (exactly 1 second = 44100 samples at 44100Hz)
         onset_interval_samples = sample_rate
 
-        # Padding samples (leading/trailing silence)
-        padding_samples = int(sample_rate * OddballStimParams.TONE_PADDING_MS / 1000.0)
-
         # Determine tone sequence
         total_tones = OddballStimParams.INITIAL_TONES + OddballStimParams.MAIN_TONES
         tone_sequence = []
@@ -195,12 +192,10 @@ class AuditoryStimulator:
             else:
                 tone_sequence.append(('standard', OddballStimParams.STANDARD_FREQ))
 
-        # Calculate total buffer size:
-        # leading_padding + (N-1) * onset_interval + last_tone + trailing_padding
-        total_samples = (padding_samples +
-                        (total_tones - 1) * onset_interval_samples +
-                        tone_samples +
-                        padding_samples)
+        # Calculate total buffer size: (N-1) onset intervals + last tone duration.
+        # No leading/trailing padding needed — the persistent stream has no initialization
+        # latency, and on_onset gives the exact DAC time of sample 0.
+        total_samples = (total_tones - 1) * onset_interval_samples + tone_samples
 
         # Create buffer
         buffer = np.zeros(total_samples, dtype=np.float64)
@@ -210,8 +205,7 @@ class AuditoryStimulator:
 
         # Generate each tone
         for i, (tone_type, frequency) in enumerate(tone_sequence):
-            # Calculate onset position in buffer (after leading padding)
-            onset_sample = padding_samples + i * onset_interval_samples
+            onset_sample = i * onset_interval_samples
 
             # Generate tone waveform
             t = np.linspace(0, tone_samples / sample_rate, tone_samples, False)
@@ -290,9 +284,9 @@ class AuditoryStimulator:
         if sync_pulse.ndim == 1:
             sync_pulse = sync_pulse.reshape(-1, 1)
 
-        # Record sync time using the same latency correction as stimulus onsets
-        # so that sync_time and onset_time values share the same reference
-        sync_time = time.time() + AudioParams.STREAM_LATENCY
+        # Wall-clock time used only for the human-readable notes field.
+        # The precise CSV start_time comes from dac_onset_time via the on_onset callback.
+        sync_time = time.time()
         logger.info(f"Sync pulse generated at time: {sync_time}")
 
         # Play the sync pulse with completion callback
@@ -332,8 +326,7 @@ class AuditoryStimulator:
             logger.error(f"Error saving sync pulse: {e}", exc_info=True)
     
     def play_audio(self, samples: np.ndarray, sample_rate: int,
-                   callback=None, log_label: Optional[str] = None,
-                   onset_offset_ms: float = 0):
+                   callback=None, log_label: Optional[str] = None):
         """Play audio using the stream manager.
 
         Args:
@@ -341,19 +334,14 @@ class AuditoryStimulator:
             sample_rate: Sample rate in Hz
             callback: Optional callback when playback finishes
             log_label: Optional label for logging
-            onset_offset_ms: Offset in ms to add to onset time (e.g., for padding)
         """
-        # Log audio event with timestamp; on_onset will add dac_onset_time when
-        # the first sample of this buffer actually reaches the DAC.
+        # on_onset captures the precise DAC time of the first sample via
+        # time_info.outputBufferDacTime, which is the source of truth for CSV timing.
         on_onset: Optional[Callable[[float], None]] = None
         if log_label is not None:
-            onset_time = time.time() + AudioParams.STREAM_LATENCY + (onset_offset_ms / 1000.0)
-            event = {
-                'event': log_label,
-                'onset_time': onset_time,
-            }
+            event = {'event': log_label}
             self.current_stim_sentences.append(event)
-            logger.debug(f"Audio event: {log_label} at {onset_time:.3f}")
+            logger.debug(f"Audio event queued: {log_label}")
 
             duration_sec = len(samples) / sample_rate
 
