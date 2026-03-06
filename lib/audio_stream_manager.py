@@ -176,7 +176,21 @@ class AudioStreamManager:
             # Call outside the lock: avoids holding it during external code
             if fire_onset is not None:
                 try:
-                    fire_onset(time_info.outputBufferDacTime)
+                    dac_time = time_info.outputBufferDacTime
+                    current_time = time_info.currentTime
+                    logger.debug(f"outputBufferDacTime={dac_time:.6f}s "
+                                 f"currentTime={current_time:.6f}s "
+                                 f"latency={dac_time - current_time:.6f}s")
+                    if dac_time <= current_time:
+                        logger.warning(
+                            f"outputBufferDacTime ({dac_time:.6f}s) <= currentTime "
+                            f"({current_time:.6f}s); output latency reported as zero or "
+                            "negative. DAC timestamps will be missing in CSV. "
+                            "This likely indicates broken latency reporting via CRAS."
+                        )
+                        fire_onset(None)
+                    else:
+                        fire_onset(dac_time)
                 except Exception as e:
                     logger.error(f"Error in on_onset callback: {e}", exc_info=True)
             if fire_finish is not None:

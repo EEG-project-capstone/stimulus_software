@@ -345,10 +345,19 @@ class AuditoryStimulator:
 
             duration_sec = len(samples) / sample_rate
 
-            def _onset_handler(dac_time: float, _event: dict = event,
+            def _onset_handler(dac_time: Optional[float], _event: dict = event,
                                 _dur: float = duration_sec) -> None:
-                _event['dac_onset_time'] = dac_time
-                _event['dac_end_time'] = dac_time + _dur
+                if not dac_time:
+                    logger.warning(
+                        f"outputBufferDacTime is {dac_time!r} for '{log_label}'; "
+                        "DAC time will be missing in CSV. "
+                        "This may indicate CRAS/ALSA latency reporting is broken."
+                    )
+                    _event['dac_onset_time'] = None
+                    _event['dac_end_time'] = None
+                else:
+                    _event['dac_onset_time'] = dac_time
+                    _event['dac_end_time'] = dac_time + _dur
             on_onset = _onset_handler
 
         # Create finish handler
