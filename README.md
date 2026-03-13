@@ -26,15 +26,14 @@ Built with Python and Tkinter, this software provides a cross-platform graphical
 
 ## Stimulus Paradigms
 
-The software supports five auditory stimulus types, each targeting a different aspect of neural responsiveness. The paradigms are based on published methods for assessing covert cognition in patients with disorders of consciousness (see [References](#references)).
+The software supports four auditory stimulus paradigms, each targeting a different aspect of neural responsiveness. The paradigms are based on published methods for assessing covert cognition in patients with disorders of consciousness (see [References](#references)).
 
-| Paradigm              | Description                                                            | Trials       | Key Parameters                     |
-| --------------------- | ---------------------------------------------------------------------- | ------------ | ---------------------------------- |
-| **Language**          | Randomized sentence playback for speech-tracking assessment            | 72           | 1.2-2.2s randomized ISI            |
-| **Motor Command**     | "Keep"/"Stop" instructions for left or right hand movement             | 8 cycles     | 10s keep / 10s stop phases         |
-| **Oddball**           | Standard (1000 Hz) and deviant (2000 Hz) tones for MMN/P300 detection  | 25 tones     | 80/20 ratio, 1000ms onset-to-onset |
-| **Loved One Voice**   | Patient's loved one's recorded voice for emotional response assessment | 50           | Gender-matched control comparison  |
-| **Control Statement** | Neutral statement baseline (male/female)                               | configurable | Comparison condition               |
+| Paradigm            | Description                                                           | Trials   | Key Parameters                        |
+| ------------------- | --------------------------------------------------------------------- | -------- | ------------------------------------- |
+| **Language**        | Randomized sentence playback for speech-tracking assessment           | 72       | 1500ms fixed ISI (jitter optional)    |
+| **Motor Command**   | "Keep"/"Stop" instructions for left or right hand movement            | 8 cycles | 10s keep / 10s stop phases            |
+| **Oddball**         | Standard (1000 Hz) and deviant (2000 Hz) tones for MMN/P300 detection | 25 tones | 80/20 ratio, 1000ms onset-to-onset    |
+| **Loved One Voice** | Interleaved familiar and gender-matched unfamiliar voice recordings   | 50       | 25 familiar / 25 unfamiliar, shuffled |
 
 Motor command and oddball paradigms each have prompt and no-prompt variants, allowing researchers to assess instruction comprehension alongside the primary stimulus.
 
@@ -104,7 +103,6 @@ After running `setup.sh`, point VSCode to the new environment:
 | Package       | Purpose                                |
 | ------------- | -------------------------------------- |
 | `pandas`      | Results data management                |
-| `pyyaml`      | Configuration file parsing             |
 | `pydub`       | Audio format handling (MP3/WAV)        |
 | `sounddevice` | Low-latency audio playback             |
 | `numpy`       | Tone generation and signal processing  |
@@ -164,7 +162,6 @@ stimulus_software/
 │   ├── stim_handlers.py           # Per-paradigm handler implementations
 │   ├── base_stim_handler.py       # Abstract handler base class
 │   ├── results_manager.py         # Thread-safe CSV result writing
-│   ├── analysis_manager.py        # EDF sync detection and analysis
 │   ├── edf_parser.py              # EDF file reading
 │   ├── edf_viewer.py              # GUI EDF signal viewer
 │   ├── logging_utils.py           # Logging context managers
@@ -175,9 +172,9 @@ stimulus_software/
 ├── audio_data/                    # Stimulus audio files
 │   ├── sentences/                 # Language trial recordings
 │   ├── prompts/                   # Instruction audio (motor, oddball)
-│   ├── static/                    # Command audio, control statements, beeps
-│   ├── lang_trials/               # Language trial metadata
-│   └── Trimmed/                   # Trimmed audio files
+│   ├── static/                    # Command audio, beep
+│   ├── control_statements/        # Gender-matched unfamiliar voice recordings
+│   └── lang_trials/               # Language trial metadata
 │
 ├── doc/                           # Protocol documentation and guides
 │
