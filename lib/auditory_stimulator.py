@@ -315,7 +315,7 @@ class AuditoryStimulator:
         try:
             # Extract the DAC onset time written by on_onset during playback
             sync_event = next(
-                (e for e in self.current_stim_sentences if e.get('event') == 'sync_pulse'),
+                (e for e in reversed(self.current_stim_sentences) if e.get('event') == 'sync_pulse'),
                 None
             )
             sync_dac_time = sync_event.get('dac_onset_time') if sync_event else None
