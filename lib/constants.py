@@ -6,6 +6,7 @@ Consolidates all magic numbers and configuration values.
 from enum import Enum, auto
 from dataclasses import dataclass
 from pathlib import Path
+import sys as _sys
 
 
 # =============================================================================
@@ -68,31 +69,56 @@ class AudioParams:
 
 # =============================================================================
 # FILE PATHS
-# All paths relative to the project root. Change these if you rename files.
+# Resolved at import time for both source runs and PyInstaller bundles.
+# Bundled assets (audio_data/) use sys._MEIPASS when frozen.
+# Writable data (patient_data/) writes next to the executable when frozen.
 # =============================================================================
 
+def _bundle_base() -> Path:
+    """Base directory for read-only bundled assets."""
+    if getattr(_sys, 'frozen', False) and hasattr(_sys, '_MEIPASS'):
+        return Path(_sys._MEIPASS)
+    return Path(__file__).resolve().parent.parent
+
+
+def _writable_base() -> Path:
+    """Base directory for writable user data (patient_data/, logs/)."""
+    if getattr(_sys, 'frozen', False):
+        exe = Path(_sys.executable).resolve()
+        if _sys.platform == 'darwin':
+            # exe is inside Foo.app/Contents/MacOS/ — go up 3 levels to reach
+            # the directory that contains the .app bundle so data is writable.
+            return exe.parent.parent.parent.parent
+        return exe.parent
+    return Path(__file__).resolve().parent.parent
+
+
+_BB = _bundle_base()    # read-only bundled assets
+_WB = _writable_base()  # writable user data
+
+
 class FilePaths:
-    """Standard file paths relative to the project root."""
+    """Standard file paths relative to the project root. Change these if you rename files."""
     # Output directories (created automatically on startup)
-    RESULTS_DIR = Path("patient_data/results")
-    EDFS_DIR    = Path("patient_data/edfs")
+    RESULTS_DIR = _WB / "patient_data/results"
+    EDFS_DIR    = _WB / "patient_data/edfs"
 
     # Audio input directories
-    SENTENCES_DIR  = Path("audio_data/sentences")
-    FAMILIAR_DIR   = Path("audio_data/static")
+    SENTENCES_DIR  = _BB / "audio_data/sentences"
+    FAMILIAR_DIR   = _BB / "audio_data/static"
 
     # Command audio files
-    RIGHT_KEEP_AUDIO = Path("audio_data/static/right_keep.mp3")
-    RIGHT_STOP_AUDIO = Path("audio_data/static/right_stop.mp3")
-    LEFT_KEEP_AUDIO  = Path("audio_data/static/left_keep.mp3")
-    LEFT_STOP_AUDIO  = Path("audio_data/static/left_stop.mp3")
+    RIGHT_KEEP_AUDIO = _BB / "audio_data/static/right_keep.mp3"
+    RIGHT_STOP_AUDIO = _BB / "audio_data/static/right_stop.mp3"
+    LEFT_KEEP_AUDIO  = _BB / "audio_data/static/left_keep.mp3"
+    LEFT_STOP_AUDIO  = _BB / "audio_data/static/left_stop.mp3"
 
     # Control / voice audio
-    CONTROL_STATEMENTS_DIR = Path("audio_data/control_statements")
+    CONTROL_STATEMENTS_DIR = _BB / "audio_data/control_statements"
 
     # Prompt audio
-    MOTOR_PROMPT  = Path("audio_data/prompts/motorcommandprompt.wav")
-    ODDBALL_PROMPT = Path("audio_data/prompts/oddballprompt.wav")
+    MOTOR_PROMPT   = _BB / "audio_data/prompts/motorcommandprompt.wav"
+    ODDBALL_PROMPT = _BB / "audio_data/prompts/oddballprompt.wav"
 
 
 # =============================================================================

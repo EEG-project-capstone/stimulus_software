@@ -8,13 +8,13 @@ dependencies = [
     "sounddevice",
     "numpy",
     "mne",
+    "scipy",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pyinstaller"]
 scripts = ["gtts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-

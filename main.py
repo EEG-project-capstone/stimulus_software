@@ -5,6 +5,7 @@ from lib.app import TkApp
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
 
 def shutdown_logging():
     logger = logging.getLogger('eeg_stimulus')
@@ -25,7 +26,10 @@ def setup_logging():
     log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # Create logs directory if it doesn't exist
-    script_dir = os.path.dirname(__file__)
+    if getattr(sys, 'frozen', False):
+        script_dir = os.path.dirname(sys.executable)
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
     logs_dir = os.path.join(script_dir, 'logs')
     os.makedirs(logs_dir, exist_ok=True)
 

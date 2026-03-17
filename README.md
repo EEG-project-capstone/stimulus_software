@@ -71,6 +71,26 @@ Compatible with **Windows**, **macOS**, and **Linux** (including ChromeOS with L
 
 ## Installation
 
+### Download a Release (Recommended)
+
+The easiest way to install is to download a pre-built release — no Python or Homebrew required:
+
+1. Go to the **[Releases](../../releases)** page of this repository.
+2. Under the latest release, download the file for your OS:
+
+   | Platform | File | How to run |
+   | --- | --- | --- |
+   | **macOS** | `stimulus_software_macos.zip` | Unzip, then double-click **Stimulus Software.app** |
+   | **Linux / ChromeOS** | `stimulus_software_linux` | `chmod +x stimulus_software_linux && ./stimulus_software_linux` |
+
+3. On first launch, `patient_data/` and `logs/` are created automatically next to the app.
+
+> **macOS note:** The app is unsigned. On first launch, right-click → **Open** → confirm to bypass Gatekeeper. You only need to do this once.
+
+---
+
+### Install from Source
+
 ### Prerequisites
 
 No pre-installed Python manager required. `setup.sh` bootstraps everything automatically.
