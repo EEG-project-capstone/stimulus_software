@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import mne
 import numpy as np
 import pandas as pd
 
@@ -17,8 +16,6 @@ class EDFParser:
     def __init__(self, edf_path: str) -> None:
         self.edf_path = Path(edf_path)
         self.raw = None
-        self.sync_sample = None  # Store the detected sync point
-        self.sync_time = None    # Store the time of the sync point
         self._header_info = None  # Cache for raw header info
 
     def validate_file(self) -> dict:
@@ -122,6 +119,7 @@ class EDFParser:
             raise EDFFileError(validation['error'])
 
         try:
+            import mne
             # Suppress MNE's verbose output
             with mne.utils.use_log_level('WARNING'):
                 self.raw = mne.io.read_raw_edf(str(self.edf_path), preload=True)
@@ -238,6 +236,7 @@ class EDFParser:
         start_sample = max(0, start_sample)
 
         if ch_names:
+            import mne
             # Ensure requested channels exist
             ch_names = [ch for ch in ch_names if ch in self.raw.ch_names]
             sel = mne.pick_channels(self.raw.ch_names, include=ch_names)
@@ -248,91 +247,127 @@ class EDFParser:
 
         return data, times
 
-    def find_sync_point(self, stimulus_csv_path: str, threshold_std: float = 3, search_duration: float = 300) -> None:        
-        """
-        Finds the approximate start of the first command trial by detecting an audio artifact.
-        Parameters:
-        - stimulus_csv_path: Path to the stimulus CSV file.
-        - threshold_std: Threshold for artifact detection (multiplier for std).
-        - search_duration: Max time (seconds) from EDF start to search for the artifact.
+    def detect_sync_pulse(self, ch_name: str = 'DC7',
+                          threshold_std: float = 5.0) -> Optional[dict]:
+        """Detect the sync pulse in a single channel by amplitude envelope.
+
+        The sync pulse is a 100 Hz square wave, ~1 second long (SyncPulseParams),
+        played through the audio output and picked up on a DC channel (typically DC7).
+
+        Algorithm:
+          1. Remove the DC offset using the first 30 s of signal as a reference.
+             This is critical: DC channels carry a large (~5 mV) standing offset
+             that would otherwise dwarf the baseline standard deviation and make a
+             weak pulse nearly invisible to a std-multiplier threshold.
+          2. Compute a 50 ms boxcar amplitude envelope on the DC-removed signal.
+          3. Threshold = baseline_std * threshold_std  (baseline mean ≈ 0 after DC removal).
+          4. Find the first run of samples above threshold that lasts at least
+             40 % of SyncPulseParams.DURATION_MS — this rejects transient spikes.
+
+        Args:
+            ch_name: Channel to search (default 'DC7').
+            threshold_std: Multiplier on the DC-removed baseline std (default 3.0).
+
+        Returns:
+            dict with keys 'start_sec', 'end_sec', 'channel' if found, else None.
         """
         if self.raw is None:
             raise RuntimeError("EDF data not loaded. Call load_edf() first.")
 
-        logger.info(f"Attempting to find sync point using stimulus CSV: {stimulus_csv_path}")
+        from lib.constants import SyncPulseParams
 
-        try:
-            df = pd.read_csv(stimulus_csv_path)
-        except FileNotFoundError:
-            logger.error(f"Stimulus CSV file not found: {stimulus_csv_path}")
-            return
-        except Exception as e:
-            logger.error(f"Error reading stimulus CSV: {e}")
-            return
+        # ── Resolve channel ───────────────────────────────────────────────
+        ch_names_lower = [c.lower() for c in self.raw.ch_names]
+        if ch_name in self.raw.ch_names:
+            target = ch_name
+        elif ch_name.lower() in ch_names_lower:
+            target = self.raw.ch_names[ch_names_lower.index(ch_name.lower())]
+        else:
+            dc_chs = [c for c in self.raw.ch_names if c.upper().startswith('DC')]
+            if not dc_chs:
+                logger.warning(f"Channel '{ch_name}' not found and no DC channels available.")
+                return None
+            target = dc_chs[0]
+            logger.warning(f"Channel '{ch_name}' not found — using '{target}' instead.")
 
-        # Find the first command trial (in the order the rows appear in the CSV)
-        cmd_stim_types = ['right_command', 'right_command+p', 'left_command', 'left_command+p']
-        first_cmd_trial = df[df['stim_type'].isin(cmd_stim_types)].iloc[0] if not df[df['stim_type'].isin(cmd_stim_types)].empty else None
+        import mne
+        sfreq = self.raw.info['sfreq']
+        sel = mne.pick_channels(self.raw.ch_names, include=[target])
+        data, times = self.raw[sel, :]
+        signal = data[0]  # 1-D
 
-        if first_cmd_trial is None:
-            logger.warning("No command trials found in the stimulus CSV.")
-            self.sync_time = None
-            return
-        
-        original_index = df[df['stim_type'].isin(cmd_stim_types)].index.tolist()[0]
-        csv_row_number = original_index + 2 
+        # ── DC removal ────────────────────────────────────────────────────
+        # First 30 s (or 5 % of recording, whichever is shorter).
+        # Sync pulse always occurs well after the recording starts.
+        baseline_samples = min(int(30 * sfreq),
+                               max(int(0.05 * len(signal)), int(2 * sfreq)))
+        dc_offset = signal[:baseline_samples].mean()
+        centered = signal - dc_offset
 
-        if csv_row_number is not None:
-            logger.info(
-                f"This corresponds to the estimated start of the first command trial: "
-                f"{first_cmd_trial['stim_type']} (CSV row {csv_row_number})."
-            )
+        # ── Amplitude envelope (50 ms boxcar on DC-removed abs signal) ───
+        win = max(1, int(0.05 * sfreq))
+        envelope = np.convolve(np.abs(centered), np.ones(win) / win, mode='same')
 
-        # Search for the artifact in the EEG data from the beginning of the EDF
-        search_start_sec = 0
-        search_end_sec = min(search_duration, len(self.raw.times) / self.raw.info['sfreq'])
+        baseline_env = envelope[:baseline_samples]
+        # After DC removal the baseline mean is near 0; use only std for threshold
+        threshold = baseline_env.std() * threshold_std
 
-        logger.info(f"Searching for audio artifact in EDF from {search_start_sec}s to {search_end_sec}s.")
-
-        # Use channels likely to pick up audio artifacts (e.g., Fp1, Fp2)
-        frontal_chs = [ch for ch in ['Fp1', 'Fp2'] if ch in self.raw.ch_names]
-        if not frontal_chs:
-            frontal_chs = self.raw.ch_names[:3]  # Fallback
-            logger.warning(f"No Fp1/Fp2 found. Using first 3 channels for artifact detection: {frontal_chs}")
-
-        # Get data for the search window
-        start_sample_search = int(search_start_sec * self.raw.info['sfreq'])
-        end_sample_search = int(search_end_sec * self.raw.info['sfreq'])
-        data_search, times_search = self.raw[frontal_chs, start_sample_search:end_sample_search]
-
-        # Calculate amplitude envelope (mean absolute value across selected channels)
-        amp_env = np.abs(data_search).mean(axis=0)
-
-        # Calculate baseline noise level (e.g., first 10% of the search window)
-        baseline_len = max(1, int(0.1 * len(amp_env)))
-        baseline_amp = amp_env[:baseline_len]
-        baseline_mean = np.mean(baseline_amp)
-        baseline_std = np.std(baseline_amp)
-
-        # Define threshold
-        threshold = baseline_mean + threshold_std * baseline_std
-        logger.debug(f"Baseline mean: {baseline_mean:.2f}, std: {baseline_std:.2f}, threshold: {threshold:.2f}")
-
-        # Find points exceeding threshold
-        above_threshold = np.where(amp_env > threshold)[0]
-
-        if len(above_threshold) == 0:
-            logger.warning(f"No audio artifact detected above threshold ({threshold:.2f}) in the search window.")
-            self.sync_time = None
-            return
-
-        # Take the first point exceeding the threshold as the sync point
-        peak_idx_in_search = above_threshold[0]
-        self.sync_sample = start_sample_search + peak_idx_in_search
-        self.sync_time = self.sync_sample / self.raw.info['sfreq']
-
-        logger.info(f"Sync point detected at sample {self.sync_sample}, time {self.sync_time:.3f}s in EDF.")
-        logger.info(
-            f"This corresponds to the estimated start of the first command trial: "
-            f"{first_cmd_trial['stim_type']} (CSV row {csv_row_number})."
+        logger.debug(
+            f"Sync detection on '{target}': DC offset={dc_offset*1e6:.1f} µV, "
+            f"baseline std={baseline_env.std()*1e6:.1f} µV, "
+            f"threshold={threshold*1e6:.1f} µV ({threshold_std}× std)"
         )
+
+        above = envelope > threshold
+        if not above.any():
+            logger.warning(
+                f"No signal above threshold ({threshold*1e6:.1f} µV) on '{target}'.")
+            return None
+
+        # ── Collect all sustained runs above threshold ────────────────────
+        # Require each run to last at least 40 % of the pulse duration.
+        # DC channels can carry brief noise bursts of similar amplitude to a
+        # weak sync pulse, so we first gather ALL qualifying runs, then keep
+        # only those whose peak is within 30 % of the strongest qualifying run
+        # (the sync pulse is designed to be the dominant signal on this channel).
+        min_run = int(0.4 * (SyncPulseParams.DURATION_MS / 1000.0) * sfreq)
+
+        diffs = np.diff(above.astype(np.int8))
+        run_starts = np.where(diffs == 1)[0] + 1
+        run_ends   = np.where(diffs == -1)[0] + 1
+        if above[0]:
+            run_starts = np.concatenate([[0], run_starts])
+        if above[-1]:
+            run_ends = np.concatenate([run_ends, [len(above)]])
+
+        qualifying = [(int(s), int(e))
+                      for s, e in zip(run_starts, run_ends)
+                      if (e - s) >= min_run]
+
+        if not qualifying:
+            logger.warning(f"No sustained sync pulse found on '{target}'.")
+            return None
+
+        # Among qualifying runs, the sync pulse has the largest peak envelope.
+        # Keep only runs whose peak is ≥ 30 % of the strongest run's peak, then
+        # take the earliest — this selects the first sync pulse if multiple exist
+        # while rejecting lower-amplitude noise bursts that happen to be long.
+        peaks      = [float(envelope[s:e].max()) for s, e in qualifying]
+        global_max = max(peaks)
+        strong     = [(s, e) for (s, e), p in zip(qualifying, peaks)
+                      if p >= 0.30 * global_max]
+
+        if not strong:
+            logger.warning(f"No high-amplitude sustained event found on '{target}'.")
+            return None
+
+        onset_idx = strong[0][0]
+        start_sec = float(times[onset_idx])
+        end_sec   = start_sec + SyncPulseParams.DURATION_MS / 1000.0
+
+        logger.info(
+            f"Sync pulse detected on '{target}': {start_sec:.3f}s – {end_sec:.3f}s "
+            f"(peak={global_max*1e6:.0f} µV, threshold={threshold*1e6:.0f} µV, "
+            f"{len(qualifying)} qualifying runs, {len(strong)} above 30 % of peak)"
+        )
+        return {'start_sec': start_sec, 'end_sec': end_sec, 'channel': target}

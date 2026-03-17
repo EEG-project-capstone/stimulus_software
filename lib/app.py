@@ -538,97 +538,79 @@ class TkApp:
     
     def _update_analysis_ui(self):
         """Update analysis UI based on file selections."""
-        if self.analysis_files.ready:
+        both_ready = self.analysis_files.ready
+        if both_ready:
             self.submit_btn.config(state='normal')
-        else:
-            self.submit_btn.config(state='disabled')
-
-        # Enable Parse EDF / View EDF buttons if EDF is selected (doesn't need CSV)
-        if self.analysis_files.edf_path is not None:
-            self.parse_edf_btn.config(state='normal')
             self.view_edf_btn.config(state='normal')
         else:
-            self.parse_edf_btn.config(state='disabled')
+            self.submit_btn.config(state='disabled')
             self.view_edf_btn.config(state='disabled')
     
     def confirm_file_selection(self):
-        """Confirm selected files for analysis."""
+        """Confirm selected files for analysis, auto-parse EDF, and populate info panels."""
         if not self.analysis_files.ready:
             logger.warning("Confirm files pressed but files not ready")
             return
 
-        # Explicit None checks for type narrowing
         if self.analysis_files.stimulus_path is None or self.analysis_files.edf_path is None:
             logger.error("Files were not ready despite ready check - this should not happen")
             return
 
-        logger.info(f"Files confirmed for analysis - "
-                   f"Stimulus: {self.analysis_files.stimulus_path.name}, "
-                   f"EDF: {self.analysis_files.edf_path.name}")
+        stim_path = self.analysis_files.stimulus_path
+        edf_path  = self.analysis_files.edf_path
+        logger.info(f"Files confirmed — Stimulus: {stim_path.name}, EDF: {edf_path.name}")
 
-        # Update UI labels
-        self.official_stimulus_label.config(
-            text=self.analysis_files.stimulus_path.name,
-            foreground="green"
-        )
-        self.official_edf_label.config(
-            text=self.analysis_files.edf_path.name,
-            foreground="green"
-        )
-        
-        # Load session data
-        self.load_session_data_from_csv(self.analysis_files.stimulus_path)
-    
-    def load_session_data_from_csv(self, filepath: Path):
-        """Load stimulus sequence and session log from CSV.
-        
-        Args:
-            filepath: Path to stimulus results CSV
-        """
-        logger.info(f"Loading session data from: {filepath}")
-        
-        # Clear previous data
-        for item in self.patient_info_stim_tree.get_children():
-            self.patient_info_stim_tree.delete(item)
-        
-        self.patient_info_notes_text.config(state="normal")
-        self.patient_info_notes_text.delete(1.0, tk.END)
-        
+        self.official_stimulus_label.config(text=stim_path.name, foreground="green")
+        self.official_edf_label.config(text=edf_path.name, foreground="green")
+
+        self._show_csv_info(stim_path)
+        self.parse_edf()
+
+    def _show_csv_info(self, filepath: Path):
+        """Populate the CSV info panel with stats and session notes."""
+        import pandas as pd
+        lines = []
         try:
-            # Use results manager to parse file
-            stimuli = self.results_manager.get_stimulus_sequence(filepath)
-            logs = self.results_manager.get_session_log(filepath)
-            
-            # Populate stimulus tree
-            for stim in stimuli:
-                stim_type = stim['type']
-                display_type = STIMULUS_TYPE_DISPLAY_NAMES.get(
-                    stim_type, 
-                    stim_type.replace('_', ' ').title()
-                )
-                self.patient_info_stim_tree.insert(
-                    '', 'end', 
-                    values=(display_type, "Completed"), 
-                    tags=('completed',)
-                )
-            
-            # Populate logs
-            for log in logs:
-                self.patient_info_notes_text.insert(tk.END, f"{log}\n")
-            
-            self.patient_info_notes_text.config(state="disabled")
-            
-            if logs:
-                self.patient_info_notes_text.see(tk.END)
-            
-            logger.info(f"Session data loaded: {len(stimuli)} stimuli, "
-                       f"{len(logs)} log entries")
-            
+            df = pd.read_csv(filepath)
+            patient_id = (df['patient_id'].dropna().iloc[0]
+                          if 'patient_id' in df.columns and not df.empty else 'unknown')
+
+            log_types  = {'session_note', 'manual_sync_pulse', 'sync_detection'}
+            stim_rows  = df[~df['stim_type'].isin(log_types)] if 'stim_type' in df.columns else df
+            note_rows  = df[df['stim_type'].isin(log_types)]  if 'stim_type' in df.columns else pd.DataFrame()
+
+            lines = [
+                f"Patient:    {patient_id}",
+                f"Stimuli:    {len(stim_rows)}",
+                f"Total rows: {len(df)}",
+            ]
+            if 'date' in df.columns:
+                dates = df['date'].dropna().unique()
+                lines.append(f"Date(s):    {', '.join(str(d) for d in dates[:3])}")
+
+            if 'stim_type' in df.columns:
+                lines.append("")
+                lines.append("── Stimulus counts ──────────────")
+                for t, c in stim_rows['stim_type'].value_counts().items():
+                    lines.append(f"  {t}: {c}")
+
+            if not note_rows.empty:
+                lines.append("")
+                lines.append("── Session notes ────────────────")
+                for _, row in note_rows.iterrows():
+                    stype = row.get('stim_type', '')
+                    note  = row.get('notes', '')
+                    t     = row.get('start_time', '')
+                    lines.append(f"  [{stype}]  {note}  {t}")
+
         except Exception as e:
-            logger.error(f"Could not load session data from {filepath}: {e}", 
-                        exc_info=True)
-            messagebox.showerror("Load Error", 
-                               f"Could not load session data:\n{e}")
+            lines = [f"Could not read CSV:\n{e}"]
+
+        self.csv_info_text.config(state='normal')
+        self.csv_info_text.delete('1.0', tk.END)
+        self.csv_info_text.insert(tk.END, '\n'.join(lines))
+        self.csv_info_text.config(state='disabled')
+    
     
     def populate_stim_list(self):
         """Populate the stimulus list Treeview."""
@@ -775,72 +757,72 @@ class TkApp:
             self.edf_combo.set("Select an EDF file...")
         else:
             self.edf_combo.set("No EDF files found")
-    
+
+    def _refresh_edf_options(self):
+        """Refresh EDF file list when the dropdown is opened."""
+        edf_files = []
+        if FilePaths.EDFS_DIR.exists():
+            edf_files = sorted([f.name for f in FilePaths.EDFS_DIR.iterdir()
+                                if f.suffix.lower() == '.edf'])
+        current = self.edf_combo.get()
+        self.edf_combo['values'] = edf_files
+        if current not in edf_files:
+            self.edf_combo.set("Select an EDF file..." if edf_files else "No EDF files found")
+
+    def _refresh_stimulus_options(self):
+        """Refresh stimulus CSV list when the dropdown is opened."""
+        stim_files = []
+        if FilePaths.RESULTS_DIR.exists():
+            stim_files = sorted([f.name for f in FilePaths.RESULTS_DIR.glob('*.csv')])
+        current = self.stimulus_combo.get()
+        self.stimulus_combo['values'] = stim_files
+        if current not in stim_files:
+            self.stimulus_combo.set("Select a stimulus file..." if stim_files else "No CSV files found")
+
     def parse_edf(self):
-        """Parse the selected EDF file and display its information in session log."""
+        """Parse the confirmed EDF file and display info in the EDF info panel."""
         if self.analysis_files.edf_path is None:
-            messagebox.showwarning("No EDF Selected",
-                                   "Please select an EDF file first.")
             return
 
         edf_path = self.analysis_files.edf_path
         logger.info(f"Parsing EDF file: {edf_path}")
+
+        def _set(text):
+            self.edf_info_text.config(state='normal')
+            self.edf_info_text.delete('1.0', tk.END)
+            self.edf_info_text.insert(tk.END, text)
+            self.edf_info_text.config(state='disabled')
 
         try:
             parser = EDFParser(str(edf_path))
             parser.load_edf()
             info = parser.get_info_summary()
 
-            # Build info text
             n_channels = len(info['ch_names'])
             duration_sec = info['duration']
-            hours = int(duration_sec // 3600)
+            hours   = int(duration_sec // 3600)
             minutes = int((duration_sec % 3600) // 60)
             seconds = duration_sec % 60
 
-            info_lines = [
-                f"{'=' * 40}",
-                f"EDF FILE INFO",
-                f"{'=' * 40}",
-                f"File: {edf_path.name}",
-                f"",
-                f"--- Recording Info ---",
-                f"Duration: {duration_sec:.1f} seconds",
-                f"         ({hours}h {minutes}m {seconds:.1f}s)",
-                f"Sample Rate: {info['sfreq']} Hz",
-                f"Total Samples: {info['n_times']:,}",
+            lines = [
+                f"Duration:  {hours}h {minutes}m {seconds:.1f}s",
+                f"           ({duration_sec:.1f} s total)",
+                f"Sfreq:     {info['sfreq']} Hz",
+                f"Samples:   {info['n_times']:,}",
             ]
-
-            # Add measurement date if available
             if info.get('meas_date'):
-                info_lines.append(f"Recording Date: {info['meas_date']}")
-
-            info_lines.extend([
-                f"",
-                f"--- Channels ({n_channels} total) ---",
-            ])
-
-            # List all channels, formatted in columns
+                lines.append(f"Recorded:  {info['meas_date']}")
+            lines.append(f"Channels ({n_channels}):")
             ch_names = info['ch_names']
-            cols = 4  # Number of columns
-            for i in range(0, len(ch_names), cols):
-                row_channels = ch_names[i:i + cols]
-                row_str = "  ".join(f"{ch:<12}" for ch in row_channels)
-                info_lines.append(row_str)
+            for i in range(0, len(ch_names), 4):
+                lines.append("  " + "  ".join(f"{c:<10}" for c in ch_names[i:i+4]))
 
-            info_lines.append(f"{'=' * 40}")
-
-            # Display in session log
-            self.patient_info_notes_text.config(state="normal")
-            self.patient_info_notes_text.delete(1.0, tk.END)
-            self.patient_info_notes_text.insert(tk.END, "\n".join(info_lines) + "\n")
-            self.patient_info_notes_text.config(state="disabled")
-
-            logger.info(f"EDF parsed successfully: {n_channels} channels, "
-                       f"{info['duration']:.1f}s duration")
+            _set('\n'.join(lines))
+            logger.info(f"EDF parsed: {n_channels} channels, {duration_sec:.1f}s")
 
         except Exception as e:
             logger.error(f"Failed to parse EDF file: {e}", exc_info=True)
+            _set(f"Parse error:\n{e}")
             messagebox.showerror("EDF Parse Error", f"Failed to parse EDF file:\n{e}")
 
     def view_edf(self):
@@ -856,7 +838,8 @@ class TkApp:
         try:
             parser = EDFParser(str(edf_path))
             parser.load_edf()
-            EDFViewerWindow(self.root, parser)
+            EDFViewerWindow(self.root, parser,
+                            stimulus_path=self.analysis_files.stimulus_path)
         except Exception as e:
             logger.error(f"Failed to open EDF viewer: {e}", exc_info=True)
             messagebox.showerror("EDF Viewer Error",
@@ -1165,7 +1148,6 @@ class TkApp:
         self._build_file_selection(main_frame)
         self._build_action_buttons(main_frame)
         self._build_confirmed_files(main_frame)
-        self._build_viewer(main_frame)
     
     def _build_file_selection(self, parent):
         """Build file selection dropdowns."""
@@ -1173,12 +1155,16 @@ class TkApp:
         frame.pack(fill='x', padx=5, pady=5)
         
         # Stimulus CSV dropdown
-        self.stimulus_combo = ttk.Combobox(frame, state="readonly", width=50)
+        self.stimulus_combo = ttk.Combobox(
+            frame, state="readonly", width=50,
+            postcommand=self._refresh_stimulus_options)
         self.stimulus_combo.pack(side='top', fill='x', pady=2)
         self.stimulus_combo.bind("<<ComboboxSelected>>", self.on_stimulus_selected)
-        
+
         # EDF dropdown
-        self.edf_combo = ttk.Combobox(frame, state="readonly", width=50)
+        self.edf_combo = ttk.Combobox(
+            frame, state="readonly", width=50,
+            postcommand=self._refresh_edf_options)
         self.edf_combo.pack(side='top', fill='x', pady=2)
         self.edf_combo.bind("<<ComboboxSelected>>", self.on_edf_selected)
     
@@ -1186,7 +1172,7 @@ class TkApp:
         """Build action buttons."""
         frame = ttk.Frame(parent)
         frame.pack(fill='x', padx=5, pady=15)
-        
+
         self.submit_btn = ttk.Button(
             frame,
             text="Use Selected Files",
@@ -1194,14 +1180,6 @@ class TkApp:
             state="disabled"
         )
         self.submit_btn.pack(side='left', padx=(0, 5))
-        
-        self.parse_edf_btn = ttk.Button(
-            frame,
-            text="Parse EDF",
-            command=self.parse_edf,
-            state="disabled"
-        )
-        self.parse_edf_btn.pack(side='left', padx=(0, 5))
 
         self.view_edf_btn = ttk.Button(
             frame,
@@ -1212,74 +1190,47 @@ class TkApp:
         self.view_edf_btn.pack(side='left', padx=(5, 0))
     
     def _build_confirmed_files(self, parent):
-        """Build confirmed files display."""
-        frame = ttk.LabelFrame(
+        """Build confirmed files display with side-by-side info panels."""
+        outer = ttk.LabelFrame(
             parent,
-            text="Currently Confirmed Files for Analysis",
-            padding="10"
+            text="Confirmed Files for Analysis",
+            padding="8"
         )
-        frame.pack(fill='x', padx=5, pady=5)
-        
-        # Stimulus label
-        stim_frame = ttk.Frame(frame)
-        stim_frame.pack(fill='x', pady=2)
-        ttk.Label(stim_frame, text="Stimulus CSV:").pack(side='left', padx=(0, 5))
-        self.official_stimulus_label = ttk.Label(stim_frame, text="None", 
-                                                 foreground="red")
-        self.official_stimulus_label.pack(side='left')
-        
-        # EDF label
-        edf_frame = ttk.Frame(frame)
-        edf_frame.pack(fill='x', pady=2)
-        ttk.Label(edf_frame, text="EDF File:").pack(side='left', padx=(0, 5))
-        self.official_edf_label = ttk.Label(edf_frame, text="None", 
-                                            foreground="red")
-        self.official_edf_label.pack(side='left')
+        outer.pack(fill='both', expand=True, padx=5, pady=5)
+        outer.grid_columnconfigure(0, weight=1)
+        outer.grid_columnconfigure(1, weight=1)
+        outer.grid_rowconfigure(0, weight=1)
+
+        # ── Stimulus CSV panel ─────────────────────────
+        csv_frame = ttk.LabelFrame(outer, text="Stimulus CSV", padding="6")
+        csv_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
+        csv_frame.grid_columnconfigure(0, weight=1)
+        csv_frame.grid_rowconfigure(1, weight=1)
+
+        self.official_stimulus_label = ttk.Label(
+            csv_frame, text="None selected", foreground="red", anchor='w')
+        self.official_stimulus_label.grid(row=0, column=0, sticky='ew', pady=(0, 4))
+
+        self.csv_info_text = tk.Text(
+            csv_frame, height=16, state='disabled',
+            font=('TkFixedFont', 9), wrap='word')
+        self.csv_info_text.grid(row=1, column=0, sticky='nsew')
+
+        # ── EDF panel ──────────────────────────────────
+        edf_frame = ttk.LabelFrame(outer, text="EDF File", padding="6")
+        edf_frame.grid(row=0, column=1, sticky='nsew', padx=(4, 0))
+        edf_frame.grid_columnconfigure(0, weight=1)
+        edf_frame.grid_rowconfigure(1, weight=1)
+
+        self.official_edf_label = ttk.Label(
+            edf_frame, text="None selected", foreground="red", anchor='w')
+        self.official_edf_label.grid(row=0, column=0, sticky='ew', pady=(0, 4))
+
+        self.edf_info_text = tk.Text(
+            edf_frame, height=16, state='disabled',
+            font=('TkFixedFont', 9), wrap='word')
+        self.edf_info_text.grid(row=1, column=0, sticky='nsew')
     
-    def _build_viewer(self, parent):
-        """Build stimulus list and notes viewer."""
-        container = ttk.Frame(parent)
-        container.pack(fill='both', expand=True, pady=10)
-        container.grid_columnconfigure(0, weight=1)
-        container.grid_rowconfigure(0, weight=1)
-        
-        # Stimulus list
-        self._build_stimulus_viewer(container)
-        
-        # Notes viewer
-        self._build_notes_viewer(container)
-    
-    def _build_stimulus_viewer(self, parent):
-        """Build stimulus sequence viewer."""
-        frame = ttk.LabelFrame(parent, text="Stimulus Sequence")
-        frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_rowconfigure(0, weight=1)
-        
-        self.patient_info_stim_tree = ttk.Treeview(
-            frame,
-            columns=('Type', 'Status'),
-            show='headings',
-            height=10
-        )
-        
-        self.patient_info_stim_tree.heading('Type', text='Stimulus Type')
-        self.patient_info_stim_tree.heading('Status', text='Status')
-        self.patient_info_stim_tree.column('Type', width=150)
-        self.patient_info_stim_tree.column('Status', width=100)
-        self.patient_info_stim_tree.tag_configure('completed', foreground='green')
-        
-        self.patient_info_stim_tree.pack(fill='both', expand=True, padx=5, pady=5)
-    
-    def _build_notes_viewer(self, parent):
-        """Build session log viewer."""
-        frame = ttk.LabelFrame(parent, text="Session Log")
-        frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_rowconfigure(0, weight=1)
-        
-        self.patient_info_notes_text = tk.Text(frame, height=10, state="disabled")
-        self.patient_info_notes_text.pack(fill='both', expand=True, padx=5, pady=5)
 
     def cleanup(self):
         """Clean up resources before closing the application."""

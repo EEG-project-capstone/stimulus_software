@@ -114,7 +114,7 @@ class AudioStreamManager:
             self._stream = None
         if stream is not None:
             try:
-                stream.stop()
+                stream.abort()   # Non-blocking; does not wait for callback thread
                 stream.close()
                 logger.info("Persistent audio stream closed")
             except Exception as e:
