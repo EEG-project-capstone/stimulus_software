@@ -14,7 +14,8 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends._backend_tk import NavigationToolbar2Tk
 import numpy as np
 from scipy.signal import iirnotch, filtfilt
 
@@ -68,10 +69,10 @@ class EDFViewerWindow:
         self.meas_date = self.info.get('meas_date')
 
         # Channel visibility: {name: BooleanVar}
-        self.ch_vars = {}
+        self.ch_vars: dict[str, tk.BooleanVar] = {}
 
         # Notch filter toggles (Hz -> BooleanVar)
-        self.notch_vars = {}
+        self.notch_vars: dict[int, tk.BooleanVar] = {}
 
         # Clock time vs relative time toggle
         self.use_clock_time = tk.BooleanVar(value=True)
@@ -117,13 +118,6 @@ class EDFViewerWindow:
         ttk.Label(frame, text="Channels", font=('TkDefaultFont', 11, 'bold')).pack(
             pady=(8, 4))
 
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill='x', padx=5)
-        ttk.Button(btn_frame, text="All", width=6,
-                   command=self._select_all).pack(side='left', padx=2)
-        ttk.Button(btn_frame, text="None", width=6,
-                   command=self._deselect_all).pack(side='left', padx=2)
-
         # Scrollable checkbox list
         self._ch_canvas = tk.Canvas(frame, width=160, highlightthickness=0)
         scrollbar = ttk.Scrollbar(frame, orient='vertical',
@@ -166,16 +160,6 @@ class EDFViewerWindow:
             cb.bind('<MouseWheel>', _on_ch_scroll)
             cb.bind('<Button-4>', _on_ch_scroll)
             cb.bind('<Button-5>', _on_ch_scroll)
-
-    def _select_all(self):
-        for var in self.ch_vars.values():
-            var.set(True)
-        self._update_plot()
-
-    def _deselect_all(self):
-        for var in self.ch_vars.values():
-            var.set(False)
-        self._update_plot()
 
     # ── Plot area ──────────────────────────────────────────────────
 
@@ -433,12 +417,13 @@ class EDFViewerWindow:
                 parent=self.win)
             return
 
-        self.sync_time_sec = result['start_sec']
+        sync_time: float = result['start_sec']
+        self.sync_time_sec = sync_time
         self.sync_end_sec = result['end_sec']
 
         # Jump viewer to the sync pulse
         max_t = max(0.0, self.total_duration - self.window_sec)
-        self.t0 = max(0.0, min(self.sync_time_sec - self.window_sec / 2, max_t))
+        self.t0 = max(0.0, min(sync_time - self.window_sec / 2, max_t))
         self.time_slider.set(self.t0)
 
         # Save to CSV
@@ -461,6 +446,8 @@ class EDFViewerWindow:
     def _save_sync_to_csv(self, start_sec: float, end_sec: float, channel: str):
         import pandas as pd
 
+        if self.stimulus_path is None:
+            raise ValueError("No stimulus CSV path configured")
         df = pd.read_csv(self.stimulus_path)
         patient_id = (df['patient_id'].dropna().iloc[0]
                       if not df.empty and 'patient_id' in df.columns
@@ -513,12 +500,13 @@ class EDFViewerWindow:
 
         n_ch = len(active)
         offsets = np.arange(n_ch) * self.scale_uv
-        colors = plt.cm.tab20(np.linspace(0, 1, max(n_ch, 1)))
+        colors = plt.cm.tab20(np.linspace(0, 1, max(n_ch, 1)))  # type: ignore[attr-defined]
 
         # X-axis: clock time or relative seconds
         if self.use_clock_time.get() and self.meas_date is not None:
+            meas_date = self.meas_date  # capture for closure; narrows type to non-None
             def _clock_fmt(x, pos):
-                t = self.meas_date + datetime.timedelta(seconds=float(x))
+                t = meas_date + datetime.timedelta(seconds=float(x))
                 return t.strftime('%H:%M:%S')
             xlabel = "Clock Time"
             self.ax.xaxis.set_major_formatter(

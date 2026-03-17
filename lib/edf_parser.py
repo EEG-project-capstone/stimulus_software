@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -15,16 +15,16 @@ logger = logging.getLogger('eeg_stimulus')
 class EDFParser:
     def __init__(self, edf_path: str) -> None:
         self.edf_path = Path(edf_path)
-        self.raw = None
-        self._header_info = None  # Cache for raw header info
+        self.raw: Optional[Any] = None
+        self._header_info: Optional[dict[str, Any]] = None  # Cache for raw header info
 
-    def validate_file(self) -> dict:
+    def validate_file(self) -> dict[str, Any]:
         """Validate the EDF file exists and has valid format.
 
         Returns:
             dict with validation results: {'valid': bool, 'error': str or None, 'header': dict or None}
         """
-        result = {'valid': False, 'error': None, 'header': None}
+        result: dict[str, Any] = {'valid': False, 'error': None, 'header': None}
 
         # Check file exists
         if not self.edf_path.exists():
@@ -64,7 +64,7 @@ class EDFParser:
 
         return result
 
-    def _read_edf_header(self) -> dict:
+    def _read_edf_header(self) -> dict[str, Any]:
         """Read and parse the EDF header without loading full data.
 
         Returns:
