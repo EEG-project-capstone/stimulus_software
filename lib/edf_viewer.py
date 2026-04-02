@@ -84,6 +84,9 @@ class EDFViewerWindow:
         # CSV stimulus events aligned to EDF time (populated after sync is known)
         self.stim_events: list = []
 
+        # EDF embedded annotations
+        self.edf_annotations: list = parser.get_annotations()
+
         self._build_ui()
         self._load_existing_sync()
         self._update_plot()
@@ -547,6 +550,18 @@ class EDFViewerWindow:
         if legend_seen:
             self.ax.legend(loc='upper right', fontsize=7, framealpha=0.8,
                            handlelength=1, borderpad=0.5)
+
+        # EDF embedded annotations
+        for ann in self.edf_annotations:
+            t = ann['onset']
+            if not (times[0] <= t <= times[-1]):
+                continue
+            desc = ann['description']
+            self.ax.axvline(t, color='#555555', linewidth=0.8,
+                            linestyle=':', alpha=0.7)
+            y_top = offsets[-1] + self.scale_uv * 0.85
+            self.ax.text(t, y_top, f' {desc}', color='#555555', fontsize=6,
+                         va='top', clip_on=True, rotation=90)
 
         # Sync pulse annotation — single marker line + subtle span
         if self.sync_time_sec is not None and times[0] <= self.sync_time_sec <= times[-1]:

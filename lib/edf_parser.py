@@ -166,6 +166,17 @@ class EDFParser:
 
         return summary
 
+    def get_annotations(self) -> list[dict]:
+        """Return EDF annotations as a list of dicts with onset, duration, description."""
+        if self.raw is None:
+            raise RuntimeError("EDF data not loaded. Call load_edf() first.")
+        return [
+            {'onset': float(ann['onset']),
+             'duration': float(ann['duration']),
+             'description': str(ann['description'])}
+            for ann in self.raw.annotations
+        ]
+
     def _format_duration(self, seconds: float) -> str:
         """Format duration in human-readable format."""
         hours = int(seconds // 3600)

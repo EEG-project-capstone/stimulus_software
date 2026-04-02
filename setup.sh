@@ -113,7 +113,14 @@ info "Using Python: $PYTHON ($($PYTHON --version))"
 
 # ── Create / update virtual environment ───────────────────────────────────────
 if [[ -d "$VENV_DIR" ]]; then
-  info "Virtual environment '${VENV_DIR}' already exists — updating..."
+  # Check if the venv's Python is still valid (can break after Homebrew upgrades)
+  if ! "$VENV_DIR/bin/python" --version &>/dev/null 2>&1; then
+    warn "Virtual environment is broken (Python interpreter missing) — recreating..."
+    rm -rf "$VENV_DIR"
+    "$PYTHON" -m venv "$VENV_DIR"
+  else
+    info "Virtual environment '${VENV_DIR}' already exists — updating..."
+  fi
 else
   info "Creating virtual environment in '${VENV_DIR}'..."
   "$PYTHON" -m venv "$VENV_DIR"
