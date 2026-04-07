@@ -289,37 +289,38 @@ class AuditoryStimulator:
         sync_time = time.time()
         logger.info(f"Sync pulse generated at time: {sync_time}")
 
-        # Play the sync pulse with completion callback
-        try:
-            callback = partial(self._handle_sync_pulse_complete, patient_id, sync_time)
+        # Dedicated per-call holder for the DAC onset time.
+        # Using a closure avoids searching current_stim_sentences, which is shared
+        # across calls and could return a stale value from a previous sync pulse.
+        dac_holder: list = [None]
 
-            self.play_audio(
+        def on_onset(dac_time: Optional[float]) -> None:
+            dac_holder[0] = dac_time
+
+        try:
+            self.stream_manager.play(
                 samples=sync_pulse,
                 sample_rate=SyncPulseParams.SAMPLE_RATE,
-                callback=callback,
-                log_label="sync_pulse"
+                on_finish=lambda: self._schedule(
+                    10, lambda: self._handle_sync_pulse_complete(
+                        patient_id, sync_time, dac_holder[0])),
+                on_onset=on_onset,
             )
         except AudioError as e:
             logger.error(f"Failed to play sync pulse: {e}")
             self.gui_callback.playback_error(f"Sync pulse failed: {e}")
 
-    def _handle_sync_pulse_complete(self, patient_id: str, sync_time: float):
+    def _handle_sync_pulse_complete(self, patient_id: str, sync_time: float,
+                                    sync_dac_time: Optional[float]) -> None:
         """Handle completion of sync pulse playback.
 
         Args:
             patient_id: Patient identifier
-            sync_time: Timestamp of sync pulse
+            sync_time: Wall-clock timestamp of sync pulse (for notes)
+            sync_dac_time: PortAudio DAC onset time, or None if unavailable
         """
         logger.info("Sync pulse playback completed")
-
         try:
-            # Extract the DAC onset time written by on_onset during playback
-            sync_event = next(
-                (e for e in reversed(self.current_stim_sentences) if e.get('event') == 'sync_pulse'),
-                None
-            )
-            sync_dac_time = sync_event.get('dac_onset_time') if sync_event else None
-
             self.results_manager.append_sync_pulse(patient_id, sync_time, sync_dac_time)
             logger.info("Sync pulse event saved successfully")
         except Exception as e:

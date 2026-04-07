@@ -585,8 +585,10 @@ class TkApp:
                 f"Total rows: {len(df)}",
             ]
             if 'date' in df.columns:
-                dates = df['date'].dropna().unique()
-                lines.append(f"Date(s):    {', '.join(str(d) for d in dates[:3])}")
+                # Use only stimulus rows for the date — log rows (sync_detection etc.)
+                # may be written on a different day and would add spurious dates.
+                dates = stim_rows['date'].dropna().unique() if not stim_rows.empty else df['date'].dropna().unique()
+                lines.append(f"Date:       {', '.join(str(d) for d in dates[:3])}")
 
             if 'stim_type' in df.columns:
                 lines.append("")
@@ -807,7 +809,7 @@ class TkApp:
             lines = [
                 f"Duration:  {hours}h {minutes}m {seconds:.1f}s",
                 f"           ({duration_sec:.1f} s total)",
-                f"Sfreq:     {info['sfreq']} Hz",
+                f"Sampling:  {info['sfreq']} Hz",
                 f"Samples:   {info['n_times']:,}",
             ]
             if info.get('meas_date'):

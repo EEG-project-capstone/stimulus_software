@@ -120,11 +120,18 @@ class EDFParser:
 
         try:
             import mne
-            # Suppress MNE's verbose output
-            with mne.utils.use_log_level('WARNING'):
-                self.raw = mne.io.read_raw_edf(str(self.edf_path), preload=True)
+            import warnings
+            # preload=False memory-maps the file — samples are read from disk on demand
+            # rather than loading the entire recording into RAM upfront.
+            with mne.utils.use_log_level('ERROR'), \
+                 warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore',
+                    message='Omitted.*annotation.*outside data range',
+                    category=RuntimeWarning)
+                self.raw = mne.io.read_raw_edf(str(self.edf_path), preload=False)
             logger.info(f"Loaded raw data with {len(self.raw.ch_names)} channels, "
-                       f"sfreq={self.raw.info['sfreq']} Hz")
+                       f"sampling rate={self.raw.info['sfreq']} Hz")
         except Exception as e:
             raise EDFFileError(f"Failed to load EDF with MNE: {e}") from e
 
@@ -341,7 +348,7 @@ class EDFParser:
         # weak sync pulse, so we first gather ALL qualifying runs, then keep
         # only those whose peak is within 30 % of the strongest qualifying run
         # (the sync pulse is designed to be the dominant signal on this channel).
-        min_run = int(0.4 * (SyncPulseParams.DURATION_MS / 1000.0) * sfreq)
+        min_run = int(0.2 * (SyncPulseParams.DURATION_MS / 1000.0) * sfreq)
 
         diffs = np.diff(above.astype(np.int8))
         run_starts = np.where(diffs == 1)[0] + 1
@@ -359,26 +366,32 @@ class EDFParser:
             logger.warning(f"No sustained sync pulse found on '{target}'.")
             return None
 
-        # Among qualifying runs, the sync pulse has the largest peak envelope.
-        # Keep only runs whose peak is ≥ 30 % of the strongest run's peak, then
-        # take the earliest — this selects the first sync pulse if multiple exist
-        # while rejecting lower-amplitude noise bursts that happen to be long.
+        # Among qualifying runs, keep those whose peak is ≥ 5 % of the strongest.
+        # The duration gate (min_run) already filters noise — any run that sustains
+        # above threshold for 40 % of the pulse duration is almost certainly a real
+        # sync pulse, even if stunted. The 5 % floor just excludes near-zero outliers.
         peaks      = [float(envelope[s:e].max()) for s, e in qualifying]
         global_max = max(peaks)
         strong     = [(s, e) for (s, e), p in zip(qualifying, peaks)
-                      if p >= 0.30 * global_max]
+                      if p >= 0.05 * global_max]
 
         if not strong:
             logger.warning(f"No high-amplitude sustained event found on '{target}'.")
             return None
 
-        onset_idx = strong[0][0]
-        start_sec = float(times[onset_idx])
-        end_sec   = start_sec + SyncPulseParams.DURATION_MS / 1000.0
+        candidates = []
+        for s, e in strong:
+            t_start = float(times[s])
+            candidates.append({
+                'start_sec': t_start,
+                'end_sec': t_start + SyncPulseParams.DURATION_MS / 1000.0,
+                'channel': target,
+            })
 
         logger.info(
-            f"Sync pulse detected on '{target}': {start_sec:.3f}s – {end_sec:.3f}s "
+            f"Sync pulse detected on '{target}': {candidates[0]['start_sec']:.3f}s – {candidates[0]['end_sec']:.3f}s "
             f"(peak={global_max*1e6:.0f} µV, threshold={threshold*1e6:.0f} µV, "
             f"{len(qualifying)} qualifying runs, {len(strong)} above 30 % of peak)"
         )
-        return {'start_sec': start_sec, 'end_sec': end_sec, 'channel': target}
+        return {'start_sec': candidates[0]['start_sec'], 'end_sec': candidates[0]['end_sec'],
+                'channel': target, 'candidates': candidates}

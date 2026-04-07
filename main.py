@@ -1,5 +1,6 @@
 # main.py
 
+import sys
 import tkinter as tk
 from lib.app import TkApp
 import logging
@@ -85,6 +86,7 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.error(f"Error during app cleanup: {e}", exc_info=True)
             root.destroy()
+            sys.exit(0)
 
         root.protocol("WM_DELETE_WINDOW", on_closing)
 

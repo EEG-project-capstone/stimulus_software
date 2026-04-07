@@ -40,26 +40,31 @@ STIM_COLORS = {
 DEFAULT_WINDOW_SEC = 300
 MIN_WINDOW_SEC = 1
 MAX_WINDOW_SEC = 3600
-DEFAULT_SCALE_UV = 50000  # microvolts per channel spacing
+DEFAULT_SCALE_UV = 50000  # microvolts per half-lane (±50000 µV fits in each channel lane)
 
 # Stepped presets for window (s) and scale (µV) — arrow buttons walk up/down these lists
 WINDOW_STEPS = [1, 2, 5, 10, 20, 30, 60, 120, 180, 300, 600, 1800, 3600]
-SCALE_STEPS  = [10, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000, 200000]
+SCALE_STEPS  = [10, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000]
 
 
 class EDFViewerWindow:
     """Toplevel window for interactive EDF viewing with channel selection."""
 
     def __init__(self, parent, parser: EDFParser,
-                 stimulus_path: Optional[Path] = None):
+                 stimulus_path: Optional[Path] = None,
+                 preselect_channels: Optional[list[str]] = None):
         self.parent = parent
         self.parser = parser
         self.stimulus_path = stimulus_path
         self.info = parser.get_info_summary()
 
         self.ch_names = self.info['ch_names']
-        self.sfreq = self.info['sfreq']
+        self.sampling_hz = self.info['sfreq']  # samples per second
         self.total_duration = self.info['duration']
+
+        # Channels to tick on by default. Caller can pass an explicit list;
+        # otherwise default to DC channels only (fast to render, contain sync pulse).
+        self._preselect = set(preselect_channels) if preselect_channels is not None else set()
 
         self.window_sec = DEFAULT_WINDOW_SEC
         self.t0 = 0.0
@@ -81,11 +86,25 @@ class EDFViewerWindow:
         self.sync_time_sec: Optional[float] = None
         self.sync_end_sec: Optional[float] = None
 
+        # EDF pulse candidates from auto-detection; index of the active one
+        self._sync_candidates: list = []
+        self._sync_candidate_idx: int = 0
+
+        # CSV manual_sync_pulse rows available for alignment; index of the active one
+        # Each entry: {'label': str, 'start_time': float}
+        self._csv_sync_rows: list = []
+        self._csv_sync_idx: int = 0
+
         # CSV stimulus events aligned to EDF time (populated after sync is known)
         self.stim_events: list = []
 
         # EDF embedded annotations
         self.edf_annotations: list = parser.get_annotations()
+
+        # Pending after() ID for debounced plot updates — cancelled and rescheduled
+        # on each slider/scroll event so the redraw only fires once the user stops.
+        self._plot_after_id: Optional[str] = None
+
 
         self._build_ui()
         self._load_existing_sync()
@@ -121,6 +140,18 @@ class EDFViewerWindow:
         ttk.Label(frame, text="Channels", font=('TkDefaultFont', 11, 'bold')).pack(
             pady=(8, 4))
 
+        # Filter entry: type to show only matching channels, comma-separated names to
+        # select them all at once (e.g. "DC7, EEG1" → ticks both and clears others)
+        filter_frame = ttk.Frame(frame)
+        filter_frame.pack(fill='x', padx=5, pady=(0, 4))
+        self._ch_filter_var = tk.StringVar()
+        filter_entry = ttk.Entry(filter_frame, textvariable=self._ch_filter_var, width=16)
+        filter_entry.pack(side='left', fill='x', expand=True)
+        filter_entry.bind('<Return>', self._on_ch_filter_enter)
+        self._ch_filter_var.trace_add('write', self._on_ch_filter_change)
+        ttk.Button(filter_frame, text="✕", width=2,
+                   command=self._clear_ch_filter).pack(side='left', padx=(2, 0))
+
         # Scrollable checkbox list
         self._ch_canvas = tk.Canvas(frame, width=160, highlightthickness=0)
         scrollbar = ttk.Scrollbar(frame, orient='vertical',
@@ -138,23 +169,25 @@ class EDFViewerWindow:
                               padx=(5, 0), pady=5)
         scrollbar.pack(side='right', fill='y', pady=5)
 
-        # Mouse-wheel scrolling (macOS / Windows use delta; Linux uses Button-4/5)
+        # Mouse-wheel / trackpad scrolling
+        # macOS trackpad sends fractional deltas; normalise to ±1 units per event.
         def _on_ch_scroll(event):
             if event.num == 4:
                 self._ch_canvas.yview_scroll(-1, 'units')
             elif event.num == 5:
                 self._ch_canvas.yview_scroll(1, 'units')
             elif event.delta:
-                self._ch_canvas.yview_scroll(
-                    -1 if event.delta > 0 else 1, 'units')
+                units = -1 if event.delta > 0 else 1
+                self._ch_canvas.yview_scroll(units, 'units')
 
         for widget in (self._ch_canvas, self._ch_inner):
             widget.bind('<MouseWheel>', _on_ch_scroll)
             widget.bind('<Button-4>', _on_ch_scroll)
             widget.bind('<Button-5>', _on_ch_scroll)
 
+        self._ch_checkboxes: dict[str, ttk.Checkbutton] = {}
         for name in self.ch_names:
-            var = tk.BooleanVar(value=False)
+            var = tk.BooleanVar(value=name in self._preselect)
             self.ch_vars[name] = var
             cb = ttk.Checkbutton(
                 self._ch_inner, text=name, variable=var,
@@ -163,8 +196,41 @@ class EDFViewerWindow:
             cb.bind('<MouseWheel>', _on_ch_scroll)
             cb.bind('<Button-4>', _on_ch_scroll)
             cb.bind('<Button-5>', _on_ch_scroll)
+            self._ch_checkboxes[name] = cb
 
     # ── Plot area ──────────────────────────────────────────────────
+
+    # ── Channel filter helpers ─────────────────────────────────────
+
+    def _on_ch_filter_change(self, *_):
+        """Show/hide checkboxes to match the filter text."""
+        text = self._ch_filter_var.get().strip().lower()
+        for name, cb in self._ch_checkboxes.items():
+            visible = not text or text in name.lower()
+            if visible:
+                cb.pack(anchor='w')
+            else:
+                cb.pack_forget()
+
+    def _on_ch_filter_enter(self, _event=None):
+        """On Enter: select exactly the comma-separated channels typed."""
+        raw = self._ch_filter_var.get()
+        names = {n.strip() for n in raw.split(',') if n.strip()}
+        # Case-insensitive match
+        lower_map = {n.lower(): n for n in self.ch_names}
+        matched = {lower_map[n.lower()] for n in names if n.lower() in lower_map}
+        if not matched:
+            return
+        for name, var in self.ch_vars.items():
+            var.set(name in matched)
+
+        self._clear_ch_filter()
+        self._update_plot()
+
+    def _clear_ch_filter(self):
+        self._ch_filter_var.set('')
+        for cb in self._ch_checkboxes.values():
+            cb.pack(anchor='w')
 
     def _build_plot_area(self, parent):
         self.fig, self.ax = plt.subplots(figsize=(12, 7))
@@ -175,97 +241,149 @@ class EDFViewerWindow:
         toolbar.update()
         self.canvas.get_tk_widget().pack(fill='both', expand=True)
 
-        # Mouse-wheel scrolls through time on the plot
+        # Mouse-wheel / trackpad scrolls through time on the plot.
+        # Trackpad fires many small-delta events; scale step by delta magnitude
+        # so a slow swipe moves slowly and a fast swipe moves quickly.
         def _on_plot_scroll(event):
-            if event.num == 4 or (event.delta and event.delta > 0):
-                direction = -1  # scroll back in time
+            if event.num == 4:
+                direction, magnitude = -1, 1
+            elif event.num == 5:
+                direction, magnitude = 1, 1
             else:
-                direction = 1   # scroll forward in time
-            step = max(1, self.window_sec // 4)
+                direction = -1 if event.delta > 0 else 1
+                # Normalise: standard wheel click = 120; trackpad sends smaller values
+                magnitude = max(1, abs(event.delta) / 120)
+            step = max(0.5, (self.window_sec / 20) * magnitude)
             new_t0 = max(0.0, min(self.t0 + direction * step,
                                   self.total_duration - self.window_sec))
             if new_t0 != self.t0:
                 self.t0 = new_t0
                 self.time_slider.set(self.t0)
-                self._update_plot()
+                self._schedule_update()
 
         self.canvas.get_tk_widget().bind('<MouseWheel>', _on_plot_scroll)
         self.canvas.get_tk_widget().bind('<Button-4>', _on_plot_scroll)
         self.canvas.get_tk_widget().bind('<Button-5>', _on_plot_scroll)
+        self.fig.canvas.mpl_connect('button_press_event', self._on_plot_click)
 
     # ── Controls ───────────────────────────────────────────────────
 
     def _build_controls(self, parent):
-        # Row 2: notch filters + clock time — pinned to bottom first
-        ctrl2 = ttk.Frame(parent)
-        ctrl2.pack(side='bottom', fill='x', padx=10, pady=(0, 4))
+        # ── Row 3 (bottom): sync controls ───────────────────────────
+        row3 = ttk.Frame(parent)
+        row3.pack(side='bottom', fill='x', padx=10, pady=(0, 4))
 
-        ttk.Label(ctrl2, text="Notch:").pack(side='left')
-        for freq in (60, 120, 180):
-            var = tk.BooleanVar(value=False)
-            self.notch_vars[freq] = var
-            ttk.Checkbutton(
-                ctrl2, text=f"{freq} Hz", variable=var,
-                command=self._update_plot
-            ).pack(side='left', padx=4)
+        dc_channels = [c for c in self.ch_names if c.upper().startswith('DC')]
+        self.sync_ch_combo = ttk.Combobox(
+            row3, width=6,
+            values=dc_channels if dc_channels else self.ch_names,
+            state='readonly', exportselection=False)
+        self.sync_ch_combo.pack(side='left', padx=(0, 2))
+        if dc_channels:
+            default_dc = 'DC7' if 'DC7' in dc_channels else dc_channels[0]
+            self.sync_ch_combo.set(default_dc)
+        else:
+            self.sync_ch_combo.current(0)
 
-        ttk.Separator(ctrl2, orient='vertical').pack(side='left', fill='y', padx=8)
+        ttk.Label(row3, text="Threshold:").pack(side='left', padx=(4, 2))
+        self.sync_threshold_entry = ttk.Entry(row3, width=4)
+        self.sync_threshold_entry.insert(0, "5.0")
+        self.sync_threshold_entry.pack(side='left', padx=(0, 4))
 
-        clock_cb = ttk.Checkbutton(
-            ctrl2, text="Clock Time", variable=self.use_clock_time,
-            command=self._update_plot)
-        clock_cb.pack(side='left', padx=4)
-        if self.meas_date is None:
-            clock_cb.config(state='disabled')
-
-        ttk.Separator(ctrl2, orient='vertical').pack(side='left', fill='y', padx=8)
-
-        self.sync_btn = ttk.Button(ctrl2, text="Detect Sync",
+        self.sync_btn = ttk.Button(row3, text="Detect Sync",
                                    command=self._detect_sync)
-        self.sync_btn.pack(side='left', padx=4)
+        self.sync_btn.pack(side='left', padx=(0, 2))
 
-        self.sync_status_label = ttk.Label(ctrl2, text="", foreground='green')
+        self.sync_next_btn = ttk.Button(row3, text="Next →",
+                                        command=self._next_sync_candidate,
+                                        state='disabled')
+        self.sync_next_btn.pack(side='left', padx=(0, 4))
+
+        self._click_sync_active = False
+        self.sync_click_btn = ttk.Button(row3, text="Set by Click",
+                                         command=self._toggle_click_sync)
+        self.sync_click_btn.pack(side='left', padx=(0, 4))
+
+        ttk.Separator(row3, orient='vertical').pack(side='left', fill='y', padx=8)
+
+        ttk.Label(row3, text="CSV:").pack(side='left', padx=(4, 2))
+        self.sync_csv_combo = ttk.Combobox(row3, width=18, state='disabled',
+                                           exportselection=False)
+        self.sync_csv_combo.bind('<<ComboboxSelected>>', self._on_csv_sync_select)
+        self.sync_csv_combo.pack(side='left', padx=(0, 4))
+
+        self.sync_remove_btn = ttk.Button(row3, text="Remove Sync",
+                                          command=self._remove_sync,
+                                          state='disabled')
+        self.sync_remove_btn.pack(side='left', padx=(0, 8))
+
+        self.sync_status_label = ttk.Label(row3, text="", foreground='green')
         self.sync_status_label.pack(side='left', padx=4)
 
-        # Row 1: time slider, window, scale — above row 2
-        ctrl = ttk.Frame(parent)
-        ctrl.pack(side='bottom', fill='x', padx=10, pady=(4, 0))
+        # ── Row 2: window size | amplitude scale | notch | clock time ──
+        row2 = ttk.Frame(parent)
+        row2.pack(side='bottom', fill='x', padx=10, pady=(0, 2))
 
-        # Time slider
-        ttk.Label(ctrl, text="Time (s):").pack(side='left')
-        max_t = max(0, self.total_duration - self.window_sec)
-        self.time_slider = tk.Scale(
-            ctrl, from_=0, to=max_t, orient=tk.HORIZONTAL,
-            resolution=1, command=self._on_scroll, length=400)
-        self.time_slider.pack(side='left', fill='x', expand=True, padx=(4, 10))
-
-        # Window size: [-] [entry] [+]  — steps through WINDOW_STEPS
-        ttk.Label(ctrl, text="Window (s):").pack(side='left')
-        ttk.Button(ctrl, text="−", width=2,
+        ttk.Label(row2, text="Window (s):").pack(side='left')
+        ttk.Button(row2, text="−", width=2,
                    command=self._window_decrease).pack(side='left', padx=2)
-        self.window_entry = ttk.Entry(ctrl, width=6)
+        self.window_entry = ttk.Entry(row2, width=6)
         self.window_entry.insert(0, str(self.window_sec))
         self.window_entry.bind('<Return>', lambda e: self._on_window_entry())
         self.window_entry.bind('<FocusOut>', lambda e: self._on_window_entry())
         self.window_entry.pack(side='left', padx=2)
-        ttk.Button(ctrl, text="+", width=2,
-                   command=self._window_increase).pack(side='left', padx=(2, 10))
+        ttk.Button(row2, text="+", width=2,
+                   command=self._window_increase).pack(side='left', padx=(2, 16))
 
-        # Amplitude scale: [-] [entry] [+]  — steps through SCALE_STEPS
-        ttk.Label(ctrl, text="Scale (µV):").pack(side='left')
-        ttk.Button(ctrl, text="−", width=2,
+        ttk.Label(row2, text="Scale (µV):").pack(side='left')
+        ttk.Button(row2, text="−", width=2,
                    command=self._scale_decrease).pack(side='left', padx=2)
-        self.scale_entry = ttk.Entry(ctrl, width=8)
+        self.scale_entry = ttk.Entry(row2, width=8)
         self.scale_entry.insert(0, str(self.scale_uv))
         self.scale_entry.bind('<Return>', lambda e: self._on_scale_entry())
         self.scale_entry.bind('<FocusOut>', lambda e: self._on_scale_entry())
         self.scale_entry.pack(side='left', padx=2)
-        ttk.Button(ctrl, text="+", width=2,
+        ttk.Button(row2, text="+", width=2,
                    command=self._scale_increase).pack(side='left', padx=2)
+
+        ttk.Separator(row2, orient='vertical').pack(side='left', fill='y', padx=10)
+
+        ttk.Label(row2, text="Notch:").pack(side='left')
+        for freq in (60, 120, 180):
+            var = tk.BooleanVar(value=False)
+            self.notch_vars[freq] = var
+            ttk.Checkbutton(row2, text=f"{freq} Hz", variable=var,
+                            command=self._update_plot).pack(side='left', padx=4)
+
+        ttk.Separator(row2, orient='vertical').pack(side='left', fill='y', padx=10)
+
+        clock_cb = ttk.Checkbutton(row2, text="Clock Time",
+                                   variable=self.use_clock_time,
+                                   command=self._update_plot)
+        clock_cb.pack(side='left', padx=4)
+        if self.meas_date is None:
+            clock_cb.config(state='disabled')
+
+        # ── Row 1: time slider (full width) ─────────────────────────
+        row1 = ttk.Frame(parent)
+        row1.pack(side='bottom', fill='x', padx=10, pady=(4, 2))
+
+        ttk.Label(row1, text="Time (s):").pack(side='left')
+        max_t = max(0, self.total_duration - self.window_sec)
+        self.time_slider = tk.Scale(
+            row1, from_=0, to=max_t, orient=tk.HORIZONTAL,
+            resolution=1, command=self._on_scroll)
+        self.time_slider.pack(side='left', fill='x', expand=True, padx=(4, 0))
 
     def _on_scroll(self, value):
         self.t0 = float(value)
-        self._update_plot()
+        self._schedule_update()
+
+    def _schedule_update(self, delay_ms: int = 50):
+        """Debounce: cancel any pending redraw and reschedule after delay_ms."""
+        if self._plot_after_id is not None:
+            self.win.after_cancel(self._plot_after_id)
+        self._plot_after_id = self.win.after(delay_ms, self._update_plot)
 
     # ── Window helpers ─────────────────────────────────────────────
 
@@ -323,22 +441,44 @@ class EDFViewerWindow:
 
     # ── Sync detection ─────────────────────────────────────────────
 
-    def _compute_stim_events(self):
+    def _load_csv_sync_rows(self, df) -> None:
+        """Populate _csv_sync_rows from a loaded CSV dataframe and update the combobox."""
+        import pandas as pd
+        rows = df[(df['stim_type'] == 'manual_sync_pulse') &
+                  df['start_time'].notna()].copy()
+        self._csv_sync_rows = []
+        labels = []
+        for i, (_, row) in enumerate(rows.iterrows()):
+            t = float(row['start_time'])
+            # Extract clock time from notes like "Manual sync pulse at 12:16:26"
+            notes = str(row.get('notes', ''))
+            time_str = notes.split(' at ')[-1].strip() if ' at ' in notes else f"t={t:.1f}s"
+            label = f"Pulse {i + 1}: {time_str} (t={t:.1f}s)"
+            self._csv_sync_rows.append({'label': label, 'start_time': t})
+            labels.append(label)
+
+        self.sync_csv_combo['values'] = labels
+        if labels:
+            self.sync_csv_combo.config(state='readonly')
+            self.sync_csv_combo.current(
+                min(self._csv_sync_idx, len(labels) - 1))
+        else:
+            self.sync_csv_combo.config(state='disabled')
+
+    def _compute_stim_events(self) -> None:
         """Align CSV stimulus events to EDF time using the sync pulse as reference."""
         self.stim_events = []
         if self.stimulus_path is None or self.sync_time_sec is None:
+            return
+        if not self._csv_sync_rows:
+            logger.warning("No manual_sync_pulse rows available — cannot align events")
             return
         try:
             import pandas as pd
             df = pd.read_csv(self.stimulus_path)
 
-            # Find the DAC timestamp of the sync pulse trigger
-            sync_rows = df[(df['stim_type'] == 'manual_sync_pulse') &
-                           df['start_time'].notna()]
-            if sync_rows.empty:
-                logger.warning("No manual_sync_pulse row found — cannot align events")
-                return
-            sync_dac_time = float(sync_rows.iloc[0]['start_time'])
+            idx = min(self._csv_sync_idx, len(self._csv_sync_rows) - 1)
+            sync_dac_time = self._csv_sync_rows[idx]['start_time']
             offset = self.sync_time_sec - sync_dac_time
 
             skip = {'manual_sync_pulse', 'sync_detection', 'session_note'}
@@ -362,11 +502,11 @@ class EDFViewerWindow:
                     continue
 
             logger.info(f"Aligned {len(self.stim_events)} stimulus events to EDF timeline "
-                        f"(offset={offset:.3f}s)")
+                        f"(offset={offset:.3f}s, csv_pulse_idx={idx})")
         except Exception as e:
             logger.warning(f"Could not compute stim events: {e}")
 
-    def _load_existing_sync(self):
+    def _load_existing_sync(self) -> None:
         """If the stimulus CSV already has a sync_detection row, load it silently."""
         if self.stimulus_path is None:
             return
@@ -375,25 +515,49 @@ class EDFViewerWindow:
             df = pd.read_csv(self.stimulus_path)
             if 'stim_type' not in df.columns:
                 return
+
+            # Always populate the CSV pulse combobox if rows are available
+            self._load_csv_sync_rows(df)
+
             hits = df[df['stim_type'] == 'sync_detection']
             if hits.empty:
                 return
             row = hits.iloc[0]
             start = float(row.get('start_time', float('nan')))
             end   = float(row.get('end_time',   float('nan')))
-            if not math.isnan(start):
-                self.sync_time_sec = start
-                self.sync_end_sec  = end if not math.isnan(end) else None
-                self.sync_status_label.config(
-                    text=f"Sync loaded from CSV @ {start:.2f}s", foreground='blue')
-                self.sync_btn.config(state='disabled', text="Sync Detected")
-                logger.info(f"Loaded existing sync detection from CSV: {start:.3f}s")
-                self._compute_stim_events()
+            if math.isnan(start):
+                return
+
+            self.sync_time_sec = start
+            self.sync_end_sec  = end if not math.isnan(end) else None
+
+            # Restore which CSV pulse was used (encoded in notes as "csv_pulse_idx=N")
+            notes = str(row.get('notes', ''))
+            for part in notes.split(';'):
+                part = part.strip()
+                if part.startswith('csv_pulse_idx='):
+                    try:
+                        self._csv_sync_idx = int(part.split('=')[1])
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
+            # Clamp to valid range and update combobox selection
+            if self._csv_sync_rows:
+                self._csv_sync_idx = min(self._csv_sync_idx, len(self._csv_sync_rows) - 1)
+                self.sync_csv_combo.current(self._csv_sync_idx)
+
+            self.sync_status_label.config(
+                text=f"Sync loaded from CSV @ {start:.2f}s", foreground='blue')
+            self.sync_btn.config(state='disabled', text="Sync Detected")
+            self.sync_remove_btn.config(state='normal')
+            logger.info(f"Loaded existing sync detection from CSV: {start:.3f}s "
+                        f"(csv_pulse_idx={self._csv_sync_idx})")
+            self._compute_stim_events()
         except Exception as e:
             logger.warning(f"Could not load existing sync from CSV: {e}")
 
-
-    def _detect_sync(self):
+    def _detect_sync(self) -> None:
         if self.stimulus_path is None:
             messagebox.showwarning(
                 "No CSV Selected",
@@ -406,7 +570,13 @@ class EDFViewerWindow:
         self.win.update_idletasks()
 
         try:
-            result = self.parser.detect_sync_pulse(ch_name='DC7')
+            try:
+                threshold_std = float(self.sync_threshold_entry.get())
+            except ValueError:
+                threshold_std = 5.0
+            result = self.parser.detect_sync_pulse(
+                ch_name=self.sync_ch_combo.get(),
+                threshold_std=threshold_std)
         except Exception as e:
             messagebox.showerror("Detection Error", str(e), parent=self.win)
             self.sync_btn.config(state='normal', text="Detect Sync")
@@ -418,46 +588,196 @@ class EDFViewerWindow:
                 "No sync pulse detected on DC7.\n"
                 "Check that the correct channel is present and the signal is large enough.",
                 parent=self.win)
+            self.sync_btn.config(state='normal', text="Detect Sync")
             return
 
-        sync_time: float = result['start_sec']
-        self.sync_time_sec = sync_time
-        self.sync_end_sec = result['end_sec']
-
-        # Jump viewer to the sync pulse
-        max_t = max(0.0, self.total_duration - self.window_sec)
-        self.t0 = max(0.0, min(sync_time - self.window_sec / 2, max_t))
-        self.time_slider.set(self.t0)
-
-        # Save to CSV
+        # Load (or refresh) the CSV pulse rows for the combobox
         try:
-            self._save_sync_to_csv(result['start_sec'], result['end_sec'],
-                                   result['channel'])
-            status = f"Sync @ {result['start_sec']:.2f}s  (saved to CSV)"
-            self.sync_status_label.config(text=status, foreground='green')
-            self.sync_btn.config(state='disabled', text="Sync Detected")
-            self._compute_stim_events()
-            logger.info(f"Sync detection saved: {status}")
+            import pandas as pd
+            df = pd.read_csv(self.stimulus_path)
+            self._load_csv_sync_rows(df)
         except Exception as e:
-            self.sync_status_label.config(
-                text=f"Detected @ {result['start_sec']:.2f}s  (CSV save failed)",
-                foreground='red')
-            logger.error(f"Failed to save sync detection to CSV: {e}", exc_info=True)
+            logger.warning(f"Could not load CSV sync rows after detection: {e}")
+
+        self._sync_candidates = result.get('candidates', [result])
+        self._sync_candidate_idx = 0
+        self._apply_sync_candidate(save=True)
+
+    def _toggle_click_sync(self) -> None:
+        """Enter/exit click-to-set-sync mode."""
+        self._click_sync_active = not self._click_sync_active
+        if self._click_sync_active:
+            self.sync_click_btn.config(text="Cancel Click", style='Accent.TButton'
+                                       if 'Accent.TButton' in ttk.Style().theme_names()
+                                       else 'TButton')
+            self.win.config(cursor='crosshair')
+        else:
+            self.sync_click_btn.config(text="Set by Click")
+            self.win.config(cursor='')
+
+    def _on_plot_click(self, event) -> None:
+        """Handle matplotlib click — set sync time if click mode is active."""
+        if not self._click_sync_active:
+            return
+        if event.inaxes is None or event.button != 1:
+            return
+        t_click = event.xdata
+        if t_click is None:
+            return
+
+        self.sync_time_sec = float(t_click)
+        self.sync_end_sec = self.sync_time_sec + 1.0  # assume 1s pulse width
+
+        self._click_sync_active = False
+        self.sync_click_btn.config(text="Set by Click")
+        self.win.config(cursor='')
+
+        self._compute_stim_events()
+        self._refresh_sync_status()
+        self.sync_btn.config(state='disabled', text="Sync Detected")
+        self.sync_remove_btn.config(state='normal')
+
+        if self.stimulus_path is not None:
+            try:
+                self._save_sync_to_csv(self.sync_time_sec, self.sync_end_sec, 'manual')
+                logger.info(f"Manual sync set by click at {self.sync_time_sec:.3f}s")
+            except Exception as e:
+                logger.error(f"Failed to save manual sync: {e}", exc_info=True)
 
         self._update_plot()
 
-    def _save_sync_to_csv(self, start_sec: float, end_sec: float, channel: str):
+    def _next_sync_candidate(self) -> None:
+        """Cycle to the next EDF-detected sync candidate and save."""
+        if len(self._sync_candidates) < 2:
+            return
+        self._sync_candidate_idx = (self._sync_candidate_idx + 1) % len(self._sync_candidates)
+        self._apply_sync_candidate(save=True)
+
+    def _on_csv_sync_select(self, _event=None) -> None:
+        """Handle combobox selection — re-align events to the chosen CSV pulse."""
+        self._csv_sync_idx = self.sync_csv_combo.current()
+        self._compute_stim_events()
+        # Re-save so the CSV row reflects the new csv_pulse_idx
+        if self.sync_time_sec is not None and self.sync_end_sec is not None:
+            try:
+                candidate = (self._sync_candidates[self._sync_candidate_idx]
+                             if self._sync_candidates else
+                             {'channel': 'DC7'})
+                self._save_sync_to_csv(self.sync_time_sec, self.sync_end_sec,
+                                       candidate.get('channel', 'DC7'))
+                self._refresh_sync_status()
+                logger.info(f"Re-saved sync with csv_pulse_idx={self._csv_sync_idx}")
+            except Exception as e:
+                logger.error(f"Failed to re-save sync after CSV pulse change: {e}")
+        self._update_plot()
+
+    def _apply_sync_candidate(self, save: bool = False) -> None:
+        """Apply the currently selected EDF candidate and optionally save to CSV."""
+        if not self._sync_candidates:
+            return
+        candidate = self._sync_candidates[self._sync_candidate_idx]
+        self.sync_time_sec = candidate['start_sec']
+        self.sync_end_sec  = candidate['end_sec']
+
+        # Jump viewer to the sync pulse
+        max_t = max(0.0, self.total_duration - self.window_sec)
+        self.t0 = max(0.0, min(self.sync_time_sec - self.window_sec / 2, max_t))
+        self.time_slider.set(self.t0)
+
+        self._compute_stim_events()
+
+        n = len(self._sync_candidates)
+        self.sync_btn.config(state='disabled', text="Sync Detected")
+        self.sync_next_btn.config(state='normal' if n > 1 else 'disabled')
+        self.sync_remove_btn.config(state='normal')
+
+        if save and self.stimulus_path is not None:
+            try:
+                self._save_sync_to_csv(self.sync_time_sec, self.sync_end_sec,
+                                       candidate['channel'])
+                self._refresh_sync_status()
+                logger.info(f"Sync saved: edf={self.sync_time_sec:.3f}s "
+                            f"candidate={self._sync_candidate_idx + 1}/{n} "
+                            f"csv_pulse={self._csv_sync_idx}")
+            except Exception as e:
+                self.sync_status_label.config(
+                    text=f"Sync @ {self.sync_time_sec:.2f}s  (CSV save failed)",
+                    foreground='red')
+                logger.error(f"Failed to save sync to CSV: {e}", exc_info=True)
+        else:
+            self._refresh_sync_status()
+
+        self._update_plot()
+
+    def _refresh_sync_status(self) -> None:
+        """Update the sync status label from current state."""
+        if self.sync_time_sec is None:
+            self.sync_status_label.config(text="", foreground='green')
+            return
+        n = len(self._sync_candidates)
+        edf_label = (f" (EDF pulse {self._sync_candidate_idx + 1}/{n})"
+                     if n > 1 else "")
+        csv_label = (f" × CSV pulse {self._csv_sync_idx + 1}"
+                     if self._csv_sync_rows else "")
+        self.sync_status_label.config(
+            text=f"Sync @ {self.sync_time_sec:.2f}s{edf_label}{csv_label}",
+            foreground='green')
+
+    def _remove_sync(self) -> None:
+        """Clear the current sync detection from memory and from the CSV."""
+        if not messagebox.askyesno(
+                "Remove Sync",
+                "Remove the saved sync detection?\n"
+                "This will delete the sync_detection row from the CSV and clear "
+                "all stimulus event alignments.",
+                parent=self.win):
+            return
+
+        # Remove sync_detection row(s) from CSV
+        if self.stimulus_path is not None:
+            try:
+                import pandas as pd
+                df = pd.read_csv(self.stimulus_path)
+                df = df[df['stim_type'] != 'sync_detection']
+                df.to_csv(self.stimulus_path, index=False)
+                logger.info("Removed sync_detection row from CSV")
+            except Exception as e:
+                logger.error(f"Failed to remove sync from CSV: {e}", exc_info=True)
+                messagebox.showerror("Error",
+                                     f"Could not update CSV:\n{e}", parent=self.win)
+                return
+
+        # Clear in-memory state
+        self.sync_time_sec = None
+        self.sync_end_sec  = None
+        self._sync_candidates = []
+        self._sync_candidate_idx = 0
+        self.stim_events = []
+
+        # Reset UI
+        self.sync_btn.config(state='normal', text="Detect Sync")
+        self.sync_next_btn.config(state='disabled')
+        self.sync_remove_btn.config(state='disabled')
+        self.sync_status_label.config(text="Sync removed", foreground='grey')
+        self._update_plot()
+
+    def _save_sync_to_csv(self, start_sec: float, end_sec: float, channel: str) -> None:
+        """Write (or overwrite) the sync_detection row in the stimulus CSV."""
         import pandas as pd
 
         if self.stimulus_path is None:
             raise ValueError("No stimulus CSV path configured")
+
         df = pd.read_csv(self.stimulus_path)
         patient_id = (df['patient_id'].dropna().iloc[0]
                       if not df.empty and 'patient_id' in df.columns
                       else 'unknown')
 
-        note = f"Sync pulse detected on {channel}"
-        row = {
+        # Remove any existing sync_detection rows before appending the new one
+        df = df[df['stim_type'] != 'sync_detection']
+
+        note = f"Sync pulse detected on {channel}; csv_pulse_idx={self._csv_sync_idx}"
+        new_row = {
             'patient_id': patient_id,
             'date': datetime.date.today().isoformat(),
             'stim_type': 'sync_detection',
@@ -465,12 +785,13 @@ class EDFViewerWindow:
             'start_time': start_sec,
             'end_time': end_sec,
         }
-        pd.DataFrame([row]).to_csv(
-            self.stimulus_path, mode='a', header=False, index=False)
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        df.to_csv(self.stimulus_path, index=False)
 
     # ── Plotting ───────────────────────────────────────────────────
 
     def _on_channel_toggle(self):
+
         self._update_plot()
 
     def _update_plot(self):
@@ -497,13 +818,27 @@ class EDFViewerWindow:
 
         # Apply active notch filters
         for freq, var in self.notch_vars.items():
-            if var.get() and freq < self.sfreq / 2:
-                b, a = iirnotch(freq, Q=30, fs=self.sfreq)
+            if var.get() and freq < self.sampling_hz / 2:
+                b, a = iirnotch(freq, Q=30, fs=self.sampling_hz)
                 data_uv = filtfilt(b, a, data_uv, axis=1)
 
         n_ch = len(active)
-        offsets = np.arange(n_ch) * self.scale_uv
         colors = plt.cm.tab20(np.linspace(0, 1, max(n_ch, 1)))  # type: ignore[attr-defined]
+
+        # Remove DC offset per channel for display
+        traces = [data_uv[i] - np.mean(data_uv[i]) for i in range(n_ch)]
+
+        # Per-channel amplitude: sampled once from the first 60 s and cached so
+        # lane spacing stays stable as the user scrolls.
+        # lane_half: half the vertical space per channel = scale_uv.
+        # scale_uv is literally µV per half-lane — raise it to zoom out (more signal
+        # fits), lower it to zoom in (signal fills more of the lane).
+        lane_half = np.full(n_ch, float(self.scale_uv))
+
+        # Stack channels bottom-to-top
+        offsets = np.zeros(n_ch)
+        for i in range(1, n_ch):
+            offsets[i] = offsets[i - 1] + lane_half[i - 1] + lane_half[i]
 
         # X-axis: clock time or relative seconds
         if self.use_clock_time.get() and self.meas_date is not None:
@@ -520,16 +855,39 @@ class EDFViewerWindow:
                 matplotlib.ticker.ScalarFormatter())
 
         for i in range(n_ch):
-            trace = data_uv[i] - np.mean(data_uv[i])  # remove DC for display
-            self.ax.plot(times, trace + offsets[i],
+            self.ax.plot(times, traces[i] + offsets[i],
                          linewidth=0.7, color=colors[i])
+            # Dashed zero-line per channel
+            self.ax.axhline(offsets[i], color='#aaaaaa', linewidth=0.4,
+                            linestyle='--', alpha=0.5)
 
-        self.ax.set_yticks(offsets)
-        self.ax.set_yticklabels(active, fontsize=8)
+        scale_label = (f"{self.scale_uv / 1000:.3g} mV"
+                       if self.scale_uv >= 500 else f"{self.scale_uv:.3g} µV")
+
+        # Left axis: channel name at each baseline
+        left_ticks = [offsets[i] for i in range(n_ch)]
+        left_labels = [name for name in active]
+        self.ax.set_yticks(left_ticks)
+        self.ax.set_yticklabels(left_labels, fontsize=8)
+
+        # Right axis: +scale and −scale ticks for each channel
+        ax_right = self.ax.twinx()
+        ax_right.set_ylim(self.ax.get_ylim())
+        right_ticks = []
+        right_labels = []
+        for i in range(n_ch):
+            right_ticks.extend([offsets[i] - lane_half[i],
+                                 offsets[i] + lane_half[i]])
+            right_labels.extend([f"−{scale_label}", f"+{scale_label}"])
+        ax_right.set_yticks(right_ticks)
+        ax_right.set_yticklabels(right_labels, fontsize=7)
+        ax_right.tick_params(axis='y', length=3)
+
         self.ax.set_xlim(times[0], times[-1])
-        self.ax.set_ylim(-self.scale_uv, offsets[-1] + self.scale_uv)
+        self.ax.set_ylim(offsets[0] - lane_half[0], offsets[-1] + lane_half[-1])
         self.ax.set_xlabel(xlabel)
         self.ax.grid(True, alpha=0.3)
+        self.fig.subplots_adjust(left=0.08, right=0.88, top=0.96, bottom=0.08)
 
         # Stimulus event annotations
         legend_seen: set = set()
