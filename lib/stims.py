@@ -6,7 +6,7 @@ import logging
 from pydub import AudioSegment
 from pathlib import Path
 
-from lib.constants import FilePaths, LanguageStimParams, AudioParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
+from lib.constants import FilePaths, LanguageStimParams, AudioParams, CommandStimParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES
 
 logger = logging.getLogger('eeg_stimulus.stims')
 
@@ -72,43 +72,91 @@ class Stims:
             blocks.append(lang_block)
             logger.debug(f"Added {len(lang_block)} language stimuli to blocks")
 
-        # Right command (no prompt)
+        # Right command (no prompt) — one stim dict per keep+stop pair
         if num_of_each_stims.get("rcmd", 0) > 0:
-            logger.info(f"Loading right command audio for {num_of_each_stims['rcmd']} stimuli")
+            n_runs = num_of_each_stims["rcmd"]
+            logger.info(f"Loading right command audio for {n_runs} runs "
+                        f"({n_runs * CommandStimParams.TOTAL_CYCLES} pairs)")
             self.right_keep_audio = AudioSegment.from_mp3(FilePaths.RIGHT_KEEP_AUDIO)
             self.right_stop_audio = AudioSegment.from_mp3(FilePaths.RIGHT_STOP_AUDIO)
-            rcmd_block = [{"type": "right_command", "status": "pending"} for _ in range(num_of_each_stims["rcmd"])]
+            rcmd_block = []
+            for _ in range(n_runs):
+                for cycle in range(CommandStimParams.TOTAL_CYCLES):
+                    rcmd_block.append({
+                        "type": "right_command",
+                        "side": "right",
+                        "cycle_num": cycle,
+                        "total_cycles": CommandStimParams.TOTAL_CYCLES,
+                        "has_prompt": False,
+                        "status": "pending",
+                    })
             blocks.append(rcmd_block)
-            logger.debug(f"Added {len(rcmd_block)} right command stimuli")
+            logger.debug(f"Added {len(rcmd_block)} right command pairs")
 
-        # Right command + prompt
+        # Right command + prompt — prompt plays only on the first pair of each run
         if num_of_each_stims.get("rcmd+p", 0) > 0:
-            logger.info(f"Loading right command with prompt audio for {num_of_each_stims['rcmd+p']} stimuli")
+            n_runs = num_of_each_stims["rcmd+p"]
+            logger.info(f"Loading right command+prompt audio for {n_runs} runs "
+                        f"({n_runs * CommandStimParams.TOTAL_CYCLES} pairs)")
             self.motor_prompt_audio = AudioSegment.from_wav(FilePaths.MOTOR_PROMPT)
             self.right_keep_audio = AudioSegment.from_mp3(FilePaths.RIGHT_KEEP_AUDIO)
             self.right_stop_audio = AudioSegment.from_mp3(FilePaths.RIGHT_STOP_AUDIO)
-            rcmd_p_block = [{"type": "right_command+p", "status": "pending"} for _ in range(num_of_each_stims["rcmd+p"])]
+            rcmd_p_block = []
+            for _ in range(n_runs):
+                for cycle in range(CommandStimParams.TOTAL_CYCLES):
+                    rcmd_p_block.append({
+                        "type": "right_command",
+                        "side": "right",
+                        "cycle_num": cycle,
+                        "total_cycles": CommandStimParams.TOTAL_CYCLES,
+                        "has_prompt": (cycle == 0),
+                        "status": "pending",
+                    })
             blocks.append(rcmd_p_block)
-            logger.debug(f"Added {len(rcmd_p_block)} right command+prompt stimuli")
+            logger.debug(f"Added {len(rcmd_p_block)} right command+prompt pairs")
 
         # Left command (no prompt)
         if num_of_each_stims.get("lcmd", 0) > 0:
-            logger.info(f"Loading left command audio for {num_of_each_stims['lcmd']} stimuli")
+            n_runs = num_of_each_stims["lcmd"]
+            logger.info(f"Loading left command audio for {n_runs} runs "
+                        f"({n_runs * CommandStimParams.TOTAL_CYCLES} pairs)")
             self.left_keep_audio = AudioSegment.from_mp3(FilePaths.LEFT_KEEP_AUDIO)
             self.left_stop_audio = AudioSegment.from_mp3(FilePaths.LEFT_STOP_AUDIO)
-            lcmd_block = [{"type": "left_command", "status": "pending"} for _ in range(num_of_each_stims["lcmd"])]
+            lcmd_block = []
+            for _ in range(n_runs):
+                for cycle in range(CommandStimParams.TOTAL_CYCLES):
+                    lcmd_block.append({
+                        "type": "left_command",
+                        "side": "left",
+                        "cycle_num": cycle,
+                        "total_cycles": CommandStimParams.TOTAL_CYCLES,
+                        "has_prompt": False,
+                        "status": "pending",
+                    })
             blocks.append(lcmd_block)
-            logger.debug(f"Added {len(lcmd_block)} left command stimuli")
+            logger.debug(f"Added {len(lcmd_block)} left command pairs")
 
-        # Left command + prompt
+        # Left command + prompt — prompt plays only on the first pair of each run
         if num_of_each_stims.get("lcmd+p", 0) > 0:
-            logger.info(f"Loading left command with prompt audio for {num_of_each_stims['lcmd+p']} stimuli")
+            n_runs = num_of_each_stims["lcmd+p"]
+            logger.info(f"Loading left command+prompt audio for {n_runs} runs "
+                        f"({n_runs * CommandStimParams.TOTAL_CYCLES} pairs)")
             self.motor_prompt_audio = AudioSegment.from_wav(FilePaths.MOTOR_PROMPT)
             self.left_keep_audio = AudioSegment.from_mp3(FilePaths.LEFT_KEEP_AUDIO)
             self.left_stop_audio = AudioSegment.from_mp3(FilePaths.LEFT_STOP_AUDIO)
-            lcmd_p_block = [{"type": "left_command+p", "status": "pending"} for _ in range(num_of_each_stims["lcmd+p"])]
+            lcmd_p_block = []
+            for _ in range(n_runs):
+                for cycle in range(CommandStimParams.TOTAL_CYCLES):
+                    lcmd_p_block.append({
+                        "type": "left_command",
+                        "side": "left",
+                        "cycle_num": cycle,
+                        "total_cycles": CommandStimParams.TOTAL_CYCLES,
+                        "has_prompt": (cycle == 0),
+                        "status": "pending",
+                    })
             blocks.append(lcmd_p_block)
-            logger.debug(f"Added {len(lcmd_p_block)} left command+prompt stimuli")
+            logger.debug(f"Added {len(lcmd_p_block)} left command+prompt pairs")
 
         # Oddball (no prompt)
         if num_of_each_stims.get("odd", 0) > 0:

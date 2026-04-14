@@ -796,6 +796,9 @@ class EDFViewerWindow:
 
     def _update_plot(self):
         active = [name for name in self.ch_names if self.ch_vars[name].get()]
+        # Remove any twin axes left over from the previous render before clearing.
+        for extra_ax in self.fig.axes[1:]:
+            extra_ax.remove()
         self.ax.clear()
 
         if not active:
@@ -870,7 +873,9 @@ class EDFViewerWindow:
         self.ax.set_yticks(left_ticks)
         self.ax.set_yticklabels(left_labels, fontsize=8)
 
-        # Right axis: +scale and −scale ticks for each channel
+        # Right axis: ±scale ticks for each channel.
+        # Labels are shown only on the topmost channel to avoid a wall of
+        # identical repeated values; all other channels get bare tick marks.
         ax_right = self.ax.twinx()
         ax_right.set_ylim(self.ax.get_ylim())
         right_ticks = []
@@ -878,7 +883,10 @@ class EDFViewerWindow:
         for i in range(n_ch):
             right_ticks.extend([offsets[i] - lane_half[i],
                                  offsets[i] + lane_half[i]])
-            right_labels.extend([f"−{scale_label}", f"+{scale_label}"])
+            if i == n_ch - 1:  # only label the top channel
+                right_labels.extend([f"−{scale_label}", f"+{scale_label}"])
+            else:
+                right_labels.extend(["", ""])
         ax_right.set_yticks(right_ticks)
         ax_right.set_yticklabels(right_labels, fontsize=7)
         ax_right.tick_params(axis='y', length=3)

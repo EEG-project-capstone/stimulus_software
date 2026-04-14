@@ -57,149 +57,96 @@ class LanguageStimHandler(BaseStimHandler):
 
 
 class CommandStimHandler(BaseStimHandler):
-    """Handler for motor command stimuli."""
-    
+    """Handler for a single motor command keep+stop pair.
+
+    Each instance of this handler runs exactly one keep phase followed by one
+    stop phase.  The cycle loop has been moved to the stim_dictionary level —
+    each pair is its own entry — so pause/resume restarts only the current
+    pair, not the whole run.
+    """
+
     def start(self, stim: dict):
-        """Start a command stimulus.
-        
-        Args:
-            stim: Stimulus dictionary
-        """
+        """Start one keep+stop pair."""
         self.is_active = True
         stim_type = stim.get('type', '')
-        
-        # Initialize state
         self.state = {
-            'side': 'right' if 'right' in stim_type else 'left',
-            'has_prompt': '+p' in stim_type,
-            'cycle': 0,
-            'phase': 'keep'
+            'side': stim.get('side', 'right' if 'right' in stim_type else 'left'),
+            'has_prompt': stim.get('has_prompt', False),
+            'cycle_num': stim.get('cycle_num', 0),
+            'total_cycles': stim.get('total_cycles', CommandStimParams.TOTAL_CYCLES),
         }
-        
-        logger.info(f"Starting {self.state['side']} command stimulus "
-                   f"(prompt={self.state['has_prompt']})")
-
+        logger.info(
+            f"Starting {self.state['side']} command pair "
+            f"{self.state['cycle_num'] + 1}/{self.state['total_cycles']} "
+            f"(prompt={self.state['has_prompt']})"
+        )
         if self.state['has_prompt']:
             self._play_prompt()
         else:
-            self.continue_stim()
-    
+            self._play_keep_command()
+
     def _play_prompt(self):
-        """Play the motor command prompt."""
+        """Play the motor command prompt (first pair of a run only)."""
         if not self.is_active:
             return
-
         prompt_seg = self.audio_stim.stims.motor_prompt_audio
         samples = self.reshape_audio_samples(prompt_seg)
-
         self.play_audio_safe(
             samples=samples,
             sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_prompt,
-            log_label="motor_prompt"
+            log_label="motor_prompt",
         )
-    
+
     def _after_prompt(self):
-        """Called after prompt finishes."""
-        self.safe_schedule(CommandStimParams.PROMPT_DELAY_MS, self.continue_stim)
-    
-    def continue_stim(self):
-        """Continue the command stimulus cycle."""
-        if not self.should_continue():
-            return
+        self.safe_schedule(CommandStimParams.PROMPT_DELAY_MS, self._play_keep_command)
 
-        if self.state['cycle'] >= CommandStimParams.TOTAL_CYCLES:
-            self._finish_stim()
-            return
-
-        if self.state['phase'] == 'keep':
-            self._play_keep_command()
-        else:
-            self._play_stop_command()
-    
     def _play_keep_command(self):
-        """Play the 'keep' command audio."""
         if not self.is_active:
             return
-        
-        logger.debug(f"Command stimulus cycle {self.state['cycle'] + 1}/"
-                    f"{CommandStimParams.TOTAL_CYCLES}: KEEP phase")
-
-        audio = (self.audio_stim.stims.right_keep_audio 
-            if self.state['side'] == 'right'
-            else self.audio_stim.stims.left_keep_audio)
-
-        # Use the shared reshaping helper to correctly handle mono/stereo
+        logger.debug(
+            f"Command pair {self.state['cycle_num'] + 1}/"
+            f"{self.state['total_cycles']}: KEEP phase"
+        )
+        audio = (self.audio_stim.stims.right_keep_audio
+                 if self.state['side'] == 'right'
+                 else self.audio_stim.stims.left_keep_audio)
         samples = self.reshape_audio_samples(audio)
-        
-        # Use method reference instead of lambda
         self.play_audio_safe(
             samples=samples,
             sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_keep_command,
-            log_label=f"{self.state['side']}_keep"
+            log_label=f"{self.state['side']}_keep",
         )
-    
+
     def _after_keep_command(self):
-        """Called after keep command finishes."""
-        self.safe_schedule(CommandStimParams.KEEP_PAUSE_MS, self._start_stop_phase)
-    
+        self.safe_schedule(CommandStimParams.KEEP_PAUSE_MS, self._play_stop_command)
+
     def _play_stop_command(self):
-        """Play the 'stop' command audio."""
         if not self.is_active:
             return
-        
-        logger.debug(f"Command stimulus cycle {self.state['cycle'] + 1}/"
-                    f"{CommandStimParams.TOTAL_CYCLES}: STOP phase")
-
-        audio = (self.audio_stim.stims.right_stop_audio 
-            if self.state['side'] == 'right'
-            else self.audio_stim.stims.left_stop_audio)
-
-        # Use the shared reshaping helper to correctly handle mono/stereo
+        logger.debug(
+            f"Command pair {self.state['cycle_num'] + 1}/"
+            f"{self.state['total_cycles']}: STOP phase"
+        )
+        audio = (self.audio_stim.stims.right_stop_audio
+                 if self.state['side'] == 'right'
+                 else self.audio_stim.stims.left_stop_audio)
         samples = self.reshape_audio_samples(audio)
-        
-        # Use method reference instead of lambda
         self.play_audio_safe(
             samples=samples,
             sample_rate=AudioParams.SAMPLE_RATE,
             on_finish=self._after_stop_command,
-            log_label=f"{self.state['side']}_stop"
+            log_label=f"{self.state['side']}_stop",
         )
-    
+
     def _after_stop_command(self):
-        """Called after stop command finishes."""
-        self.safe_schedule(CommandStimParams.STOP_PAUSE_MS, self._next_cycle)
+        # Wait out the rest period, then the pair is complete.
+        self.safe_schedule(CommandStimParams.STOP_PAUSE_MS, self.safe_finish)
 
-    def _start_stop_phase(self):
-        """Transition to stop phase."""
-        if not self.is_active:
-            return
-        self.state['phase'] = 'stop'
-        self.continue_stim()
-
-    def _next_cycle(self):
-        """Move to the next cycle."""
-        if not self.is_active:
-            return
-        self.state['cycle'] += 1
-        self.state['phase'] = 'keep'
-        self.continue_stim()
-    
-    def _finish_stim(self):
-        """Finish the command stimulus."""
-        if not self.is_active:
-            return
-        
-        logger.debug(f"Command stimulus completed: {self.state['side']}, "
-                    f"{CommandStimParams.TOTAL_CYCLES} cycles")
-        
-        self.log_event('command_stim_end', {
-            'side': self.state['side'],
-            'total_cycles': CommandStimParams.TOTAL_CYCLES
-        })
-        
-        self.audio_stim.finish_current_stim()
+    def continue_stim(self):
+        """Not used — pairs are driven by the stim_dictionary."""
+        pass
 
 
 class OddballStimHandler(BaseStimHandler):

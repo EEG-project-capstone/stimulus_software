@@ -22,7 +22,7 @@ from lib.stim_handlers import (
 )
 from pathlib import Path
 from lib.constants import (SyncPulseParams, TimingParams, OddballStimParams, AudioParams,
-                           MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES)
+                           CommandStimParams, MALE_CONTROL_VOICES, FEMALE_CONTROL_VOICES)
 from lib.exceptions import AudioError
 from lib.logging_utils import log_operation
 
@@ -50,9 +50,7 @@ class AuditoryStimulator:
         self.handlers = {
             'language': LanguageStimHandler(self),
             'right_command': CommandStimHandler(self),
-            'right_command+p': CommandStimHandler(self),
             'left_command': CommandStimHandler(self),
-            'left_command+p': CommandStimHandler(self),
             'oddball': OddballStimHandler(self),
             'oddball+p': OddballStimHandler(self),
             'familiar': voice_handler,
@@ -491,19 +489,73 @@ class AuditoryStimulator:
             None
         )
 
-        # Create clean notes based on stimulus type
-        notes = self._format_stimulus_notes(stim_type, self.current_stim_sentences, stim)
+        is_command = stim_type in ('right_command', 'left_command')
 
-        stim_result_data = {
-            'notes': notes,
-            'start_time': first_dac,
-            'end_time': last_dac_end,
-        }
+        if is_command:
+            # Each keep+stop pair writes two rows: one for the keep phase and one
+            # for the stop phase.  Both are logged together only after the stop
+            # phase completes (i.e. after STOP_PAUSE_MS elapses).
+            #
+            # Keep row: start = keep-audio DAC onset
+            #           end   = stop-audio DAC onset  (= end of keep imagery window)
+            # Stop row: start = stop-audio DAC onset
+            #           end   = stop-audio DAC end + STOP_PAUSE_MS  (= end of rest window)
+            side = stim.get('side', 'right' if 'right' in stim_type else 'left')
+            cycle_num = stim.get('cycle_num', 0)
+            total_cycles = stim.get('total_cycles', CommandStimParams.TOTAL_CYCLES)
+            has_prompt = stim.get('has_prompt', False)
+
+            keep_event = next(
+                (e for e in self.current_stim_sentences
+                 if e.get('event') == f'{side}_keep'),
+                None
+            )
+            stop_event = next(
+                (e for e in self.current_stim_sentences
+                 if e.get('event') == f'{side}_stop'),
+                None
+            )
+
+            keep_dac = keep_event.get('dac_onset_time') if keep_event else None
+            stop_dac = stop_event.get('dac_onset_time') if stop_event else None
+            stop_dac_end = stop_event.get('dac_end_time') if stop_event else None
+            stop_end = (stop_dac_end + CommandStimParams.STOP_PAUSE_MS / 1000.0
+                        if stop_dac_end is not None else None)
+
+            cycle_label = f"cycle {cycle_num + 1} of {total_cycles}"
+            prompt_note = " (with prompt)" if has_prompt else ""
+
+            self.results_manager.append_result(
+                patient_id=patient_id,
+                result_type=f'{side}_keep',
+                data={
+                    'notes': f"{side.capitalize()} keep — {cycle_label}{prompt_note}",
+                    'start_time': keep_dac,
+                    'end_time': stop_dac,
+                }
+            )
+            self.results_manager.append_result(
+                patient_id=patient_id,
+                result_type=f'{side}_stop',
+                data={
+                    'notes': f"{side.capitalize()} stop — {cycle_label}",
+                    'start_time': stop_dac,
+                    'end_time': stop_end,
+                }
+            )
+            return
+
+        # All non-command stimuli: single row
+        notes = self._format_stimulus_notes(stim_type, self.current_stim_sentences, stim)
 
         self.results_manager.append_result(
             patient_id=patient_id,
             result_type=stim_type,
-            data=stim_result_data
+            data={
+                'notes': notes,
+                'start_time': first_dac,
+                'end_time': last_dac_end,
+            }
         )
 
     def _format_stimulus_notes(self, stim_type: str, events: list, stim: dict) -> str:
@@ -535,23 +587,6 @@ class AuditoryStimulator:
             voices = MALE_CONTROL_VOICES if self.stims.familiar_gender == 'Male' else FEMALE_CONTROL_VOICES
             speaker = voices[voice_index]
             return f"speaker: {speaker}"
-
-        elif stim_type in ('right_command', 'right_command+p', 'left_command', 'left_command+p'):
-            # For command stimuli, extract side and cycles
-            side = 'right' if 'right' in stim_type else 'left'
-            has_prompt = '+p' in stim_type
-
-            # Look for command_stim_end event to get cycle count
-            cycles = None
-            for event in events:
-                if event.get('event') == 'command_stim_end':
-                    cycles = event.get('total_cycles')
-                    break
-
-            if cycles:
-                prompt_str = " (with prompt)" if has_prompt else ""
-                return f"{side.capitalize()} command: {cycles} cycles{prompt_str}"
-            return f"{side.capitalize()} command stimulus"
 
         return ''
     
@@ -586,6 +621,29 @@ class AuditoryStimulator:
             # Now stop audio stream (any triggered callbacks will early-exit)
             self.stream_manager.stop()
             self._cancel_scheduled_callbacks()
+
+            # Record the interruption in the CSV before clearing event data.
+            # Uses wall-clock time (not DAC time) — sufficient for identifying
+            # which stimulus was interrupted; not suitable for EDF alignment.
+            try:
+                patient_id = self.gui_callback.get_patient_id()
+                current_stim = self.stims.stim_dictionary[self.stims.current_stim_index]
+                stim_type = current_stim.get('type', 'unknown')
+                stim_index = self.stims.current_stim_index
+                pause_time = time.time()
+                self.results_manager.append_result(
+                    patient_id=patient_id,
+                    result_type='stimulus_paused',
+                    data={
+                        'notes': f"Paused during {stim_type} (stimulus #{stim_index + 1}); "
+                                 f"stimulus will replay from start on resume",
+                        'start_time': pause_time,
+                        'end_time': None,
+                    }
+                )
+                logger.info(f"Logged pause event for {stim_type} #{stim_index + 1}")
+            except Exception as e:
+                logger.warning(f"Could not log pause event: {e}")
 
             # Clear current stimulus event data (beeps, etc.)
             self.current_stim_sentences = []
